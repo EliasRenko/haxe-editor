@@ -6,46 +6,19 @@ import math.Vec2;
 @:cppFileCode('
 #include <SDL3/SDL_log.h>
 
-// Alias for cleaner code
-using Engine = ::Editor_obj;
-
-// Global state
 bool hxcpp_initialized = false;
-
-// Callbacks
-EngineCallback g_callback = nullptr;
+CustomCallback g_callback = nullptr;
 
 // SDL log output function that forwards to C# callback
 void SDLCALL CustomLogOutput(void* userdata, int category, SDL_LogPriority priority, const char* message) {
     if (g_callback != nullptr) {
-        // Format: [PRIORITY] message
-        const char* priorityStr = "INFO";
-        switch (priority) {
-            case SDL_LOG_PRIORITY_VERBOSE: priorityStr = "VERBOSE"; break;
-            case SDL_LOG_PRIORITY_DEBUG: priorityStr = "DEBUG"; break;
-            case SDL_LOG_PRIORITY_INFO: priorityStr = "INFO"; break;
-            case SDL_LOG_PRIORITY_WARN: priorityStr = "WARN"; break;
-            case SDL_LOG_PRIORITY_ERROR: priorityStr = "ERROR"; break;
-            case SDL_LOG_PRIORITY_CRITICAL: priorityStr = "CRITICAL"; break;
-        }
-        
         char buffer[1024];
-        snprintf(buffer, sizeof(buffer), "[%s] %s", priorityStr, message);
+        snprintf(buffer, sizeof(buffer), "%s", message);
         g_callback(buffer);
     }
 }
 
 extern "C" {
-    // Set callback function for C# to receive messages
-    __declspec(dllexport) void setCallback(EngineCallback callback) {
-        g_callback = callback;
-        if (callback != nullptr) {
-            // Hook SDL log output to forward to C# callback
-            SDL_SetLogOutputFunction(CustomLogOutput, nullptr);
-        }
-    }
-    
-    // Haxe runtime initialization
     __declspec(dllexport) const char* HxcppInit() {
         if (hxcpp_initialized) {
             return NULL;  // Already initialized
@@ -55,129 +28,121 @@ extern "C" {
         if (err == NULL) {
             hxcpp_initialized = true;
         }
-        return err;  // Returns NULL on success, error message on failure
+        return err;
     }
     
-    // Engine API
     __declspec(dllexport) int init() {
-        // Ensure runtime is initialized first
         if (!hxcpp_initialized) {
             const char* err = hx::Init();
             if (err != NULL) return 0;
             hxcpp_initialized = true;
         }
         
-        // Use NativeAttach to properly set up the thread
         hx::NativeAttach attach;
-        return Engine::init();
+        return ::Editor_obj::init();
     }
     
-    __declspec(dllexport) int initWithCallback(EngineCallback callback) {
-        // Set callback first
-        setCallback(callback);
+    __declspec(dllexport) int initWithCallback(CustomCallback callback) {
+        if (callback != nullptr) {
+            g_callback = callback;
+            SDL_SetLogOutputFunction(CustomLogOutput, (void*)callback);
+        }
         
-        // Then initialize
         return init();
     }
     
     __declspec(dllexport) void updateFrame(float deltaTime) {
-        Engine::updateFrame(deltaTime);
+        ::Editor_obj::updateFrame(deltaTime);
     }
     
     __declspec(dllexport) void render() {
-        Engine::render();
+        ::Editor_obj::render();
     }
     
     __declspec(dllexport) void swapBuffers() {
-        Engine::swapBuffers();
+        ::Editor_obj::swapBuffers();
     }
     
     __declspec(dllexport) void shutdownEngine() {
-        Engine::engineShutdown();
+        ::Editor_obj::engineShutdown();
     }
     
     __declspec(dllexport) void release() {
-        Engine::release();
+        ::Editor_obj::release();
     }
     
     __declspec(dllexport) void loadState(int stateIndex) {
-        Engine::loadState(stateIndex);
+        ::Editor_obj::loadState(stateIndex);
     }
     
     __declspec(dllexport) int isRunning() {
-        return Engine::engineIsRunning();
+        return ::Editor_obj::engineIsRunning();
     }
     
     __declspec(dllexport) int getWindowWidth() {
-        return Engine::engineGetWindowWidth();
+        return ::Editor_obj::engineGetWindowWidth();
     }
     
     __declspec(dllexport) int getWindowHeight() {
-        return Engine::engineGetWindowHeight();
+        return ::Editor_obj::engineGetWindowHeight();
     }
     
     __declspec(dllexport) void setWindowSize(int width, int height) {
-        Engine::engineSetWindowSize(width, height);
+        ::Editor_obj::engineSetWindowSize(width, height);
     }
     
     __declspec(dllexport) void* getWindowHandle() {
-        return Engine::getWindowHandle();
+        return ::Editor_obj::getWindowHandle();
     }
     
     __declspec(dllexport) void setWindowPosition(int x, int y) {
-        Engine::setWindowPosition(x, y);
+        ::Editor_obj::setWindowPosition(x, y);
     }
     
     __declspec(dllexport) void setWindowSizeAndBorderless(int width, int height) {
-        Engine::engineSetWindowSizeAndBorderless(width, height);
+        ::Editor_obj::engineSetWindowSizeAndBorderless(width, height);
     }
     
     __declspec(dllexport) void onMouseButtonDown(int x, int y, int button) {
-        Engine::onMouseButtonDown(x, y, button);
+        ::Editor_obj::onMouseButtonDown(x, y, button);
     }
 
     __declspec(dllexport) void onMouseButtonUp(int x, int y, int button) {
-        Engine::onMouseButtonUp(x, y, button);
+        ::Editor_obj::onMouseButtonUp(x, y, button);
     }
 
     __declspec(dllexport) void onKeyboardDown(int keyCode) {
-        Engine::onKeyboardDown(keyCode);
+        ::Editor_obj::onKeyboardDown(keyCode);
     }
 
     __declspec(dllexport) void onKeyboardUp(int keyCode) {
-        Engine::onKeyboardUp(keyCode);
+        ::Editor_obj::onKeyboardUp(keyCode);
     }
     
     __declspec(dllexport) void importFont(const char* fontPath, float fontSize) {
-        Engine::importFont(fontPath, fontSize);
+        ::Editor_obj::importFont(fontPath, fontSize);
     }
     
     __declspec(dllexport) void rebakeFont(float fontSize, int atlasWidth, int atlasHeight, int firstChar, int numChars) {
-        Engine::rebakeFont(fontSize, atlasWidth, atlasHeight, firstChar, numChars);
+        ::Editor_obj::rebakeFont(fontSize, atlasWidth, atlasHeight, firstChar, numChars);
     }
     
     __declspec(dllexport) void exportFont(const char* outputPath) {
-        Engine::exportFont(outputPath);
+        ::Editor_obj::exportFont(outputPath);
     }
     
     __declspec(dllexport) void loadFont(const char* outputName) {
-        Engine::loadFont(outputName);
+        ::Editor_obj::loadFont(outputName);
     }
 }
 ')
 
 class Editor {
-    
-    // Store app instance
+
     private static var app:App = null;
     private static var initialized:Bool = false;
     
-    /**
-     * DLL Main - called when DLL mode is active
-     */
     public static function main():Void {
-        trace("Haxe BMFG DLL loaded - ready for API calls");
-        trace("Available exports: EngineInit, EngineUpdate, EngineRender, etc.");
     }
     
     // Custom log function that uses SDL logging (forwarded to C# via CustomLogOutput)
