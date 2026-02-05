@@ -1,0 +1,43 @@
+# Copy dependencies to DLL output folder
+--macro Sys.command("cmd", ["/c", ".\\bat\\copy-files.bat", "..\\haxe-native\\include", ".\\bin\\dll\\include"])
+--macro Sys.command("cmd", ["/c", ".\\bat\\copy-files.bat", "..\\haxe-native\\lib", ".\\bin\\dll\\lib"])
+--macro Sys.command("cmd", ["/c", "if not exist bin\\dll\\src mkdir bin\\dll\\src"])
+--macro Sys.command("cmd", ["/c", "copy ..\\haxe-native\\src\\glad.c bin\\dll\\src\\glad.c"])
+--macro Sys.command("cmd", ["/c", "copy src\\editor_native.h bin\\dll\\include\\editor_native.h"])
+--macro Sys.command("cmd", ["/c", "copy ..\\haxe-native\\lib\\SDL3.dll bin\\dll\\SDL3.dll"])
+--macro Sys.command("cmd", ["/c", ".\\bat\\copy-files.bat", "res", ".\\bin\\dll\\res"])
+
+#Copy DLL files to C# project (after build completes via --cmd)
+--cmd copy bin\\dll\\Editor-debug.dll C:\\Users\\efedorenko\\Documents\\projects\\csharp\\csharp-editor\\bin\\x64\\Debug\\Editor-debug.dll
+--cmd copy bin\\dll\\SDL3.dll C:\\Users\\efedorenko\\Documents\\projects\\csharp\\csharp-editor\\bin\\x64\\Debug\\SDL3.dll
+--cmd .\\bat\\copy-files.bat bin\\dll\\res C:\\Users\\efedorenko\\Documents\\projects\\csharp\\csharp-editor\\bin\\x64\\Debug\\res
+
+#--cmd copy bin\\dll\\Editor-debug.dll C:\\Users\\Renko\\Documents\\Libraries\\csharp-editor\\bin\\x64\\Debug\\Editor-debug.dll
+#--cmd copy bin\\dll\\SDL3.dll C:\\Users\\Renko\\Documents\\Libraries\\csharp-editor\\bin\\x64\\Debug\\SDL3.dll
+#--cmd .\\bat\\copy-files.bat bin\\dll\\res C:\\Users\\Renko\\Documents\\Libraries\\csharp-editor\\bin\\x64\\Debug\\res
+
+# Link libraries FIRST (but src will override conflicting classes)
+-lib haxe-native
+-lib haxe-application
+
+# Local source folder - this will override any classes from libraries with same name
+-cp src
+-main Editor
+-cpp bin/dll
+
+# DLL-specific flags
+-D debug
+-D dll
+-D dll_link
+-D HXCPP_DLL_EXPORT
+-D HXCPP_M64
+-D HXCPP_CPP11
+-D HXCPP_NO_PCH
+-D HXCPP_NO_PRECOMPILED_HEADERS
+-D no-deprecation-warnings
+
+# Optimization
+-dce full
+
+# Debug symbols for development
+-debug
