@@ -1,5 +1,6 @@
 package;
 
+import states.EditorState;
 import math.Vec2;
 
 @:headerCode('#include "editor_native.h"')
@@ -118,22 +119,6 @@ extern "C" {
     __declspec(dllexport) void onKeyboardUp(int keyCode) {
         ::Editor_obj::onKeyboardUp(keyCode);
     }
-    
-    __declspec(dllexport) void importFont(const char* fontPath, float fontSize) {
-        ::Editor_obj::importFont(fontPath, fontSize);
-    }
-    
-    __declspec(dllexport) void rebakeFont(float fontSize, int atlasWidth, int atlasHeight, int firstChar, int numChars) {
-        ::Editor_obj::rebakeFont(fontSize, atlasWidth, atlasHeight, firstChar, numChars);
-    }
-    
-    __declspec(dllexport) void exportFont(const char* outputPath) {
-        ::Editor_obj::exportFont(outputPath);
-    }
-    
-    __declspec(dllexport) void loadFont(const char* outputName) {
-        ::Editor_obj::loadFont(outputName);
-    }
 }
 ')
 
@@ -170,15 +155,17 @@ class Editor {
             }
             
             // Load the font baker state
-            app.addState(new FontBakerState(app));
-            app.log.info(1, "FontBakerState loaded");
+            app.addState(new EditorState(app));
+            app.log.info(1, "EditorState loaded");
             
             initialized = true;
             log("Engine initialized successfully");
 
             return 1;
         } catch (e:Dynamic) {
-            log("Editor: Init error: " + e);
+            //log("Editor: Init error: " + e);
+            // TODO: Better error handling to C# on exceptions
+            app.log.error(Log.LogCategory.SYSTEM, "Editor: Init error: " + e);
             return 0;
         }
     }
@@ -280,8 +267,8 @@ class Editor {
             log("Editor: Loading state " + stateId);
             switch (stateId) {
                 case 0: 
-                    app.addState(new FontBakerState(app));
-                    log("Editor: FontBakerState loaded");
+                    app.addState(new EditorState(app));
+                    log("Editor: EditorState loaded");
                 default: 
                     log("Editor: Unknown state ID: " + stateId);
                     return 0;
@@ -407,120 +394,6 @@ class Editor {
             // Pass scancode as keycode since use_scancodes is not defined
             // and Keycode constants are actually scancode values
             @:privateAccess app.onKeyUp(scancode, scancode, false, 0, 1);
-        }
-    }
-    
-    /**
-     * Import a TTF font - loads, bakes to RAM texture, and displays without exporting to disk
-     * @param fontPath Path to the TTF font file
-     * @param fontSize Font size in pixels
-     */
-    @:keep
-    public static function importFont(fontPath:String, fontSize:Float):Void {
-        if (app == null || !initialized) {
-            log("Editor: Cannot import font - engine not initialized");
-            return;
-        }
-        
-        try {
-            log('Importing font: $fontPath at ${fontSize}px (RAM only, no export)');
-            
-            // Get the FontBakerState
-            var state = app.currentState;
-            if (state != null && Std.isOfType(state, FontBakerState)) {
-                var fontState:FontBakerState = cast state;
-                fontState.importFont(fontPath, fontSize);
-            } else {
-                log("Editor: Current state is not FontBakerState");
-            }
-        } catch (e:Dynamic) {
-            log("Editor: Import font error: " + e);
-        }
-    }
-    
-    /**
-     * Export a font - bakes TTF to texture atlas and saves JSON + TGA files to disk
-     * @param fontPath Path to the TTF font file
-     * @param fontSize Font size in pixels
-     */
-    @:keep
-    public static function exportFont(outputPath:String):Void {
-        if (app == null || !initialized) {
-            log("Editor: Cannot export font - engine not initialized");
-            return;
-        }
-        
-        try {
-            log('Exporting currently imported font to: $outputPath');
-            
-            // Get the FontBakerState
-            var state = app.currentState;
-            if (state != null && Std.isOfType(state, FontBakerState)) {
-                var fontState:FontBakerState = cast state;
-                fontState.exportFont(outputPath);
-            } else {
-                log("Editor: Current state is not FontBakerState");
-            }
-        } catch (e:Dynamic) {
-            log("Editor: Export font error: " + e);
-        }
-    }
-    
-    /**
-     * Rebake the currently loaded font with new settings
-     * @param fontSize Font size in pixels
-     * @param atlasWidth Atlas texture width
-     * @param atlasHeight Atlas texture height
-     * @param firstChar First character to bake
-     * @param numChars Number of characters to bake
-     */
-    @:keep
-    public static function rebakeFont(fontSize:Float, atlasWidth:Int, atlasHeight:Int, firstChar:Int, numChars:Int):Void {
-        if (app == null || !initialized) {
-            log("Editor: Cannot rebake font - engine not initialized");
-            return;
-        }
-        
-        try {
-            log('Rebaking font: size=$fontSize, atlas=${atlasWidth}x${atlasHeight}, chars=$firstChar-${firstChar + numChars - 1}');
-            
-            // Get the FontBakerState
-            var state = app.currentState;
-            if (state != null && Std.isOfType(state, FontBakerState)) {
-                var fontState:FontBakerState = cast state;
-                fontState.rebakeFont(fontSize, atlasWidth, atlasHeight, firstChar, numChars);
-            } else {
-                log("Editor: Current state is not FontBakerState");
-            }
-        } catch (e:Dynamic) {
-            log("Editor: Rebake font error: " + e);
-        }
-    }
-    
-    /**
-     * Load a previously exported font and display it
-     * @param outputName Output name (without extension) of the baked font files
-     */
-    @:keep
-    public static function loadFont(outputName:String):Void {
-        if (app == null || !initialized) {
-            log("Editor: Cannot load font - engine not initialized");
-            return;
-        }
-        
-        try {
-            log('Loading font: $outputName');
-            
-            // Get the FontBakerState
-            var state = app.currentState;
-            if (state != null && Std.isOfType(state, FontBakerState)) {
-                var fontState:FontBakerState = cast state;
-                fontState.loadFont(outputName);
-            } else {
-                log("Editor: Current state is not FontBakerState");
-            }
-        } catch (e:Dynamic) {
-            log("Editor: Load font error: " + e);
         }
     }
 }

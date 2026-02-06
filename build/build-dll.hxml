@@ -1,4 +1,5 @@
 # Copy dependencies to DLL output folder
+--macro Sys.command("cmd", ["/c", ".\\bat\\clean-obj.bat"])
 --macro Sys.command("cmd", ["/c", ".\\bat\\copy-files.bat", "..\\haxe-native\\include", ".\\bin\\dll\\include"])
 --macro Sys.command("cmd", ["/c", ".\\bat\\copy-files.bat", "..\\haxe-native\\lib", ".\\bin\\dll\\lib"])
 --macro Sys.command("cmd", ["/c", "if not exist bin\\dll\\src mkdir bin\\dll\\src"])

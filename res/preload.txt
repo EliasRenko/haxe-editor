@@ -1,3 +1,10 @@
 # Shaders
 shaders/text.vert
 shaders/text.frag
+shaders/grid.vert
+shaders/grid.frag
+shaders/texture.vert
+shaders/texture.frag
+
+#textures
+textures/sky.tga
