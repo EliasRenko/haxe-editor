@@ -161,13 +161,16 @@ class EditorState extends State {
      * Convert screen coordinates to world coordinates
      */
     private function screenToWorld(screenX:Float, screenY:Float):{x:Float, y:Float} {
-        // Centered ortho projection: zoom happens around screen center
-        // Convert screen offset from center, scale by zoom, then add camera position
+        // Centered ortho projection: zoom happens around configurable zoom center
         var windowWidth = app.window.size.x;
         var windowHeight = app.window.size.y;
         
-        var worldX = (screenX - windowWidth * 0.5) / camera.zoom + windowWidth * 0.5 + camera.x;
-        var worldY = (screenY - windowHeight * 0.5) / camera.zoom + windowHeight * 0.5 + camera.y;
+        // Get zoom center (defaults to screen center if not set)
+        var zoomCenterX = camera.zoomCenterX != null ? camera.zoomCenterX : windowWidth * 0.5;
+        var zoomCenterY = camera.zoomCenterY != null ? camera.zoomCenterY : windowHeight * 0.5;
+        
+        var worldX = (screenX - zoomCenterX) / camera.zoom + zoomCenterX + camera.x;
+        var worldY = (screenY - zoomCenterY) / camera.zoom + zoomCenterY + camera.y;
 
         return {x: worldX, y: worldY};
     }
