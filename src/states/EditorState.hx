@@ -146,13 +146,13 @@ class EditorState extends State {
         // Convert screen position to world position using camera
         var worldPos = screenToWorld(screenX, screenY);
 
-        // Left click to place tile
-        if (mouse.pressed(1)) { // Button 1 = left
+        // Left click to place tile (continuous while holding)
+        if (mouse.check(1)) { // Button 1 = left
             placeTileAt(worldPos.x, worldPos.y);
         }
 
-        // Right click to remove tile
-        if (mouse.pressed(3)) { // Button 3 = right
+        // Right click to remove tile (continuous while holding)
+        if (mouse.check(3)) { // Button 3 = right
             removeTileAt(worldPos.x, worldPos.y);
         }
     }
@@ -182,6 +182,17 @@ class EditorState extends State {
         // Snap to grid (tiles are positioned by top-left corner)
         var tileX = Std.int(Math.floor(worldX / tileSize) * tileSize);
         var tileY = Std.int(Math.floor(worldY / tileSize) * tileSize);
+        
+        // Check if tile already exists at this position
+        for (tileId in 0...1000) { // MAX_TILES
+            var tile = tileBatch.getTile(tileId);
+            if (tile != null) {
+                if (Math.abs(tile.x - tileX) < 1 && Math.abs(tile.y - tileY) < 1) {
+                    // Tile already exists at this position, don't add another
+                    return;
+                }
+            }
+        }
         
         // Add tile to batch
         var tileId = tileBatch.addTile(tileX, tileY, tileSize, tileSize, tileRegions[selectedTileRegion]);

@@ -103,6 +103,10 @@ extern "C" {
     __declspec(dllexport) void setWindowSizeAndBorderless(int width, int height) {
         ::Editor_obj::engineSetWindowSizeAndBorderless(width, height);
     }
+
+    __declspec(dllexport) void onMouseMotion(int x, int y) {
+        ::Editor_obj::onMouseMotion(x, y);
+    }
     
     __declspec(dllexport) void onMouseButtonDown(int x, int y, int button) {
         ::Editor_obj::onMouseButtonDown(x, y, button);
@@ -354,6 +358,13 @@ class Editor {
         if (app != null && initialized && app.window != null) {
             //app.window.setSize(width, height);
             //app.window.setBorderless(true);
+        }
+    }
+
+        @:keep
+    public static function onMouseMotion(x:Int, y:Int):Void {
+        if (app != null && initialized) {
+            @:privateAccess app.onMouseMotion(x, y, 0, 0, 1);
         }
     }
     

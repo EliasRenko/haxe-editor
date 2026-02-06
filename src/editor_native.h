@@ -38,6 +38,7 @@ extern "C" {
     __declspec(dllexport) void setWindowSizeAndBorderless(int width, int height);
 
     // Mouse input handling
+    __declspec(dllexport) void onMouseMotion(int x, int y);
     __declspec(dllexport) void onMouseButtonDown(int x, int y, int button);
     __declspec(dllexport) void onMouseButtonUp(int x, int y, int button);
     __declspec(dllexport) void onKeyboardDown(int keyCode);
