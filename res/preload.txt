@@ -8,3 +8,4 @@ shaders/texture.frag
 
 #textures
 textures/sky.tga
+textures/devTiles.tga

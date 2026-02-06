@@ -5,15 +5,23 @@ import App;
 import Renderer;
 import ProgramInfo;
 import display.Grid;
+import display.ManagedTileBatch;
 import entity.DisplayEntity;
 
 /**
- * Editor state with just an infinite grid for visual reference
- * Minimal state for level editing and scene construction
+ * Editor state with infinite grid and editable tilemap
+ * Allows placing and removing tiles with mouse clicks
  */
 class EditorState extends State {
     
     private var grid:Grid;
+    private var tileBatch:ManagedTileBatch;
+    private var tileBatchEntity:DisplayEntity;
+    
+    // Tile editor settings
+    private var tileSize:Int = 32; // Size of each tile in pixels
+    private var selectedTileRegion:Int = 0; // Currently selected tile to place
+    private var tileRegions:Array<Int> = []; // Available tile regions
     
     public function new(app:App) {
         super("EditorState", app);
@@ -24,8 +32,14 @@ class EditorState extends State {
         
         trace("EditorState: Initializing");
         
-        // Setup camera for 2D orthographic view
+        // Setup camera for 2D orthographic view with center-based zoom
         camera.ortho = true;
+        
+        // Initialize camera to center of screen for proper centered projection
+        var windowWidth = app.window.size.x;
+        var windowHeight = app.window.size.y;
+        camera.x = windowWidth * 0.5;
+        camera.y = windowHeight * 0.5;
         
         // Get renderer
         var renderer = app.renderer;
@@ -45,14 +59,64 @@ class EditorState extends State {
         grid.depthTest = false;
         grid.init(renderer);
         
-        trace("EditorState: Grid created - visible=" + grid.visible + ", pos=(" + grid.x + "," + grid.y + "," + grid.z + ")");
+        trace("EditorState: Grid created");
         
         var gridEntity = new DisplayEntity(grid, "grid");
         addEntity(gridEntity);
         
-        trace("EditorState: Grid entity added - active=" + gridEntity.active + ", visible=" + gridEntity.visible);
-        trace("EditorState: Camera - ortho=" + camera.ortho + ", zoom=" + camera.zoom + ", pos=(" + camera.x + "," + camera.y + "," + camera.z + ")");
+        // Setup tilemap
+        setupTilemap(renderer);
+        
         trace("EditorState: Setup complete");
+    }
+    
+    /**
+     * Setup the editable tilemap
+     */
+    private function setupTilemap(renderer:Renderer):Void {
+        trace("EditorState: Setting up tilemap");
+        
+        // Load tile atlas texture
+        var tileTextureData = app.resources.getTexture("textures/devTiles.tga");
+        var tileTexture = renderer.uploadTexture(tileTextureData);
+        
+        trace("EditorState: Tile texture loaded - " + tileTextureData.width + "x" + tileTextureData.height);
+        
+        // Create texture shader for tiles
+        var textureVertShader = app.resources.getText("shaders/texture.vert");
+        var textureFragShader = app.resources.getText("shaders/texture.frag");
+        var textureProgramInfo = renderer.createProgramInfo("texture", textureVertShader, textureFragShader);
+        
+        // Create managed tile batch
+        tileBatch = new ManagedTileBatch(textureProgramInfo, tileTexture);
+        tileBatch.depthTest = false;
+        tileBatch.init(renderer);
+        
+        // Define tile regions in the atlas (assuming 32x32 tiles in a grid)
+        var tilesPerRow = Std.int(tileTextureData.width / tileSize);
+        var tilesPerCol = Std.int(tileTextureData.height / tileSize);
+        
+        trace("EditorState: Defining " + (tilesPerRow * tilesPerCol) + " tile regions (" + tilesPerRow + "x" + tilesPerCol + ")");
+        
+        for (row in 0...tilesPerCol) {
+            for (col in 0...tilesPerRow) {
+                var regionId = tileBatch.defineRegion(
+                    col * tileSize,  // atlasX
+                    row * tileSize,  // atlasY
+                    tileSize,        // width
+                    tileSize         // height
+                );
+                tileRegions.push(regionId);
+            }
+        }
+        
+        trace("EditorState: Defined " + tileRegions.length + " tile regions");
+        
+        // Create entity for tile batch
+        tileBatchEntity = new DisplayEntity(tileBatch, "tilemap");
+        addEntity(tileBatchEntity);
+        
+        trace("EditorState: Tilemap ready - Use left click to place tiles, right click to remove");
     }
     
     private var updateCount:Int = 0;
@@ -60,9 +124,99 @@ class EditorState extends State {
     override public function update(deltaTime:Float):Void {
         super.update(deltaTime);
         
+        // Handle mouse input for tile placement/removal
+        handleTileInput();
+        
         if (updateCount < 3) {
             trace("EditorState: update() frame " + updateCount);
             updateCount++;
+        }
+    }
+    
+    /**
+     * Handle mouse input for placing and removing tiles
+     */
+    private function handleTileInput():Void {
+        var mouse = app.input.mouse;
+
+        // Get mouse screen position from C# (assumed to be in screen coordinates)
+        var screenX = mouse.x;
+        var screenY = mouse.y;
+
+        // Convert screen position to world position using camera
+        var worldPos = screenToWorld(screenX, screenY);
+
+        // Left click to place tile
+        if (mouse.pressed(1)) { // Button 1 = left
+            placeTileAt(worldPos.x, worldPos.y);
+        }
+
+        // Right click to remove tile
+        if (mouse.pressed(3)) { // Button 3 = right
+            removeTileAt(worldPos.x, worldPos.y);
+        }
+    }
+    
+    /**
+     * Convert screen coordinates to world coordinates
+     */
+    private function screenToWorld(screenX:Float, screenY:Float):{x:Float, y:Float} {
+        // Centered ortho projection: zoom happens around screen center
+        // Convert screen offset from center, scale by zoom, then add camera position
+        var windowWidth = app.window.size.x;
+        var windowHeight = app.window.size.y;
+        
+        var worldX = (screenX - windowWidth * 0.5) / camera.zoom + windowWidth * 0.5 + camera.x;
+        var worldY = (screenY - windowHeight * 0.5) / camera.zoom + windowHeight * 0.5 + camera.y;
+
+        return {x: worldX, y: worldY};
+    }
+    
+    /**
+     * Place a tile at world position (snaps to grid)
+     */
+    private function placeTileAt(worldX:Float, worldY:Float):Void {
+        // Snap to grid (tiles are positioned by top-left corner)
+        var tileX = Std.int(Math.floor(worldX / tileSize) * tileSize);
+        var tileY = Std.int(Math.floor(worldY / tileSize) * tileSize);
+        
+        // Add tile to batch
+        var tileId = tileBatch.addTile(tileX, tileY, tileSize, tileSize, tileRegions[selectedTileRegion]);
+        
+        if (tileId >= 0) {
+            // Mark buffers as needing update
+            tileBatch.needsBufferUpdate = true;
+        }
+    }
+    
+    /**
+     * Remove tile at world position
+     */
+    private function removeTileAt(worldX:Float, worldY:Float):Void {
+        // Snap to grid
+        var tileX = Math.floor(worldX / tileSize) * tileSize;
+        var tileY = Math.floor(worldY / tileSize) * tileSize;
+        
+        trace("EditorState: Removing tile at (" + tileX + ", " + tileY + ")");
+        
+        // Find and remove tile at this position
+        // Note: This is a simple implementation - for production you'd want a spatial hash
+        var found = false;
+        for (tileId in 0...1000) { // MAX_TILES
+            var tile = tileBatch.getTile(tileId);
+            if (tile != null) {
+                if (Math.abs(tile.x - tileX) < 1 && Math.abs(tile.y - tileY) < 1) {
+                    tileBatch.removeTile(tileId);
+                    tileBatch.needsBufferUpdate = true;
+                    found = true;
+                    trace("EditorState: Tile removed, ID=" + tileId + ", total tiles=" + tileBatch.getTileCount());
+                    break;
+                }
+            }
+        }
+        
+        if (!found) {
+            trace("EditorState: No tile found at position");
         }
     }
     
@@ -71,15 +225,12 @@ class EditorState extends State {
     override public function render(renderer:Renderer):Void {
         // WORKAROUND: Call render() directly due to C++ virtual method dispatch issue
         if (grid != null && grid.visible) {
-            if (renderCount < 3) {
-                trace("EditorState.render() frame " + renderCount + " - calling grid.render()");
-                trace("  grid.vertices.length=" + grid.vertices.length);
-                trace("  grid.z=" + grid.z);
-                trace("  camera.zoom=" + camera.zoom);
-            }
             grid.render(camera.getMatrix());
-        } else if (renderCount < 3) {
-            trace("EditorState.render() frame " + renderCount + " - grid is null or not visible");
+        }
+        
+        // Render tilemap
+        if (tileBatch != null && tileBatch.visible) {
+            tileBatch.render(camera.getMatrix());
         }
         
         super.render(renderer);
