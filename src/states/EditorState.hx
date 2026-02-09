@@ -25,6 +25,13 @@ class EditorState extends State {
     private var selectedTileRegion:Int = 0; // Currently selected tile to place
     private var tileRegions:Array<Int> = []; // Available tile regions
     
+    // Grid-based tile storage index (faster lookups than iterating ManagedTileBatch)
+    // Key format: "gridX_gridY" -> tileId in ManagedTileBatch
+    private var tileGrid:Map<String, Int> = new Map<String, Int>();
+    
+    // Resize behavior options
+    public var deleteOutOfBoundsTilesOnResize:Bool = true; // Auto-delete tiles when shrinking frame
+    
     // Map bounds (defines the editable area)
     private var mapX:Float = 0;
     private var mapY:Float = 0;
@@ -299,6 +306,11 @@ class EditorState extends State {
         if (mapFrame != null) {
             mapFrame.setBounds(mapX, mapY, mapWidth, mapHeight);
         }
+        
+        // Optionally delete tiles outside new bounds
+        if (deleteOutOfBoundsTilesOnResize) {
+            cleanupTilesOutsideBounds();
+        }
     }
     
     /**
@@ -334,21 +346,24 @@ class EditorState extends State {
             return;
         }
         
-        // Check if tile already exists at this position
-        for (tileId in 0...1000) { // MAX_TILES
-            var tile = tileBatch.getTile(tileId);
-            if (tile != null) {
-                if (Math.abs(tile.x - tileX) < 1 && Math.abs(tile.y - tileY) < 1) {
-                    // Tile already exists at this position, don't add another
-                    return;
-                }
-            }
+        // Convert to grid coordinates
+        var gridX = Std.int(tileX / tileSize);
+        var gridY = Std.int(tileY / tileSize);
+        var gridKey = gridX + "_" + gridY;
+        
+        // Check if tile already exists at this grid position (O(1) lookup!)
+        if (tileGrid.exists(gridKey)) {
+            // Tile already exists at this position, don't add another
+            return;
         }
         
         // Add tile to batch
         var tileId = tileBatch.addTile(tileX, tileY, tileSize, tileSize, tileRegions[selectedTileRegion]);
         
         if (tileId >= 0) {
+            // Store in grid index for fast lookups
+            tileGrid.set(gridKey, tileId);
+            
             // Mark buffers as needing update
             tileBatch.needsBufferUpdate = true;
         }
@@ -369,18 +384,17 @@ class EditorState extends State {
             return;
         }
         
-        // Find and remove tile at this position
-        var found = false;
-        for (tileId in 0...1000) { // MAX_TILES
-            var tile = tileBatch.getTile(tileId);
-            if (tile != null) {
-                if (Math.abs(tile.x - tileX) < 1 && Math.abs(tile.y - tileY) < 1) {
-                    tileBatch.removeTile(tileId);
-                    tileBatch.needsBufferUpdate = true;
-                    found = true;
-                    break;
-                }
-            }
+        // Convert to grid coordinates
+        var gridX = Std.int(tileX / tileSize);
+        var gridY = Std.int(tileY / tileSize);
+        var gridKey = gridX + "_" + gridY;
+        
+        // Fast lookup in grid index (O(1) instead of O(n)!)
+        if (tileGrid.exists(gridKey)) {
+            var tileId = tileGrid.get(gridKey);
+            tileBatch.removeTile(tileId);
+            tileGrid.remove(gridKey); // Remove from grid index
+            tileBatch.needsBufferUpdate = true;
         }
     }
     
@@ -407,16 +421,27 @@ class EditorState extends State {
      */
     public function cleanupTilesOutsideBounds():Int {
         var removed = 0;
-        for (tileId in 0...1000) { // MAX_TILES
+        var keysToRemove:Array<String> = [];
+        
+        // Iterate through grid index to find out-of-bounds tiles
+        for (gridKey in tileGrid.keys()) {
+            var tileId = tileGrid.get(gridKey);
             var tile = tileBatch.getTile(tileId);
             if (tile != null) {
                 if (tile.x < mapX || tile.x >= mapX + mapWidth || 
                     tile.y < mapY || tile.y >= mapY + mapHeight) {
                     tileBatch.removeTile(tileId);
+                    keysToRemove.push(gridKey);
                     removed++;
                 }
             }
         }
+        
+        // Remove from grid index
+        for (key in keysToRemove) {
+            tileGrid.remove(key);
+        }
+        
         if (removed > 0) {
             tileBatch.needsBufferUpdate = true;
         }
