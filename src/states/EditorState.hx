@@ -6,6 +6,7 @@ import Renderer;
 import ProgramInfo;
 import display.Grid;
 import display.ManagedTileBatch;
+import display.MapFrame;
 import entity.DisplayEntity;
 
 /**
@@ -17,11 +18,18 @@ class EditorState extends State {
     private var grid:Grid;
     private var tileBatch:ManagedTileBatch;
     private var tileBatchEntity:DisplayEntity;
+    private var mapFrame:MapFrame;
     
     // Tile editor settings
     private var tileSize:Int = 32; // Size of each tile in pixels
     private var selectedTileRegion:Int = 0; // Currently selected tile to place
     private var tileRegions:Array<Int> = []; // Available tile regions
+    
+    // Map bounds (defines the editable area)
+    private var mapX:Float = 0;
+    private var mapY:Float = 0;
+    private var mapWidth:Float = 1024; // 32x32 tiles
+    private var mapHeight:Float = 1024;
     
     public function new(app:App) {
         super("EditorState", app);
@@ -29,8 +37,6 @@ class EditorState extends State {
     
     override public function init():Void {
         super.init();
-        
-        trace("EditorState: Initializing");
         
         // Setup camera for 2D orthographic view with center-based zoom
         camera.ortho = true;
@@ -59,28 +65,24 @@ class EditorState extends State {
         grid.depthTest = false;
         grid.init(renderer);
         
-        trace("EditorState: Grid created");
-        
         var gridEntity = new DisplayEntity(grid, "grid");
         addEntity(gridEntity);
         
         // Setup tilemap
         setupTilemap(renderer);
         
-        trace("EditorState: Setup complete");
+        // Setup map frame
+        setupMapFrame(renderer);
     }
     
     /**
      * Setup the editable tilemap
      */
     private function setupTilemap(renderer:Renderer):Void {
-        trace("EditorState: Setting up tilemap");
-        
+
         // Load tile atlas texture
         var tileTextureData = app.resources.getTexture("textures/devTiles.tga");
         var tileTexture = renderer.uploadTexture(tileTextureData);
-        
-        trace("EditorState: Tile texture loaded - " + tileTextureData.width + "x" + tileTextureData.height);
         
         // Create texture shader for tiles
         var textureVertShader = app.resources.getText("shaders/texture.vert");
@@ -96,8 +98,6 @@ class EditorState extends State {
         var tilesPerRow = Std.int(tileTextureData.width / tileSize);
         var tilesPerCol = Std.int(tileTextureData.height / tileSize);
         
-        trace("EditorState: Defining " + (tilesPerRow * tilesPerCol) + " tile regions (" + tilesPerRow + "x" + tilesPerCol + ")");
-        
         for (row in 0...tilesPerCol) {
             for (col in 0...tilesPerRow) {
                 var regionId = tileBatch.defineRegion(
@@ -110,13 +110,27 @@ class EditorState extends State {
             }
         }
         
-        trace("EditorState: Defined " + tileRegions.length + " tile regions");
-        
         // Create entity for tile batch
         tileBatchEntity = new DisplayEntity(tileBatch, "tilemap");
         addEntity(tileBatchEntity);
+    }
+    
+    /**
+     * Setup the map frame (visual boundary)
+     */
+    private function setupMapFrame(renderer:Renderer):Void {
+        // Load line shader for frame rendering
+        var lineVertShader = app.resources.getText("shaders/line.vert");
+        var lineFragShader = app.resources.getText("shaders/line.frag");
         
-        trace("EditorState: Tilemap ready - Use left click to place tiles, right click to remove");
+        var lineProgramInfo = renderer.createProgramInfo("line", lineVertShader, lineFragShader);
+        
+        mapFrame = new MapFrame(lineProgramInfo, mapX, mapY, mapWidth, mapHeight);
+        mapFrame.init(renderer);
+        
+        // Add the lineBatch as an entity so it gets rendered automatically
+        var lineBatchEntity = new DisplayEntity(mapFrame.getLineBatch(), "mapFrame");
+        addEntity(lineBatchEntity);
     }
     
     private var updateCount:Int = 0;
@@ -183,6 +197,13 @@ class EditorState extends State {
         var tileX = Std.int(Math.floor(worldX / tileSize) * tileSize);
         var tileY = Std.int(Math.floor(worldY / tileSize) * tileSize);
         
+        // Check if tile is within map bounds
+        if (tileX < mapX || tileX >= mapX + mapWidth || 
+            tileY < mapY || tileY >= mapY + mapHeight) {
+            // Tile is outside map bounds
+            return;
+        }
+        
         // Check if tile already exists at this position
         for (tileId in 0...1000) { // MAX_TILES
             var tile = tileBatch.getTile(tileId);
@@ -211,10 +232,14 @@ class EditorState extends State {
         var tileX = Math.floor(worldX / tileSize) * tileSize;
         var tileY = Math.floor(worldY / tileSize) * tileSize;
         
-        trace("EditorState: Removing tile at (" + tileX + ", " + tileY + ")");
+        // Check if position is within map bounds
+        if (tileX < mapX || tileX >= mapX + mapWidth || 
+            tileY < mapY || tileY >= mapY + mapHeight) {
+            // Position is outside map bounds
+            return;
+        }
         
         // Find and remove tile at this position
-        // Note: This is a simple implementation - for production you'd want a spatial hash
         var found = false;
         for (tileId in 0...1000) { // MAX_TILES
             var tile = tileBatch.getTile(tileId);
@@ -223,14 +248,9 @@ class EditorState extends State {
                     tileBatch.removeTile(tileId);
                     tileBatch.needsBufferUpdate = true;
                     found = true;
-                    trace("EditorState: Tile removed, ID=" + tileId + ", total tiles=" + tileBatch.getTileCount());
                     break;
                 }
             }
-        }
-        
-        if (!found) {
-            trace("EditorState: No tile found at position");
         }
     }
     
@@ -245,6 +265,15 @@ class EditorState extends State {
         // Render tilemap
         if (tileBatch != null && tileBatch.visible) {
             tileBatch.render(camera.getMatrix());
+        }
+        
+        // Update map frame (sets uniforms) - actual drawing happens in super.render() via entity
+        if (mapFrame != null && mapFrame.visible) {
+            var lineBatch = mapFrame.getLineBatch();
+            if (lineBatch.needsBufferUpdate) {
+                lineBatch.updateBuffers(renderer);
+            }
+            lineBatch.render(camera.getMatrix());
         }
         
         super.render(renderer);

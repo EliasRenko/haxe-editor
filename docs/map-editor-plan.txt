@@ -1,0 +1,47 @@
+MAP EDITOR IMPLEMENTATION PLAN
+================================
+
+GOAL: Create a bounded map region with resizable edges for tile-based level editing
+
+## Phase 1: Map Bounds Foundation
+1. Add map boundary properties to EditorState (x, y, width, height)
+2. Restrict tile placement to only work within the map bounds
+3. Restrict grid rendering to only show within the map bounds
+4. Start with default map size: 32x32 tiles = 1024x1024 pixels
+
+## Phase 2: Visual Frame
+1. Create a MapFrame class to render the boundary rectangle
+2. Draw edge indicators to show resize handles
+3. Add visual feedback (different colors for frame, handles, etc.)
+4. Add debug objects (small rects/tiles) at each edge center as drag handles
+
+## Phase 3: Interactive Resizing (4-Direction)
+1. Create visual handle objects for each edge:
+   - Top edge handle (center-top)
+   - Bottom edge handle (center-bottom)
+   - Left edge handle (center-left)
+   - Right edge handle (center-right)
+2. Detect mouse hover over resize handles
+3. Implement drag logic to resize the map bounds:
+   - Top handle: move top edge up/down
+   - Bottom handle: move bottom edge up/down
+   - Left handle: move left edge left/right
+   - Right handle: move right edge left/right
+4. Update cursor to show resize direction (↔ for left/right, ↕ for top/bottom)
+5. Add constraints:
+   - Minimum map size (e.g., 10x10 tiles)
+   - Snap to grid (32px increments)
+
+## Phase 4: Polish
+1. Save/load map bounds with the level data
+2. Add keyboard shortcuts for common sizes
+3. Display map dimensions as overlay text (e.g., "32x24 tiles")
+4. Add visual feedback when trying to place tiles outside bounds
+5. Consider undo/redo for resize operations
+
+## IMPLEMENTATION NOTES
+- Make handles easy to grab (e.g., 16px wide/tall)
+- Handles should be visually distinct (different color, possibly animated)
+- Show coordinates/size tooltip while resizing
+- Grid should fade or disappear outside map bounds
+- Tiles outside bounds should be prevented or highlighted as invalid

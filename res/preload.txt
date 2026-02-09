@@ -5,6 +5,8 @@ shaders/grid.vert
 shaders/grid.frag
 shaders/texture.vert
 shaders/texture.frag
+shaders/line.vert
+shaders/line.frag
 
 #textures
 textures/sky.tga
