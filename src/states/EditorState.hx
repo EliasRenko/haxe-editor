@@ -31,6 +31,12 @@ class EditorState extends State {
     private var mapWidth:Float = 1024; // 32x32 tiles
     private var mapHeight:Float = 1024;
     
+    // Resize state
+    private var resizeMode:String = null; // "top", "bottom", "left", "right", or null
+    private var resizeDragStart:{x:Float, y:Float} = null;
+    private var resizeOriginalBounds:{x:Float, y:Float, width:Float, height:Float} = null;
+    private var minMapSize:Float = 320.0; // 10 tiles minimum (10 * 32px)
+    
     public function new(app:App) {
         super("EditorState", app);
     }
@@ -148,7 +154,7 @@ class EditorState extends State {
     }
     
     /**
-     * Handle mouse input for placing and removing tiles
+     * Handle mouse input for placing and removing tiles, and resizing the map frame
      */
     private function handleTileInput():Void {
         var mouse = app.input.mouse;
@@ -160,6 +166,38 @@ class EditorState extends State {
         // Convert screen position to world position using camera
         var worldPos = screenToWorld(screenX, screenY);
 
+        // Handle resize drag (if in resize mode)
+        if (resizeMode != null) {
+            if (mouse.check(1)) {
+                // Continue dragging
+                handleResizeDrag(worldPos.x, worldPos.y);
+            } else {
+                // Released mouse - end resize
+                resizeMode = null;
+                resizeDragStart = null;
+                resizeOriginalBounds = null;
+            }
+            return; // Skip tile placement while resizing
+        }
+
+        // Left click - check for resize handle first, then place tile
+        if (mouse.pressed(1)) { // Button just pressed
+            // Check if clicking on a resize handle
+            var handle = getHandleAt(worldPos.x, worldPos.y);
+            if (handle != null) {
+                // Start resize
+                resizeMode = handle;
+                resizeDragStart = {x: worldPos.x, y: worldPos.y};
+                resizeOriginalBounds = {
+                    x: mapX,
+                    y: mapY,
+                    width: mapWidth,
+                    height: mapHeight
+                };
+                return;
+            }
+        }
+        
         // Left click to place tile (continuous while holding)
         if (mouse.check(1)) { // Button 1 = left
             placeTileAt(worldPos.x, worldPos.y);
@@ -168,6 +206,98 @@ class EditorState extends State {
         // Right click to remove tile (continuous while holding)
         if (mouse.check(3)) { // Button 3 = right
             removeTileAt(worldPos.x, worldPos.y);
+        }
+    }
+    
+    /**
+     * Check if world position is over a resize handle
+     * Returns: "top", "bottom", "left", "right", or null
+     */
+    private function getHandleAt(worldX:Float, worldY:Float):String {
+        if (mapFrame == null) return null;
+        
+        // Check each handle
+        var handles = [
+            {name: "top", bounds: mapFrame.getTopHandle()},
+            {name: "bottom", bounds: mapFrame.getBottomHandle()},
+            {name: "left", bounds: mapFrame.getLeftHandle()},
+            {name: "right", bounds: mapFrame.getRightHandle()}
+        ];
+        
+        for (handle in handles) {
+            var b = handle.bounds;
+            if (worldX >= b.x && worldX <= b.x + b.width &&
+                worldY >= b.y && worldY <= b.y + b.height) {
+                return handle.name;
+            }
+        }
+        
+        return null;
+    }
+    
+    /**
+     * Handle resize dragging with constraints
+     */
+    private function handleResizeDrag(worldX:Float, worldY:Float):Void {
+        if (resizeMode == null || resizeDragStart == null || resizeOriginalBounds == null) return;
+        
+        var deltaX = worldX - resizeDragStart.x;
+        var deltaY = worldY - resizeDragStart.y;
+        
+        // Snap delta to grid (32px increments)
+        deltaX = Math.round(deltaX / tileSize) * tileSize;
+        deltaY = Math.round(deltaY / tileSize) * tileSize;
+        
+        var newX = resizeOriginalBounds.x;
+        var newY = resizeOriginalBounds.y;
+        var newWidth = resizeOriginalBounds.width;
+        var newHeight = resizeOriginalBounds.height;
+        
+        switch (resizeMode) {
+            case "top":
+                // Move top edge up/down (changes Y and height)
+                newY = resizeOriginalBounds.y + deltaY;
+                newHeight = resizeOriginalBounds.height - deltaY;
+                
+            case "bottom":
+                // Move bottom edge up/down (changes height only)
+                newHeight = resizeOriginalBounds.height + deltaY;
+                
+            case "left":
+                // Move left edge left/right (changes X and width)
+                newX = resizeOriginalBounds.x + deltaX;
+                newWidth = resizeOriginalBounds.width - deltaX;
+                
+            case "right":
+                // Move right edge left/right (changes width only)
+                newWidth = resizeOriginalBounds.width + deltaX;
+        }
+        
+        // Apply minimum size constraint
+        if (newWidth < minMapSize) {
+            if (resizeMode == "left") {
+                // Adjust X to maintain right edge position
+                newX = newX + (newWidth - minMapSize);
+            }
+            newWidth = minMapSize;
+        }
+        if (newHeight < minMapSize) {
+            if (resizeMode == "top") {
+                // Adjust Y to maintain bottom edge position
+                newY = newY + (newHeight - minMapSize);
+            }
+            newHeight = minMapSize;
+        }
+        
+        // Update map bounds
+        mapX = newX;
+        mapY = newY;
+        mapWidth = newWidth;
+        mapHeight = newHeight;
+        
+        // Update frame visual
+        if (mapFrame != null) {
+            mapFrame.setBounds(mapX, mapY, mapWidth, mapHeight);
         }
     }
     
@@ -252,6 +382,45 @@ class EditorState extends State {
                 }
             }
         }
+    }
+    
+    /**
+     * Count tiles that are outside the current map bounds
+     */
+    private function countTilesOutsideBounds():Int {
+        var count = 0;
+        for (tileId in 0...1000) { // MAX_TILES
+            var tile = tileBatch.getTile(tileId);
+            if (tile != null) {
+                if (tile.x < mapX || tile.x >= mapX + mapWidth || 
+                    tile.y < mapY || tile.y >= mapY + mapHeight) {
+                    count++;
+                }
+            }
+        }
+        return count;
+    }
+    
+    /**
+     * Remove all tiles that are outside the current map bounds
+     * Useful when shrinking the map to clean up orphaned tiles
+     */
+    public function cleanupTilesOutsideBounds():Int {
+        var removed = 0;
+        for (tileId in 0...1000) { // MAX_TILES
+            var tile = tileBatch.getTile(tileId);
+            if (tile != null) {
+                if (tile.x < mapX || tile.x >= mapX + mapWidth || 
+                    tile.y < mapY || tile.y >= mapY + mapHeight) {
+                    tileBatch.removeTile(tileId);
+                    removed++;
+                }
+            }
+        }
+        if (removed > 0) {
+            tileBatch.needsBufferUpdate = true;
+        }
+        return removed;
     }
     
     private var renderCount:Int = 0;
