@@ -8,6 +8,9 @@ uniform float uSubGridSize;
 uniform vec3 uGridColor;
 uniform vec3 uBackgroundColor;
 uniform float uFadeDistance;
+uniform vec2 uBoundsMin; // Min bounds (x, y)
+uniform vec2 uBoundsMax; // Max bounds (x, y)
+uniform int uEnableBounds; // 0 = disabled, 1 = enabled
 
 float grid(vec2 pos, float gridSize) {
     // Calculate grid lines
@@ -19,6 +22,14 @@ float grid(vec2 pos, float gridSize) {
 }
 
 void main() {
+    // Clip to bounds if enabled
+    if (uEnableBounds == 1) {
+        if (fragPos.x < uBoundsMin.x || fragPos.x > uBoundsMax.x ||
+            fragPos.y < uBoundsMin.y || fragPos.y > uBoundsMax.y) {
+            discard; // Fragment outside bounds - don't render
+        }
+    }
+    
     // Calculate main grid
     float mainGrid = grid(fragPos, uGridSize);
     

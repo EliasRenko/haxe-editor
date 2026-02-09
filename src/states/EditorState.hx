@@ -1,4 +1,4 @@
-package states;
+﻿package states;
 
 import State;
 import App;
@@ -7,6 +7,7 @@ import ProgramInfo;
 import display.Grid;
 import display.ManagedTileBatch;
 import display.MapFrame;
+import display.LineBatch;
 import entity.DisplayEntity;
 
 /**
@@ -19,6 +20,11 @@ class EditorState extends State {
     private var tileBatch:ManagedTileBatch;
     private var tileBatchEntity:DisplayEntity;
     private var mapFrame:MapFrame;
+    private var worldAxes:LineBatch;
+    private var worldAxesEntity:DisplayEntity;
+    
+    // Visual options
+    public var showWorldAxes:Bool = true; // Show X/Y axes at origin (0,0)
     
     // Tile editor settings
     private var tileSize:Int = 32; // Size of each tile in pixels
@@ -78,6 +84,9 @@ class EditorState extends State {
         grid.depthTest = false;
         grid.init(renderer);
         
+        // Clip grid to map bounds
+        grid.setBounds(mapX, mapY, mapX + mapWidth, mapY + mapHeight);
+        
         var gridEntity = new DisplayEntity(grid, "grid");
         addEntity(gridEntity);
         
@@ -86,6 +95,9 @@ class EditorState extends State {
         
         // Setup map frame
         setupMapFrame(renderer);
+        
+        // Setup world axes
+        setupWorldAxes(renderer);
     }
     
     /**
@@ -144,6 +156,54 @@ class EditorState extends State {
         // Add the lineBatch as an entity so it gets rendered automatically
         var lineBatchEntity = new DisplayEntity(mapFrame.getLineBatch(), "mapFrame");
         addEntity(lineBatchEntity);
+    }
+    
+    /**
+     * Setup infinite world axes at origin (0,0)
+     * Red = X axis (horizontal), Green = Y axis (vertical)
+     */
+    private function setupWorldAxes(renderer:Renderer):Void {
+        trace("[AXES DEBUG] Setting up world axes...");
+        
+        var lineProgramInfo = app.renderer.getProgramInfo("line");
+        if (lineProgramInfo == null) {
+            trace("[AXES DEBUG] ERROR: line program info is null!");
+            return;
+        }
+        trace("[AXES DEBUG] Got line program info: " + lineProgramInfo);
+        
+        worldAxes = new LineBatch(lineProgramInfo, true);
+        worldAxes.depthTest = false;
+        worldAxes.visible = showWorldAxes;
+        trace("[AXES DEBUG] Created LineBatch, visible=" + worldAxes.visible);
+        
+        // Initialize first (creates buffers)
+        worldAxes.init(renderer);
+        trace("[AXES DEBUG] After init: VBO=" + worldAxes.vbo + ", EBO=" + worldAxes.ebo);
+        
+        // THEN add the lines
+        var axisLength = 10000.0;
+        var z = 0.05;
+        
+        // X axis - Red
+        var redColor = [1.0, 0.0, 0.0, 1.0];
+        worldAxes.addLine(-axisLength, 0, z, axisLength, 0, z, redColor, redColor);
+        trace("[AXES DEBUG] Added X axis line (red)");
+        
+        // Y axis - Green
+        var greenColor = [0.0, 1.0, 0.0, 1.0];
+        worldAxes.addLine(0, -axisLength, z, 0, axisLength, z, greenColor, greenColor);
+        trace("[AXES DEBUG] Added Y axis line (green)");
+        
+        
+        // Upload the vertex data to GPU immediately
+        worldAxes.updateBuffers(renderer);
+        trace("[AXES DEBUG] Called updateBuffers, needsBufferUpdate now=" + worldAxes.needsBufferUpdate);
+        
+        // Add to entity system for rendering
+        worldAxesEntity = new DisplayEntity(worldAxes, "worldAxes");
+        addEntity(worldAxesEntity);
+        trace("[AXES DEBUG] Added worldAxes entity to render system");
     }
     
     private var updateCount:Int = 0;
@@ -307,6 +367,11 @@ class EditorState extends State {
             mapFrame.setBounds(mapX, mapY, mapWidth, mapHeight);
         }
         
+        // Update grid bounds to match map frame
+        if (grid != null) {
+            grid.setBounds(mapX, mapY, mapX + mapWidth, mapY + mapHeight);
+        }
+        
         // Optionally delete tiles outside new bounds
         if (deleteOutOfBoundsTilesOnResize) {
             cleanupTilesOutsideBounds();
@@ -448,6 +513,67 @@ class EditorState extends State {
         return removed;
     }
     
+    /**
+     * Export tilemap data to JSON format
+     * @param filePath Absolute path where to save the JSON file
+     * @return Number of tiles exported
+     */
+    public function exportToJSON(filePath:String):Int {
+        var tiles:Array<Dynamic> = [];
+        
+        // Iterate through grid index and export each tile
+        for (gridKey in tileGrid.keys()) {
+            var tileId = tileGrid.get(gridKey);
+            var tile = tileBatch.getTile(tileId);
+            
+            if (tile != null) {
+                // Convert world position back to grid coordinates
+                var gridX = Std.int(tile.x / tileSize);
+                var gridY = Std.int(tile.y / tileSize);
+                
+                // Get tile region (atlas index)
+                var region = tile.regionId;
+                
+                tiles.push({
+                    gridX: gridX,
+                    gridY: gridY,
+                    x: tile.x,
+                    y: tile.y,
+                    region: region
+                });
+            }
+        }
+        
+        // Create JSON structure
+        var data = {
+            version: "1.0",
+            tileSize: tileSize,
+            mapBounds: {
+                x: mapX,
+                y: mapY,
+                width: mapWidth,
+                height: mapHeight,
+                gridWidth: Std.int(mapWidth / tileSize),
+                gridHeight: Std.int(mapHeight / tileSize)
+            },
+            tiles: tiles,
+            tileCount: tiles.length
+        };
+        
+        // Convert to JSON string with pretty formatting
+        var jsonString = haxe.Json.stringify(data, null, "  ");
+        
+        // Write to file
+        try {
+            sys.io.File.saveContent(filePath, jsonString);
+            trace("Exported " + tiles.length + " tiles to: " + filePath);
+            return tiles.length;
+        } catch (e:Dynamic) {
+            trace("Error exporting JSON: " + e);
+            return -1;
+        }
+    }
+    
     private var renderCount:Int = 0;
     
     override public function render(renderer:Renderer):Void {
@@ -468,6 +594,12 @@ class EditorState extends State {
                 lineBatch.updateBuffers(renderer);
             }
             lineBatch.render(camera.getMatrix());
+        }
+        
+        // Entity system handles worldAxes rendering automatically
+        // Just update visibility flag
+        if (worldAxes != null) {
+            worldAxes.visible = showWorldAxes;
         }
         
         super.render(renderer);

@@ -93,14 +93,6 @@ class MapFrame {
     
     public function init(renderer:Renderer):Void {
         lineBatch.init(renderer);
-        
-        // CRITICAL FIX: Manually create buffers if init didn't work
-        if (lineBatch.vbo == 0) {
-            var buffers = renderer.createBuffers();
-            lineBatch.vbo = buffers.vbo;
-            lineBatch.ebo = buffers.ebo;
-        }
-        
         rebuildFrame();
     }
     

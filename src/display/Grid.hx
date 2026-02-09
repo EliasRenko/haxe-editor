@@ -21,6 +21,13 @@ class Grid extends Transform {
     public var gridColor:Array<Float> = [0.3, 0.3, 0.3]; // RGB
     public var backgroundColor:Array<Float> = [0.0, 0.0, 0.0]; // RGB
     public var fadeDistance:Float = 2000.0;
+    
+    // Bounds clipping (optional)
+    public var enableBounds:Bool = false;
+    public var boundsMinX:Float = 0.0;
+    public var boundsMinY:Float = 0.0;
+    public var boundsMaxX:Float = 1000.0;
+    public var boundsMaxY:Float = 1000.0;
 
     /**
      * Create a new Grid display object
@@ -69,6 +76,11 @@ class Grid extends Transform {
         uniforms.set("uGridColor", gridColor);
         uniforms.set("uBackgroundColor", backgroundColor);
         uniforms.set("uFadeDistance", fadeDistance);
+        
+        // Set bounds uniforms
+        uniforms.set("uEnableBounds", enableBounds ? 1 : 0);
+        uniforms.set("uBoundsMin", [boundsMinX, boundsMinY]);
+        uniforms.set("uBoundsMax", [boundsMaxX, boundsMaxY]);
 
         // Call parent render - it will handle updateTransform and uMatrix
         super.render(cameraMatrix);
@@ -92,5 +104,27 @@ class Grid extends Transform {
      */
     public function setBackgroundColor(r:Float, g:Float, b:Float):Void {
         backgroundColor = [r, g, b];
+    }
+    
+    /**
+     * Set the bounds for grid clipping
+     * @param minX Minimum X coordinate
+     * @param minY Minimum Y coordinate
+     * @param maxX Maximum X coordinate
+     * @param maxY Maximum Y coordinate
+     */
+    public function setBounds(minX:Float, minY:Float, maxX:Float, maxY:Float):Void {
+        boundsMinX = minX;
+        boundsMinY = minY;
+        boundsMaxX = maxX;
+        boundsMaxY = maxY;
+        enableBounds = true;
+    }
+    
+    /**
+     * Disable bounds clipping (grid will be infinite again)
+     */
+    public function clearBounds():Void {
+        enableBounds = false;
     }
 }
