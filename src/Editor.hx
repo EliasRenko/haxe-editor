@@ -128,6 +128,14 @@ extern "C" {
     __declspec(dllexport) void getTextureData(const char* path, TextureDataStruct* outData) {
         ::Editor_obj::getTextureData(path, outData);
     }
+    
+    __declspec(dllexport) int getTileset(const char* tilesetName, TilesetInfoStruct* outInfo) {
+        return ::Editor_obj::getTileset(::String(tilesetName), outInfo);
+    }
+    
+    __declspec(dllexport) void setSelectedTile(int tileRegionId) {
+        ::Editor_obj::setSelectedTile(tileRegionId);
+    }
 }
 ')
 
@@ -135,6 +143,7 @@ class Editor {
 
     private static var app:App = null;
     private static var initialized:Bool = false;
+    private static var editorState:states.EditorState = null; // Store reference to editor state
     
     public static function main():Void {
     }
@@ -164,7 +173,8 @@ class Editor {
             }
             
             // Load the font baker state
-            app.addState(new EditorState(app));
+            editorState = new EditorState(app);
+            app.addState(editorState);
             app.log.info(1, "EditorState loaded");
             
             initialized = true;
@@ -276,7 +286,8 @@ class Editor {
             log("Editor: Loading state " + stateId);
             switch (stateId) {
                 case 0: 
-                    app.addState(new EditorState(app));
+                    editorState = new EditorState(app);
+                    app.addState(editorState);
                     log("Editor: EditorState loaded");
                 default: 
                     log("Editor: Unknown state ID: " + stateId);
@@ -457,6 +468,83 @@ class Editor {
             log("Editor: Loaded texture: " + path + " (" + width + "x" + height + ", " + bpp + " bpp)");
         } catch (e:Dynamic) {
             log("Editor: Error loading texture: " + e);
+        }
+    }
+    
+    /**
+     * Get tileset information by name
+     * @param tilesetName Name of the tileset (e.g., "devTiles")
+     * @param outInfo Pointer to TilesetInfoStruct to fill
+     * @return 1 if successful, 0 if tileset not found
+     */
+    @:keep
+    public static function getTileset(tilesetName:String, outInfo:cpp.RawPointer<cpp.Void>):Int {
+        if (app == null || !initialized) {
+            log("Editor: Cannot get tileset - engine not initialized");
+            return 0;
+        }
+        
+        if (editorState == null) {
+            log("Editor: EditorState not loaded");
+            return 0;
+        }
+        
+        try {
+            var tilesetInfo = editorState.getTilesetInfo(tilesetName);
+            
+            if (tilesetInfo == null) {
+                log("Editor: Tileset not found: " + tilesetName);
+                return 0;
+            }
+            
+            // Fill the struct using untyped C++ code
+            var name = tilesetInfo.name;
+            var texturePath = tilesetInfo.texturePath;
+            var tileSize = tilesetInfo.tileSize;
+            var tilesPerRow = tilesetInfo.tilesPerRow;
+            var tilesPerCol = tilesetInfo.tilesPerCol;
+            var regionCount = tilesetInfo.regionCount;
+            
+            untyped __cpp__("
+                TilesetInfoStruct* outStruct = (TilesetInfoStruct*){0};
+                outStruct->name = {1}.utf8_str();
+                outStruct->texturePath = {2}.utf8_str();
+                outStruct->tileSize = {3};
+                outStruct->tilesPerRow = {4};
+                outStruct->tilesPerCol = {5};
+                outStruct->regionCount = {6};
+            ", outInfo, name, texturePath, tileSize, tilesPerRow, tilesPerCol, regionCount);
+            
+            log("Editor: Retrieved tileset: " + tilesetName + " (" + tilesPerRow + "x" + tilesPerCol + " tiles)");
+            return 1;
+            
+        } catch (e:Dynamic) {
+            log("Editor: Error getting tileset: " + e);
+            return 0;
+        }
+    }
+    
+    /**
+     * Set the selected tile region for drawing
+     * @param tileRegionId The region ID to select (0-based index into tile regions array)
+     */
+    @:keep
+    public static function setSelectedTile(tileRegionId:Int):Void {
+        if (app == null || !initialized) {
+            log("Editor: Cannot set selected tile - engine not initialized");
+            return;
+        }
+        
+        if (editorState == null) {
+            log("Editor: EditorState not loaded");
+            return;
+        }
+        
+        try {
+            editorState.setSelectedTileRegion(tileRegionId);
+            log("Editor: Selected tile region: " + tileRegionId);
+        } catch (e:Dynamic) {
+            log("Editor: Error setting selected tile: " + e);
         }
     }
 }

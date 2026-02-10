@@ -11,6 +11,21 @@ import display.LineBatch;
 import entity.DisplayEntity;
 
 /**
+ * Tileset structure containing texture and tile information
+ */
+typedef Tileset = {
+    var name:String;              // Tileset name (e.g., "devTiles")
+    var texturePath:String;       // Resource path (e.g., "textures/devTiles.tga")
+    var textureId:Dynamic;        // OpenGL texture object from renderer.uploadTexture()
+    var tileSize:Int;             // Size of each tile in pixels
+    var tilesPerRow:Int;          // Number of tiles per row in atlas
+    var tilesPerCol:Int;          // Number of tiles per column in atlas
+    var tileRegions:Array<Int>;   // Array of region IDs in the tile batch
+    var tileBatch:ManagedTileBatch; // Batch for rendering tiles from this tileset
+    var entity:DisplayEntity;     // Entity for automatic rendering
+}
+
+/**
  * Editor state with infinite grid and editable tilemap
  * Allows placing and removing tiles with mouse clicks
  */
@@ -26,10 +41,14 @@ class EditorState extends State {
     // Visual options
     public var showWorldAxes:Bool = true; // Show X/Y axes at origin (0,0)
     
+    // Tileset management
+    private var tilesets:Map<String, Tileset> = new Map<String, Tileset>();
+    private var currentTilesetName:String = "devTiles"; // Currently active tileset
+    
     // Tile editor settings
     private var tileSize:Int = 32; // Size of each tile in pixels
     private var selectedTileRegion:Int = 0; // Currently selected tile to place
-    private var tileRegions:Array<Int> = []; // Available tile regions
+    private var tileRegions:Array<Int> = []; // Available tile regions (for backward compatibility)
     
     // Grid-based tile storage index (faster lookups than iterating ManagedTileBatch)
     // Key format: "gridX_gridY" -> tileId in ManagedTileBatch
@@ -90,8 +109,8 @@ class EditorState extends State {
         var gridEntity = new DisplayEntity(grid, "grid");
         addEntity(gridEntity);
         
-        // Setup tilemap
-        setupTilemap(renderer);
+        // Setup default tilemap
+        setupTilemap("textures/devTiles.tga", "devTiles", 32);
         
         // Setup map frame
         setupMapFrame(renderer);
@@ -101,43 +120,117 @@ class EditorState extends State {
     }
     
     /**
-     * Setup the editable tilemap
+     * Set the currently selected tile region for drawing
+     * @param regionId The region ID to select (0-based index)
      */
-    private function setupTilemap(renderer:Renderer):Void {
-
+    public function setSelectedTileRegion(regionId:Int):Void {
+        if (regionId >= 0 && regionId < tileRegions.length) {
+            selectedTileRegion = regionId;
+            trace("Selected tile region: " + regionId + " of " + tileRegions.length);
+        } else {
+            trace("Invalid tile region ID: " + regionId + " (valid range: 0-" + (tileRegions.length - 1) + ")");
+        }
+    }
+    
+    /**
+     * Get tileset information by name (for external access)
+     * @param tilesetName Name of the tileset
+     * @return Tileset data or null if not found
+     */
+    public function getTilesetInfo(tilesetName:String):Null<{name:String, texturePath:String, tileSize:Int, tilesPerRow:Int, tilesPerCol:Int, regionCount:Int}> {
+        var tileset = tilesets.get(tilesetName);
+        if (tileset == null) {
+            return null;
+        }
+        
+        return {
+            name: tileset.name,
+            texturePath: tileset.texturePath,
+            tileSize: tileset.tileSize,
+            tilesPerRow: tileset.tilesPerRow,
+            tilesPerCol: tileset.tilesPerCol,
+            regionCount: tileset.tileRegions.length
+        };
+    }
+    
+    /**
+     * Setup a tileset and add it to the collection
+     * @param texturePath Resource path to the texture (e.g., "textures/devTiles.tga")
+     * @param tilesetName Unique name for this tileset
+     * @param tileSize Size of each tile in pixels
+     */
+    private function setupTilemap(texturePath:String, tilesetName:String, tileSize:Int):Void {
+        var renderer = app.renderer;
+        
         // Load tile atlas texture
-        var tileTextureData = app.resources.getTexture("textures/devTiles.tga");
+        var tileTextureData = app.resources.getTexture(texturePath);
+        if (tileTextureData == null) {
+            trace("Error: Could not load texture: " + texturePath);
+            return;
+        }
+        
         var tileTexture = renderer.uploadTexture(tileTextureData);
         
-        // Create texture shader for tiles
-        var textureVertShader = app.resources.getText("shaders/texture.vert");
-        var textureFragShader = app.resources.getText("shaders/texture.frag");
-        var textureProgramInfo = renderer.createProgramInfo("texture", textureVertShader, textureFragShader);
+        // Create texture shader for tiles (reuse if already exists)
+        var textureProgramInfo = renderer.getProgramInfo("texture");
+        if (textureProgramInfo == null) {
+            var textureVertShader = app.resources.getText("shaders/texture.vert");
+            var textureFragShader = app.resources.getText("shaders/texture.frag");
+            textureProgramInfo = renderer.createProgramInfo("texture", textureVertShader, textureFragShader);
+        }
         
-        // Create managed tile batch
-        tileBatch = new ManagedTileBatch(textureProgramInfo, tileTexture);
-        tileBatch.depthTest = false;
-        tileBatch.init(renderer);
+        // Create managed tile batch for this tileset
+        var batch = new ManagedTileBatch(textureProgramInfo, tileTexture);
+        batch.depthTest = false;
+        batch.init(renderer);
         
-        // Define tile regions in the atlas (assuming 32x32 tiles in a grid)
+        // Calculate atlas dimensions
         var tilesPerRow = Std.int(tileTextureData.width / tileSize);
         var tilesPerCol = Std.int(tileTextureData.height / tileSize);
         
+        // Define tile regions in the atlas
+        var regions:Array<Int> = [];
         for (row in 0...tilesPerCol) {
             for (col in 0...tilesPerRow) {
-                var regionId = tileBatch.defineRegion(
+                var regionId = batch.defineRegion(
                     col * tileSize,  // atlasX
                     row * tileSize,  // atlasY
                     tileSize,        // width
                     tileSize         // height
                 );
-                tileRegions.push(regionId);
+                regions.push(regionId);
             }
         }
         
         // Create entity for tile batch
-        tileBatchEntity = new DisplayEntity(tileBatch, "tilemap");
-        addEntity(tileBatchEntity);
+        var entity = new DisplayEntity(batch, "tilemap_" + tilesetName);
+        addEntity(entity);
+        
+        // Create tileset structure
+        var tileset:Tileset = {
+            name: tilesetName,
+            texturePath: texturePath,
+            textureId: tileTexture,
+            tileSize: tileSize,
+            tilesPerRow: tilesPerRow,
+            tilesPerCol: tilesPerCol,
+            tileRegions: regions,
+            tileBatch: batch,
+            entity: entity
+        };
+        
+        // Store in collection
+        tilesets.set(tilesetName, tileset);
+        
+        // Update current tileset references (for backward compatibility)
+        if (tilesetName == currentTilesetName) {
+            tileBatch = batch;
+            tileBatchEntity = entity;
+            tileRegions = regions;
+            this.tileSize = tileSize;
+        }
+        
+        trace("Loaded tileset: " + tilesetName + " (" + tilesPerRow + "x" + tilesPerCol + " tiles)");
     }
     
     /**
