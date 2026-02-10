@@ -4,6 +4,7 @@ import states.EditorState;
 import math.Vec2;
 
 @:headerCode('#include "editor_native.h"')
+@:headerInclude("haxe/io/Bytes.h")
 @:cppFileCode('
 #include <SDL3/SDL_log.h>
 
@@ -122,6 +123,10 @@ extern "C" {
 
     __declspec(dllexport) void onKeyboardUp(int keyCode) {
         ::Editor_obj::onKeyboardUp(keyCode);
+    }
+    
+    __declspec(dllexport) void getTextureData(const char* path, TextureDataStruct* outData) {
+        ::Editor_obj::getTextureData(path, outData);
     }
 }
 ')
@@ -405,6 +410,53 @@ class Editor {
             // Pass scancode as keycode since use_scancodes is not defined
             // and Keycode constants are actually scancode values
             @:privateAccess app.onKeyUp(scancode, scancode, false, 0, 1);
+        }
+    }
+    
+    /**
+     * Get texture data by resource path
+     * @param path Resource path (e.g., "textures/myTexture.tga")
+     * @param outData Pointer to TextureDataStruct to fill
+     */
+    @:keep
+    public static function getTextureData(path:String, outData:cpp.RawPointer<cpp.Void>):Void {
+        if (app == null || !initialized) {
+            log("Editor: Cannot get texture - engine not initialized");
+            return;
+        }
+        
+        try {
+            // Load texture from resources
+            var textureData = app.resources.getTexture(path);
+            if (textureData == null) {
+                log("Editor: Texture not found: " + path);
+                return;
+            }
+            
+            // Fill the struct using untyped C++ code
+            var width = textureData.width;
+            var height = textureData.height;
+            var bpp = textureData.bytesPerPixel;
+            var dataLength = textureData.bytes.length;
+            var isTransparent = textureData.transparent ? 1 : 0;
+            var bytes = textureData.bytes;
+            
+            untyped __cpp__("
+                TextureDataStruct* outStruct = (TextureDataStruct*){0};
+                outStruct->width = {1};
+                outStruct->height = {2};
+                outStruct->bytesPerPixel = {3};
+                outStruct->dataLength = {4};
+                outStruct->transparent = {5};
+                // ArrayBufferViewImpl has a 'bytes' field of type haxe::io::Bytes
+                // which has a 'b' field of type Array<unsigned char>
+                ::Array<unsigned char> byteArray = {6}->bytes->b;
+                outStruct->data = (unsigned char*)&(byteArray[0]);
+            ", outData, width, height, bpp, dataLength, isTransparent, bytes);
+            
+            log("Editor: Loaded texture: " + path + " (" + width + "x" + height + ", " + bpp + " bpp)");
+        } catch (e:Dynamic) {
+            log("Editor: Error loading texture: " + e);
         }
     }
 }

@@ -11,11 +11,22 @@
 typedef void (__cdecl *CustomCallback)(const char* message);
 typedef void (__cdecl *MouseDownButtonCallback)(double x, double y, int button);
 
+// Texture data structure for passing to C#
+typedef struct {
+    unsigned char* data;      // Pointer to pixel data
+    int width;                // Texture width
+    int height;               // Texture height
+    int bytesPerPixel;        // Bytes per pixel (1=grayscale, 3=RGB, 4=RGBA)
+    int dataLength;           // Total size of data array
+    int transparent;          // 1 if has transparency, 0 otherwise
+} TextureDataStruct;
+
 // C exports
 extern "C" {
     // Global state (declared in Editor.hx @:cppFileCode)
     extern bool hxcpp_initialized;
     extern CustomCallback g_callback;
+    
     __declspec(dllexport) const char* HxcppInit();
 
     __declspec(dllexport) void setCallback(CustomCallback callback);
@@ -43,6 +54,9 @@ extern "C" {
     __declspec(dllexport) void onMouseButtonUp(int x, int y, int button);
     __declspec(dllexport) void onKeyboardDown(int keyCode);
     __declspec(dllexport) void onKeyboardUp(int keyCode);
+    
+    // Texture data retrieval
+    __declspec(dllexport) void getTextureData(const char* path, TextureDataStruct* outData);
 }
 
 #endif // EDITOR_NATIVE_H
