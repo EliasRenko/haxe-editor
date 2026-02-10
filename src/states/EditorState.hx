@@ -1,5 +1,6 @@
 ﻿package states;
 
+import Log.LogCategory;
 import State;
 import App;
 import Renderer;
@@ -109,8 +110,7 @@ class EditorState extends State {
         var gridEntity = new DisplayEntity(grid, "grid");
         addEntity(gridEntity);
         
-        // Setup default tilemap
-        setupTilemap("textures/devTiles.tga", "devTiles", 32);
+        // No default tilemap - use setupTilemap() or importFromJSON() to load tilesets
         
         // Setup map frame
         setupMapFrame(renderer);
@@ -154,18 +154,114 @@ class EditorState extends State {
     }
     
     /**
+     * Get the count of loaded tilesets
+     * @return Number of tilesets
+     */
+    public function getTilesetCount():Int {
+        var count = 0;
+        for (_ in tilesets.keys()) {
+            count++;
+        }
+        return count;
+    }
+    
+    /**
+     * Get tileset name at specific index
+     * @param index Index of the tileset (0-based)
+     * @return Tileset name or empty string if index out of bounds
+     */
+    public function getTilesetNameAt(index:Int):String {
+        if (index < 0) return "";
+        
+        var i = 0;
+        for (name in tilesets.keys()) {
+            if (i == index) {
+                return name;
+            }
+            i++;
+        }
+        return ""; // Index out of bounds
+    }
+
+    /**
+     * Set the current active tileset for drawing
+     * @param tilesetName Name of the tileset to make active
+     * @return True if tileset was found and set, false otherwise
+     */
+    public function setCurrentTileset(tilesetName:String):Bool {
+        var tileset = tilesets.get(tilesetName);
+        if (tileset == null) {
+            trace("Tileset not found: " + tilesetName);
+            return false;
+        }
+        
+        // Update current tileset references
+        currentTilesetName = tilesetName;
+        tileBatch = tileset.tileBatch;
+        tileBatchEntity = tileset.entity;
+        tileRegions = tileset.tileRegions;
+        tileSize = tileset.tileSize;
+        
+        app.logDebug(LogCategory.APP,"Active tileset set to: " + tilesetName);
+        return true;
+    }
+
+    /**
+     * Delete a tileset by name
+     * Cleans up the ManagedTileBatch and removes the entity from the rendering system
+     * @param tilesetName Name of the tileset to delete
+     * @return True if tileset was found and deleted, false otherwise
+     */
+    public function deleteTileset(tilesetName:String):Bool {
+        var tileset = tilesets.get(tilesetName);
+        if (tileset == null) {
+            app.logDebug(LogCategory.APP,"Tileset not found: " + tilesetName);
+            return false;
+        }
+        
+        // Clear all tiles from the batch
+        tileset.tileBatch.clear();
+        
+        // Remove entity from rendering system
+        // Note: State class's entities array - we need to remove it
+        if (entities != null && tileset.entity != null) {
+            entities.remove(tileset.entity);
+        }
+        
+        // Remove from tilesets collection
+        tilesets.remove(tilesetName);
+        
+        // If this was the current tileset, clear the references
+        if (tilesetName == currentTilesetName) {
+            tileBatch = null;
+            tileBatchEntity = null;
+            tileRegions = [];
+            currentTilesetName = "";
+            trace("Warning: Deleted the current active tileset. You may need to set a new active tileset.");
+        }
+        
+        trace("Deleted tileset: " + tilesetName);
+        return true;
+    }
+    
+    /**
      * Setup a tileset and add it to the collection
      * @param texturePath Resource path to the texture (e.g., "textures/devTiles.tga")
      * @param tilesetName Unique name for this tileset
      * @param tileSize Size of each tile in pixels
      */
-    private function setupTilemap(texturePath:String, tilesetName:String, tileSize:Int):Void {
+    public function setupTilemap(texturePath:String, tilesetName:String, tileSize:Int):Void {
         var renderer = app.renderer;
         
-        // Load tile atlas texture
-        var tileTextureData = app.resources.getTexture(texturePath);
+        // Load tile atlas texture - check if already loaded, if not load it first
+        if (!app.resources.cached(texturePath)) {
+            app.logDebug(LogCategory.APP,"Texture not cached, loading: " + texturePath);
+            app.resources.loadTexture(texturePath, false);
+        }
+        
+        var tileTextureData = app.resources.getTexture(texturePath, false);
         if (tileTextureData == null) {
-            trace("Error: Could not load texture: " + texturePath);
+            app.logDebug(LogCategory.APP,"Error: Could not load texture: " + texturePath);
             return;
         }
         
@@ -628,6 +724,7 @@ class EditorState extends State {
                 var region = tile.regionId;
                 
                 tiles.push({
+                    tilesetName: currentTilesetName,
                     gridX: gridX,
                     gridY: gridY,
                     x: tile.x,
@@ -637,10 +734,22 @@ class EditorState extends State {
             }
         }
         
+        // Collect tileset info
+        var tilesetsArray:Array<Dynamic> = [];
+        for (tilesetName in tilesets.keys()) {
+            var tileset = tilesets.get(tilesetName);
+            tilesetsArray.push({
+                name: tileset.name,
+                texturePath: tileset.texturePath,
+                tileSize: tileset.tileSize
+            });
+        }
+        
         // Create JSON structure
         var data = {
-            version: "1.0",
-            tileSize: tileSize,
+            version: "1.1",
+            tilesets: tilesetsArray,
+            currentTileset: currentTilesetName,
             mapBounds: {
                 x: mapX,
                 y: mapY,
@@ -663,6 +772,102 @@ class EditorState extends State {
             return tiles.length;
         } catch (e:Dynamic) {
             trace("Error exporting JSON: " + e);
+            return -1;
+        }
+    }
+    
+    /**
+     * Import tilemap data from JSON format
+     * Automatically loads tilesets and places tiles
+     * @param filePath Absolute path to the JSON file
+     * @return Number of tiles imported, or -1 on error
+     */
+    public function importFromJSON(filePath:String):Int {
+        try {
+            // Read JSON file
+            var jsonString = sys.io.File.getContent(filePath);
+            var data:Dynamic = haxe.Json.parse(jsonString);
+            
+            // Clear existing tiles
+            tileGrid.clear();
+            
+            // Load tilesets first
+            if (data.tilesets != null) {
+                var tilesetsArray:Array<Dynamic> = data.tilesets;
+                for (tilesetData in tilesetsArray) {
+                    var name:String = tilesetData.name;
+                    var path:String = tilesetData.texturePath;
+                    var size:Int = tilesetData.tileSize;
+                    
+                    // Only load if not already loaded
+                    if (!tilesets.exists(name)) {
+                        setupTilemap(path, name, size);
+                        trace("Loaded tileset from JSON: " + name);
+                    }
+                }
+            }
+            
+            // Set current tileset
+            if (data.currentTileset != null) {
+                var currentName:String = data.currentTileset;
+                var tileset = tilesets.get(currentName);
+                if (tileset != null) {
+                    currentTilesetName = currentName;
+                    tileBatch = tileset.tileBatch;
+                    tileBatchEntity = tileset.entity;
+                    tileRegions = tileset.tileRegions;
+                    tileSize = tileset.tileSize;
+                }
+            }
+            
+            // Update map bounds
+            if (data.mapBounds != null) {
+                mapX = data.mapBounds.x;
+                mapY = data.mapBounds.y;
+                mapWidth = data.mapBounds.width;
+                mapHeight = data.mapBounds.height;
+                
+                // Update visuals
+                if (mapFrame != null) {
+                    mapFrame.setBounds(mapX, mapY, mapWidth, mapHeight);
+                }
+                if (grid != null) {
+                    grid.setBounds(mapX, mapY, mapX + mapWidth, mapY + mapHeight);
+                }
+            }
+            
+            // Place tiles
+            var tiles:Array<Dynamic> = data.tiles;
+            var importedCount = 0;
+            
+            for (tileData in tiles) {
+                var tilesetName:String = tileData.tilesetName != null ? tileData.tilesetName : currentTilesetName;
+                var tileset = tilesets.get(tilesetName);
+                
+                if (tileset != null) {
+                    var x:Float = tileData.x;
+                    var y:Float = tileData.y;
+                    var region:Int = tileData.region;
+                    var gridX:Int = tileData.gridX;
+                    var gridY:Int = tileData.gridY;
+                    var gridKey = gridX + "_" + gridY;
+                    
+                    // Add tile using the tileset's batch
+                    var tileId = tileset.tileBatch.addTile(x, y, tileset.tileSize, tileset.tileSize, region);
+                    
+                    if (tileId >= 0) {
+                        tileGrid.set(gridKey, tileId);
+                        tileset.tileBatch.needsBufferUpdate = true;
+                        importedCount++;
+                    }
+                }
+            }
+            
+            trace("Imported " + importedCount + " tiles from: " + filePath);
+            return importedCount;
+            
+        } catch (e:Dynamic) {
+            trace("Error importing JSON: " + e);
             return -1;
         }
     }

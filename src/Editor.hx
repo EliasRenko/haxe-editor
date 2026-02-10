@@ -136,6 +136,30 @@ extern "C" {
     __declspec(dllexport) void setSelectedTile(int tileRegionId) {
         ::Editor_obj::setSelectedTile(tileRegionId);
     }
+    
+    __declspec(dllexport) int exportMap(const char* filePath) {
+        return ::Editor_obj::exportMap(::String(filePath));
+    }
+    
+    __declspec(dllexport) int importMap(const char* filePath) {
+        return ::Editor_obj::importMap(::String(filePath));
+    }
+    
+    __declspec(dllexport) void setupTilemap(const char* texturePath, const char* tilesetName, int tileSize) {
+        ::Editor_obj::setupTilemap(::String(texturePath), ::String(tilesetName), tileSize);
+    }
+    
+    __declspec(dllexport) int getTilesetCount() {
+        return ::Editor_obj::getTilesetCount();
+    }
+    
+    __declspec(dllexport) const char* getTilesetNameAt(int index) {
+        return ::Editor_obj::getTilesetNameAt(index).__s;
+    }
+    
+    __declspec(dllexport) int setCurrentTileset(const char* tilesetName) {
+        return ::Editor_obj::setCurrentTileset(::String(tilesetName));
+    }
 }
 ')
 
@@ -545,6 +569,175 @@ class Editor {
             log("Editor: Selected tile region: " + tileRegionId);
         } catch (e:Dynamic) {
             log("Editor: Error setting selected tile: " + e);
+        }
+    }
+    
+    /**
+     * Export the current tilemap to a JSON file
+     * @param filePath Absolute path where to save the JSON file
+     * @return Number of tiles exported, or -1 on error
+     */
+    @:keep
+    public static function exportMap(filePath:String):Int {
+        if (app == null || !initialized) {
+            log("Editor: Cannot export tilemap - engine not initialized");
+            return -1;
+        }
+        
+        if (editorState == null) {
+            log("Editor: EditorState not loaded");
+            return -1;
+        }
+        
+        try {
+            var tileCount = editorState.exportToJSON(filePath);
+            if (tileCount >= 0) {
+                log("Editor: Exported " + tileCount + " tiles to: " + filePath);
+            } else {
+                log("Editor: Failed to export tilemap");
+            }
+            return tileCount;
+        } catch (e:Dynamic) {
+            log("Editor: Error exporting tilemap: " + e);
+            return -1;
+        }
+    }
+    
+    /**
+     * Import tilemap from a JSON file
+     * @param filePath Absolute path to the JSON file
+     * @return Number of tiles imported, or -1 on error
+     */
+    @:keep
+    public static function importMap(filePath:String):Int {
+        if (app == null || !initialized) {
+            log("Editor: Cannot import tilemap - engine not initialized");
+            return -1;
+        }
+        
+        if (editorState == null) {
+            log("Editor: EditorState not loaded");
+            return -1;
+        }
+        
+        try {
+            var tileCount = editorState.importFromJSON(filePath);
+            if (tileCount >= 0) {
+                log("Editor: Imported " + tileCount + " tiles from: " + filePath);
+            } else {
+                log("Editor: Failed to import tilemap");
+            }
+            return tileCount;
+        } catch (e:Dynamic) {
+            log("Editor: Error importing tilemap: " + e);
+            return -1;
+        }
+    }
+    
+    /**
+     * Setup/load a tileset
+     * @param texturePath Resource path to the texture
+     * @param tilesetName Unique name for this tileset
+     * @param tileSize Size of each tile in pixels
+     */
+    @:keep
+    public static function setupTilemap(texturePath:String, tilesetName:String, tileSize:Int):Void {
+        if (app == null || !initialized) {
+            log("Editor: Cannot setup tilemap - engine not initialized");
+            return;
+        }
+        
+        if (editorState == null) {
+            log("Editor: EditorState not loaded");
+            return;
+        }
+        
+        try {
+            editorState.setupTilemap(texturePath, tilesetName, tileSize);
+            log("Editor: Setup tilemap: " + tilesetName);
+        } catch (e:Dynamic) {
+            log("Editor: Error setting up tilemap: " + e);
+        }
+    }
+    
+    /**
+     * Get the count of loaded tilesets
+     * @return Number of tilesets loaded
+     */
+    @:keep
+    public static function getTilesetCount():Int {
+        if (app == null || !initialized) {
+            log("Editor: Cannot get tileset count - engine not initialized");
+            return 0;
+        }
+        
+        if (editorState == null) {
+            log("Editor: EditorState not loaded");
+            return 0;
+        }
+        
+        try {
+            return editorState.getTilesetCount();
+        } catch (e:Dynamic) {
+            log("Editor: Error getting tileset count: " + e);
+            return 0;
+        }
+    }
+    
+    /**
+     * Get tileset name at specific index
+     * @param index Index of the tileset (0-based)
+     * @return Tileset name or empty string if index out of bounds
+     */
+    @:keep
+    public static function getTilesetNameAt(index:Int):String {
+        if (app == null || !initialized) {
+            log("Editor: Cannot get tileset name - engine not initialized");
+            return "";
+        }
+        
+        if (editorState == null) {
+            log("Editor: EditorState not loaded");
+            return "";
+        }
+        
+        try {
+            return editorState.getTilesetNameAt(index);
+        } catch (e:Dynamic) {
+            log("Editor: Error getting tileset name at index " + index + ": " + e);
+            return "";
+        }
+    }
+    
+    /**
+     * Set the current active tileset for drawing
+     * @param tilesetName Name of the tileset to make active
+     * @return 1 if tileset was found and set, 0 otherwise
+     */
+    @:keep
+    public static function setCurrentTileset(tilesetName:String):Int {
+        if (app == null || !initialized) {
+            log("Editor: Cannot set tileset - engine not initialized");
+            return 0;
+        }
+        
+        if (editorState == null) {
+            log("Editor: EditorState not loaded");
+            return 0;
+        }
+        
+        try {
+            var result = editorState.setCurrentTileset(tilesetName);
+            if (result) {
+                log("Editor: Active tileset set to: " + tilesetName);
+                return 1;
+            } else {
+                log("Editor: Tileset not found: " + tilesetName);
+                return 0;
+            }
+        } catch (e:Dynamic) {
+            log("Editor: Error setting tileset: " + e);
+            return 0;
         }
     }
 }

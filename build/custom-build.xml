@@ -1,0 +1,8 @@
+<xml>
+<!-- Custom linker flags for debugging -->
+<target id="haxe" if="windows">
+   <flag value="/DEBUG"/>
+   <flag value="/OPT:NOREF"/>
+   <flag value="/OPT:NOICF"/>
+</target>
+</xml>

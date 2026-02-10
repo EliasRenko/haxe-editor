@@ -11,24 +11,22 @@
 typedef void (__cdecl *CustomCallback)(const char* message);
 typedef void (__cdecl *MouseDownButtonCallback)(double x, double y, int button);
 
-// Texture data structure for passing to C#
 typedef struct {
-    unsigned char* data;      // Pointer to pixel data
-    int width;                // Texture width in pixels
-    int height;               // Texture height in pixels
-    int bytesPerPixel;        // Bytes per pixel (1, 3, or 4)
-    int dataLength;           // Total size of data array
-    int transparent;          // 1 if has transparency, 0 otherwise
+    unsigned char* data;
+    int width;
+    int height;
+    int bytesPerPixel;
+    int dataLength;
+    int transparent;
 } TextureDataStruct;
 
-// Tileset information structure for passing to C#
 typedef struct {
-    const char* name;         // Tileset name
-    const char* texturePath;  // Resource path to texture
-    int tileSize;             // Size of each tile in pixels
-    int tilesPerRow;          // Number of tiles per row in atlas
-    int tilesPerCol;          // Number of tiles per column in atlas
-    int regionCount;          // Total number of tile regions
+    const char* name;
+    const char* texturePath;
+    int tileSize;
+    int tilesPerRow;
+    int tilesPerCol;
+    int regionCount;
 } TilesetInfoStruct;
 
 extern "C" {
@@ -72,6 +70,16 @@ extern "C" {
     
     // Tile selection
     __declspec(dllexport) void setSelectedTile(int tileRegionId);
+    
+    // Tilemap import/export
+    __declspec(dllexport) int exportMap(const char* filePath);
+    __declspec(dllexport) int importMap(const char* filePath);
+    
+    // Tileset management
+    __declspec(dllexport) void setupTilemap(const char* texturePath, const char* tilesetName, int tileSize);
+    __declspec(dllexport) int getTilesetCount();
+    __declspec(dllexport) const char* getTilesetNameAt(int index);
+    __declspec(dllexport) int setCurrentTileset(const char* tilesetName);
 }
 
 #endif // EDITOR_NATIVE_H

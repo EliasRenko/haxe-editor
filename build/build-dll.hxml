@@ -7,6 +7,7 @@
 --macro Sys.command("cmd", ["/c", "copy src\\editor_native.h bin\\dll\\include\\editor_native.h"])
 --macro Sys.command("cmd", ["/c", "copy ..\\haxe-native\\lib\\SDL3.dll bin\\dll\\SDL3.dll"])
 --macro Sys.command("cmd", ["/c", ".\\bat\\copy-files.bat", "res", ".\\bin\\dll\\res"])
+--macro Sys.command("cmd", ["/c", "copy build\\custom-build.xml bin\\dll\\custom-build.xml"])
 
 #Copy DLL files to C# project (after build completes via --cmd)
 --cmd copy bin\\dll\\Editor-debug.dll C:\\Users\\efedorenko\\Documents\\projects\\csharp\\csharp-editor\\bin\\x64\\Debug\\Editor-debug.dll
