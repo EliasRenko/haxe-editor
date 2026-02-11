@@ -462,7 +462,7 @@ class Editor {
         
         try {
             // Load texture from resources
-            var textureData = app.resources.getTexture(path);
+            var textureData = app.resources.getTexture(path, false);
             if (textureData == null) {
                 log("Editor: Texture not found: " + path);
                 return;

@@ -708,29 +708,46 @@ class EditorState extends State {
      * @return Number of tiles exported
      */
     public function exportToJSON(filePath:String):Int {
-        var tiles:Array<Dynamic> = [];
+        var layers:Array<Dynamic> = [];
+        var totalTileCount = 0;
         
-        // Iterate through grid index and export each tile
-        for (gridKey in tileGrid.keys()) {
-            var tileId = tileGrid.get(gridKey);
-            var tile = tileBatch.getTile(tileId);
+        // Iterate through ALL tilesets and create a layer for each one
+        for (tilesetName in tilesets.keys()) {
+            var tileset = tilesets.get(tilesetName);
+            if (tileset == null || tileset.tileBatch == null) continue;
             
-            if (tile != null) {
-                // Convert world position back to grid coordinates
-                var gridX = Std.int(tile.x / tileSize);
-                var gridY = Std.int(tile.y / tileSize);
+            var layerTiles:Array<Dynamic> = [];
+            
+            // Get all tiles from this tileset's batch
+            for (tileId in 0...1000) { // MAX_TILES
+                var tile = tileset.tileBatch.getTile(tileId);
                 
-                // Get tile region (atlas index)
-                var region = tile.regionId;
-                
-                tiles.push({
-                    tilesetName: currentTilesetName,
-                    gridX: gridX,
-                    gridY: gridY,
-                    x: tile.x,
-                    y: tile.y,
-                    region: region
+                if (tile != null) {
+                    // Convert world position back to grid coordinates
+                    var gridX = Std.int(tile.x / tileset.tileSize);
+                    var gridY = Std.int(tile.y / tileset.tileSize);
+                    
+                    // Get tile region (atlas index)
+                    var region = tile.regionId;
+                    
+                    layerTiles.push({
+                        gridX: gridX,
+                        gridY: gridY,
+                        x: tile.x,
+                        y: tile.y,
+                        region: region
+                    });
+                }
+            }
+            
+            // Only add layer if it has tiles
+            if (layerTiles.length > 0) {
+                layers.push({
+                    tilesetName: tileset.name,
+                    tiles: layerTiles,
+                    tileCount: layerTiles.length
                 });
+                totalTileCount += layerTiles.length;
             }
         }
         
@@ -747,7 +764,7 @@ class EditorState extends State {
         
         // Create JSON structure
         var data = {
-            version: "1.1",
+            version: "1.2",
             tilesets: tilesetsArray,
             currentTileset: currentTilesetName,
             mapBounds: {
@@ -758,8 +775,8 @@ class EditorState extends State {
                 gridWidth: Std.int(mapWidth / tileSize),
                 gridHeight: Std.int(mapHeight / tileSize)
             },
-            tiles: tiles,
-            tileCount: tiles.length
+            layers: layers,
+            tileCount: totalTileCount
         };
         
         // Convert to JSON string with pretty formatting
@@ -768,8 +785,8 @@ class EditorState extends State {
         // Write to file
         try {
             sys.io.File.saveContent(filePath, jsonString);
-            trace("Exported " + tiles.length + " tiles to: " + filePath);
-            return tiles.length;
+            trace("Exported " + totalTileCount + " tiles in " + layers.length + " layers to: " + filePath);
+            return totalTileCount;
         } catch (e:Dynamic) {
             trace("Error exporting JSON: " + e);
             return -1;
@@ -788,8 +805,14 @@ class EditorState extends State {
             var jsonString = sys.io.File.getContent(filePath);
             var data:Dynamic = haxe.Json.parse(jsonString);
             
-            // Clear existing tiles
+            // Clear existing tiles from grid index AND all tile batches
             tileGrid.clear();
+            for (tilesetName in tilesets.keys()) {
+                var tileset = tilesets.get(tilesetName);
+                if (tileset != null && tileset.tileBatch != null) {
+                    tileset.tileBatch.clear();
+                }
+            }
             
             // Load tilesets first
             if (data.tilesets != null) {
@@ -836,34 +859,71 @@ class EditorState extends State {
                 }
             }
             
-            // Place tiles
-            var tiles:Array<Dynamic> = data.tiles;
+            // Place tiles - support both new layer-based format (v1.2) and old flat format (v1.1)
             var importedCount = 0;
             
-            for (tileData in tiles) {
-                var tilesetName:String = tileData.tilesetName != null ? tileData.tilesetName : currentTilesetName;
-                var tileset = tilesets.get(tilesetName);
+            if (data.layers != null) {
+                // New format (v1.2) - layer-based
+                var layers:Array<Dynamic> = data.layers;
                 
-                if (tileset != null) {
-                    var x:Float = tileData.x;
-                    var y:Float = tileData.y;
-                    var region:Int = tileData.region;
-                    var gridX:Int = tileData.gridX;
-                    var gridY:Int = tileData.gridY;
-                    var gridKey = gridX + "_" + gridY;
+                for (layer in layers) {
+                    var tilesetName:String = layer.tilesetName;
+                    var tileset = tilesets.get(tilesetName);
                     
-                    // Add tile using the tileset's batch
-                    var tileId = tileset.tileBatch.addTile(x, y, tileset.tileSize, tileset.tileSize, region);
-                    
-                    if (tileId >= 0) {
-                        tileGrid.set(gridKey, tileId);
-                        tileset.tileBatch.needsBufferUpdate = true;
-                        importedCount++;
+                    if (tileset != null && layer.tiles != null) {
+                        var tiles:Array<Dynamic> = layer.tiles;
+                        
+                        for (tileData in tiles) {
+                            var x:Float = tileData.x;
+                            var y:Float = tileData.y;
+                            var region:Int = tileData.region;
+                            var gridX:Int = tileData.gridX;
+                            var gridY:Int = tileData.gridY;
+                            var gridKey = gridX + "_" + gridY;
+                            
+                            // Add tile using the tileset's batch
+                            var tileId = tileset.tileBatch.addTile(x, y, tileset.tileSize, tileset.tileSize, region);
+                            
+                            if (tileId >= 0) {
+                                tileGrid.set(gridKey, tileId);
+                                tileset.tileBatch.needsBufferUpdate = true;
+                                importedCount++;
+                            }
+                        }
                     }
                 }
+                
+                trace("Imported " + importedCount + " tiles from " + layers.length + " layers: " + filePath);
+            } else if (data.tiles != null) {
+                // Old format (v1.1) - flat tiles array
+                var tiles:Array<Dynamic> = data.tiles;
+                
+                for (tileData in tiles) {
+                    var tilesetName:String = tileData.tilesetName != null ? tileData.tilesetName : currentTilesetName;
+                    var tileset = tilesets.get(tilesetName);
+                    
+                    if (tileset != null) {
+                        var x:Float = tileData.x;
+                        var y:Float = tileData.y;
+                        var region:Int = tileData.region;
+                        var gridX:Int = tileData.gridX;
+                        var gridY:Int = tileData.gridY;
+                        var gridKey = gridX + "_" + gridY;
+                        
+                        // Add tile using the tileset's batch
+                        var tileId = tileset.tileBatch.addTile(x, y, tileset.tileSize, tileset.tileSize, region);
+                        
+                        if (tileId >= 0) {
+                            tileGrid.set(gridKey, tileId);
+                            tileset.tileBatch.needsBufferUpdate = true;
+                            importedCount++;
+                        }
+                    }
+                }
+                
+                trace("Imported " + importedCount + " tiles (legacy format) from: " + filePath);
             }
             
-            trace("Imported " + importedCount + " tiles from: " + filePath);
             return importedCount;
             
         } catch (e:Dynamic) {
