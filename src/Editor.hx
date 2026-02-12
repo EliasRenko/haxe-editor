@@ -2,6 +2,9 @@ package;
 
 import states.EditorState;
 import math.Vec2;
+import layers.TilemapLayer;
+import layers.EntityLayer;
+import layers.FolderLayer;
 
 @:headerCode('#include "editor_native.h"')
 @:headerInclude("haxe/io/Bytes.h")
@@ -145,8 +148,8 @@ extern "C" {
         return ::Editor_obj::importMap(::String(filePath));
     }
     
-    __declspec(dllexport) void setupTilemap(const char* texturePath, const char* tilesetName, int tileSize) {
-        ::Editor_obj::setupTilemap(::String(texturePath), ::String(tilesetName), tileSize);
+    __declspec(dllexport) void setupTileset(const char* texturePath, const char* tilesetName, int tileSize) {
+        ::Editor_obj::setupTileset(::String(texturePath), ::String(tilesetName), tileSize);
     }
     
     __declspec(dllexport) int getTilesetCount() {
@@ -159,6 +162,60 @@ extern "C" {
     
     __declspec(dllexport) int setCurrentTileset(const char* tilesetName) {
         return ::Editor_obj::setCurrentTileset(::String(tilesetName));
+    }
+    
+    // Layer management functions
+    __declspec(dllexport) void createTilemapLayer(const char* layerName, const char* tilesetName) {
+        ::Editor_obj::createTilemapLayer(::String(layerName), ::String(tilesetName));
+    }
+    
+    __declspec(dllexport) void createEntityLayer(const char* layerName) {
+        ::Editor_obj::createEntityLayer(::String(layerName));
+    }
+    
+    __declspec(dllexport) void createFolderLayer(const char* layerName) {
+        ::Editor_obj::createFolderLayer(::String(layerName));
+    }
+    
+    __declspec(dllexport) int setActiveLayer(const char* layerName) {
+        return ::Editor_obj::setActiveLayer(::String(layerName));
+    }
+    
+    __declspec(dllexport) int setActiveLayerByIndex(int index) {
+        return ::Editor_obj::setActiveLayerByIndex(index);
+    }
+    
+    __declspec(dllexport) const char* getActiveLayerName() {
+        return ::Editor_obj::getActiveLayerName().__s;
+    }
+    
+    __declspec(dllexport) int getActiveLayerIndex() {
+        return ::Editor_obj::getActiveLayerIndex();
+    }
+    
+    __declspec(dllexport) int removeLayer(const char* layerName) {
+        return ::Editor_obj::removeLayer(::String(layerName));
+    }
+    
+    __declspec(dllexport) int removeLayerByIndex(int index) {
+        return ::Editor_obj::removeLayerByIndex(index);
+    }
+    
+    __declspec(dllexport) int getLayerCount() {
+        return ::Editor_obj::getLayerCount();
+    }
+    
+    __declspec(dllexport) const char* getLayerNameAt(int index) {
+        return ::Editor_obj::getLayerNameAt(index).__s;
+    }
+    
+    __declspec(dllexport) int getLayerInfoAt(int index, LayerInfoStruct* outInfo) {
+        return ::Editor_obj::getLayerInfoAt(index, outInfo);
+    }
+    
+    __declspec(dllexport) int getLayerInfo(const char* layerName, LayerInfoStruct* outInfo) {
+        ::String hxLayerName = ::String(layerName);
+        return ::Editor_obj::getLayerInfo(hxLayerName, outInfo);
     }
 }
 ')
@@ -639,21 +696,14 @@ class Editor {
      * @param texturePath Resource path to the texture
      * @param tilesetName Unique name for this tileset
      * @param tileSize Size of each tile in pixels
-     */
-    @:keep
-    public static function setupTilemap(texturePath:String, tilesetName:String, tileSize:Int):Void {
-        if (app == null || !initialized) {
-            log("Editor: Cannot setup tilemap - engine not initialized");
-            return;
-        }
-        
+*/ @:keep public static function setupTileset(texturePath:String, tilesetName:String, tileSize:Int):Void { if (app == null || !initialized) { log("Editor: Cannot setup tileset - engine not initialized"); return; }
         if (editorState == null) {
             log("Editor: EditorState not loaded");
             return;
         }
         
         try {
-            editorState.setupTilemap(texturePath, tilesetName, tileSize);
+            editorState.setupTileset(texturePath, tilesetName, tileSize);
             log("Editor: Setup tilemap: " + tilesetName);
         } catch (e:Dynamic) {
             log("Editor: Error setting up tilemap: " + e);
@@ -737,6 +787,321 @@ class Editor {
             }
         } catch (e:Dynamic) {
             log("Editor: Error setting tileset: " + e);
+            return 0;
+        }
+    }
+    
+    // ===== LAYER MANAGEMENT =====
+    
+    /**
+     * Create a new tilemap layer
+     * @param layerName Name for the new layer
+     * @param tilesetName Name of the tileset to use
+     */
+    @:keep
+    public static function createTilemapLayer(layerName:String, tilesetName:String):Void {
+        if (app == null || !initialized || editorState == null) {
+            log("Editor: Cannot create tilemap layer - engine not initialized");
+            return;
+        }
+        
+        try {
+            editorState.createTilemapLayer(layerName, tilesetName);
+        } catch (e:Dynamic) {
+            log("Editor: Error creating tilemap layer: " + e);
+        }
+    }
+    
+    /**
+     * Create a new entity layer
+     * @param layerName Name for the new layer
+     */
+    @:keep
+    public static function createEntityLayer(layerName:String):Void {
+        if (app == null || !initialized || editorState == null) {
+            log("Editor: Cannot create entity layer - engine not initialized");
+            return;
+        }
+        
+        try {
+            editorState.createEntityLayer(layerName);
+        } catch (e:Dynamic) {
+            log("Editor: Error creating entity layer: " + e);
+        }
+    }
+    
+    /**
+     * Create a new folder layer
+     * @param layerName Name for the new folder
+     */
+    @:keep
+    public static function createFolderLayer(layerName:String):Void {
+        if (app == null || !initialized || editorState == null) {
+            log("Editor: Cannot create folder layer - engine not initialized");
+            return;
+        }
+        
+        try {
+            editorState.createFolderLayer(layerName);
+        } catch (e:Dynamic) {
+            log("Editor: Error creating folder layer: " + e);
+        }
+    }
+    
+    /**
+     * Set the active layer by name
+     * @param layerName Name of the layer to make active
+     * @return 1 if layer was found and set, 0 otherwise
+     */
+    @:keep
+    public static function setActiveLayer(layerName:String):Int {
+        if (app == null || !initialized || editorState == null) {
+            log("Editor: Cannot set active layer - engine not initialized");
+            return 0;
+        }
+        
+        try {
+            return editorState.setActiveLayer(layerName) ? 1 : 0;
+        } catch (e:Dynamic) {
+            log("Editor: Error setting active layer: " + e);
+            return 0;
+        }
+    }
+    
+    /**
+     * Set the active layer by index
+     * @param index Index of the layer to make active
+     * @return 1 if layer was found and set, 0 otherwise
+     */
+    @:keep
+    public static function setActiveLayerByIndex(index:Int):Int {
+        if (app == null || !initialized || editorState == null) {
+            log("Editor: Cannot set active layer - engine not initialized");
+            return 0;
+        }
+        
+        try {
+            return editorState.setActiveLayerByIndex(index) ? 1 : 0;
+        } catch (e:Dynamic) {
+            log("Editor: Error setting active layer by index: " + e);
+            return 0;
+        }
+    }
+    
+    /**
+     * Get the active layer name
+     * @return Name of the active layer, or empty string if none
+     */
+    @:keep
+    public static function getActiveLayerName():String {
+        if (app == null || !initialized || editorState == null) {
+            return "";
+        }
+        
+        try {
+            return editorState.getActiveLayerName();
+        } catch (e:Dynamic) {
+            log("Editor: Error getting active layer name: " + e);
+            return "";
+        }
+    }
+    
+    /**
+     * Get the active layer index
+     * @return Index of the active layer, or -1 if none
+     */
+    @:keep
+    public static function getActiveLayerIndex():Int {
+        if (app == null || !initialized || editorState == null) {
+            return -1;
+        }
+        
+        try {
+            return editorState.getActiveLayerIndex();
+        } catch (e:Dynamic) {
+            log("Editor: Error getting active layer index: " + e);
+            return -1;
+        }
+    }
+    
+    /**
+     * Remove a layer by name
+     * @param layerName Name of the layer to remove
+     * @return 1 if layer was found and removed, 0 otherwise
+     */
+    @:keep
+    public static function removeLayer(layerName:String):Int {
+        if (app == null || !initialized || editorState == null) {
+            log("Editor: Cannot remove layer - engine not initialized");
+            return 0;
+        }
+        
+        try {
+            return editorState.removeLayer(layerName) ? 1 : 0;
+        } catch (e:Dynamic) {
+            log("Editor: Error removing layer: " + e);
+            return 0;
+        }
+    }
+    
+    /**
+     * Remove a layer by index
+     * @param index Index of the layer to remove
+     * @return 1 if layer was found and removed, 0 otherwise
+     */
+    @:keep
+    public static function removeLayerByIndex(index:Int):Int {
+        if (app == null || !initialized || editorState == null) {
+            log("Editor: Cannot remove layer - engine not initialized");
+            return 0;
+        }
+        
+        try {
+            return editorState.removeLayerByIndex(index) ? 1 : 0;
+        } catch (e:Dynamic) {
+            log("Editor: Error removing layer by index: " + e);
+            return 0;
+        }
+    }
+    
+    /**
+     * Get the total number of layers
+     * @return Number of layers
+     */
+    @:keep
+    public static function getLayerCount():Int {
+        if (app == null || !initialized || editorState == null) {
+            return 0;
+        }
+        
+        try {
+            return editorState.getLayerCount();
+        } catch (e:Dynamic) {
+            log("Editor: Error getting layer count: " + e);
+            return 0;
+        }
+    }
+    
+    /**
+     * Get layer name at specific index
+     * @param index Index of the layer (0-based)
+     * @return Layer name or empty string if index out of bounds
+     */
+    @:keep
+    public static function getLayerNameAt(index:Int):String {
+        if (app == null || !initialized || editorState == null) {
+            return "";
+        }
+        
+        try {
+            var layer = editorState.getLayerAt(index);
+            return layer != null ? layer.name : "";
+        } catch (e:Dynamic) {
+            log("Editor: Error getting layer name at index: " + e);
+            return "";
+        }
+    }
+    
+    /**
+     * Get layer info at specific index
+     * @param index Index of the layer (0-based)
+     * @param outInfo Pointer to LayerInfoStruct to fill
+     * @return 1 on success, 0 on failure
+     */
+    @:keep
+    public static function getLayerInfoAt(index:Int, outInfo:cpp.RawPointer<cpp.Void>):Int {
+        if (app == null || !initialized || editorState == null) {
+            log("Editor: Cannot get layer info - engine not initialized or editor state not loaded");
+            return 0;
+        }
+        
+        try {
+            var layer = editorState.getLayerAt(index);
+            if (layer == null) {
+                log("Editor: Layer not found at index: " + index);
+                return 0;
+            }
+            
+            var name = layer.name;
+            var type = 0; // 0 = TilemapLayer, 1 = EntityLayer, 2 = FolderLayer
+            var tilesetName = "";
+            var visible = layer.visible ? 1 : 0;
+            
+            // Determine layer type
+            if (Std.isOfType(layer, layers.TilemapLayer)) {
+                type = 0;
+                var tilemapLayer:layers.TilemapLayer = cast layer;
+                tilesetName = tilemapLayer.tilesetName;
+            } else if (Std.isOfType(layer, layers.EntityLayer)) {
+                type = 1;
+            } else if (Std.isOfType(layer, layers.FolderLayer)) {
+                type = 2;
+            }
+            
+            untyped __cpp__("
+                LayerInfoStruct* outStruct = (LayerInfoStruct*){0};
+                outStruct->name = {1}.utf8_str();
+                outStruct->type = {2};
+                outStruct->tilesetName = {3}.utf8_str();
+                outStruct->visible = {4};
+            ", outInfo, name, type, tilesetName, visible);
+            
+            return 1;
+            
+        } catch (e:Dynamic) {
+            log("Editor: Error getting layer info at index: " + e);
+            return 0;
+        }
+    }
+    
+    /**
+     * Get layer info by name
+     * @param layerName Name of the layer
+     * @param outInfo Pointer to LayerInfoStruct to fill
+     * @return 1 on success, 0 on failure
+     */
+    @:keep
+    public static function getLayerInfo(layerName:String, outInfo:cpp.RawPointer<cpp.Void>):Int {
+        if (app == null || !initialized || editorState == null) {
+            log("Editor: Cannot get layer info - engine not initialized or editor state not loaded");
+            return 0;
+        }
+        
+        try {
+            var layer = editorState.getLayerByName(layerName);
+            if (layer == null) {
+                log("Editor: Layer not found: " + layerName);
+                return 0;
+            }
+            
+            var name = layer.name;
+            var type = 0; // 0 = TilemapLayer, 1 = EntityLayer, 2 = FolderLayer
+            var tilesetName = "";
+            var visible = layer.visible ? 1 : 0;
+            
+            // Determine layer type
+            if (Std.isOfType(layer, layers.TilemapLayer)) {
+                type = 0;
+                var tilemapLayer:layers.TilemapLayer = cast layer;
+                tilesetName = tilemapLayer.tilesetName;
+            } else if (Std.isOfType(layer, layers.EntityLayer)) {
+                type = 1;
+            } else if (Std.isOfType(layer, layers.FolderLayer)) {
+                type = 2;
+            }
+            
+            untyped __cpp__("
+                LayerInfoStruct* outStruct = (LayerInfoStruct*){0};
+                outStruct->name = {1}.utf8_str();
+                outStruct->type = {2};
+                outStruct->tilesetName = {3}.utf8_str();
+                outStruct->visible = {4};
+            ", outInfo, name, type, tilesetName, visible);
+            
+            return 1;
+            
+        } catch (e:Dynamic) {
+            log("Editor: Error getting layer info: " + e);
             return 0;
         }
     }

@@ -29,6 +29,13 @@ typedef struct {
     int regionCount;
 } TilesetInfoStruct;
 
+typedef struct {
+    const char* name;
+    int type;                // 0 = TilemapLayer, 1 = EntityLayer, 2 = FolderLayer
+    const char* tilesetName; // For TilemapLayer only (null for others)
+    int visible;             // 0 = hidden, 1 = visible
+} LayerInfoStruct;
+
 extern "C" {
     // Global state (declared in Editor.hx @:cppFileCode)
     extern bool hxcpp_initialized;
@@ -65,9 +72,6 @@ extern "C" {
     // Texture data retrieval
     __declspec(dllexport) void getTextureData(const char* path, TextureDataStruct* outData);
     
-    // Tileset information retrieval
-    __declspec(dllexport) int getTileset(const char* tilesetName, TilesetInfoStruct* outInfo);
-    
     // Tile selection
     __declspec(dllexport) void setSelectedTile(int tileRegionId);
     
@@ -76,10 +80,27 @@ extern "C" {
     __declspec(dllexport) int importMap(const char* filePath);
     
     // Tileset management
-    __declspec(dllexport) void setupTilemap(const char* texturePath, const char* tilesetName, int tileSize);
+    __declspec(dllexport) int getTileset(const char* tilesetName, TilesetInfoStruct* outInfo);
+    __declspec(dllexport) void setupTileset(const char* texturePath, const char* tilesetName, int tileSize);
     __declspec(dllexport) int getTilesetCount();
     __declspec(dllexport) const char* getTilesetNameAt(int index);
     __declspec(dllexport) int setCurrentTileset(const char* tilesetName);
+    
+    
+    // Layer management
+    __declspec(dllexport) void createTilemapLayer(const char* layerName, const char* tilesetName);
+    __declspec(dllexport) void createEntityLayer(const char* layerName);
+    __declspec(dllexport) void createFolderLayer(const char* layerName);
+    __declspec(dllexport) int setActiveLayer(const char* layerName);
+    __declspec(dllexport) int setActiveLayerByIndex(int index);
+    __declspec(dllexport) const char* getActiveLayerName();
+    __declspec(dllexport) int getActiveLayerIndex();
+    __declspec(dllexport) int removeLayer(const char* layerName);
+    __declspec(dllexport) int removeLayerByIndex(int index);
+    __declspec(dllexport) int getLayerCount();
+    __declspec(dllexport) const char* getLayerNameAt(int index);
+    __declspec(dllexport) int getLayerInfoAt(int index, LayerInfoStruct* outInfo);
+    __declspec(dllexport) int getLayerInfo(const char* layerName, LayerInfoStruct* outInfo);
 }
 
 #endif // EDITOR_NATIVE_H

@@ -4,27 +4,16 @@ import Log.LogCategory;
 import State;
 import App;
 import Renderer;
-import ProgramInfo;
 import display.Grid;
 import display.ManagedTileBatch;
 import display.MapFrame;
 import display.LineBatch;
 import entity.DisplayEntity;
-
-/**
- * Tileset structure containing texture and tile information
- */
-typedef Tileset = {
-    var name:String;              // Tileset name (e.g., "devTiles")
-    var texturePath:String;       // Resource path (e.g., "textures/devTiles.tga")
-    var textureId:Dynamic;        // OpenGL texture object from renderer.uploadTexture()
-    var tileSize:Int;             // Size of each tile in pixels
-    var tilesPerRow:Int;          // Number of tiles per row in atlas
-    var tilesPerCol:Int;          // Number of tiles per column in atlas
-    var tileRegions:Array<Int>;   // Array of region IDs in the tile batch
-    var tileBatch:ManagedTileBatch; // Batch for rendering tiles from this tileset
-    var entity:DisplayEntity;     // Entity for automatic rendering
-}
+import layers.Layer;
+import layers.TilemapLayer;
+import layers.EntityLayer;
+import layers.FolderLayer;
+import Tileset;
 
 /**
  * Editor state with infinite grid and editable tilemap
@@ -51,9 +40,9 @@ class EditorState extends State {
     private var selectedTileRegion:Int = 0; // Currently selected tile to place
     private var tileRegions:Array<Int> = []; // Available tile regions (for backward compatibility)
     
-    // Grid-based tile storage index (faster lookups than iterating ManagedTileBatch)
-    // Key format: "gridX_gridY" -> tileId in ManagedTileBatch
-    private var tileGrid:Map<String, Int> = new Map<String, Int>();
+    // Layer management
+    private var layers:Array<Layer> = [];
+    private var activeLayer:Layer = null;
     
     // Resize behavior options
     public var deleteOutOfBoundsTilesOnResize:Bool = true; // Auto-delete tiles when shrinking frame
@@ -184,7 +173,9 @@ class EditorState extends State {
     }
 
     /**
-     * Set the current active tileset for drawing
+     * Set the current active tileset for drawing context
+     * This updates the tile regions and tile size used for drawing operations
+     * Note: This is called automatically when setting an active TilemapLayer
      * @param tilesetName Name of the tileset to make active
      * @return True if tileset was found and set, false otherwise
      */
@@ -195,14 +186,17 @@ class EditorState extends State {
             return false;
         }
         
-        // Update current tileset references
+        // Update current tileset drawing context
         currentTilesetName = tilesetName;
-        tileBatch = tileset.tileBatch;
-        tileBatchEntity = tileset.entity;
         tileRegions = tileset.tileRegions;
         tileSize = tileset.tileSize;
         
-        app.logDebug(LogCategory.APP,"Active tileset set to: " + tilesetName);
+        // Note: tileBatch and tileBatchEntity are kept for backward compatibility
+        // but are no longer used directly (each layer has its own batch)
+        tileBatch = tileset.tileBatch;
+        tileBatchEntity = tileset.entity;
+        
+        app.logDebug(LogCategory.APP,"Active tileset context set to: " + tilesetName);
         return true;
     }
 
@@ -250,7 +244,7 @@ class EditorState extends State {
      * @param tilesetName Unique name for this tileset
      * @param tileSize Size of each tile in pixels
      */
-    public function setupTilemap(texturePath:String, tilesetName:String, tileSize:Int):Void {
+    public function setupTileset(texturePath:String, tilesetName:String, tileSize:Int):Void {
         var renderer = app.renderer;
         
         // Load tile atlas texture - check if already loaded, if not load it first
@@ -589,9 +583,18 @@ class EditorState extends State {
      * Place a tile at world position (snaps to grid)
      */
     private function placeTileAt(worldX:Float, worldY:Float):Void {
+        // Check if active layer is a tilemap layer
+        if (activeLayer == null || !Std.isOfType(activeLayer, TilemapLayer)) {
+            return;
+        }
+        
+        var tilemapLayer:TilemapLayer = cast activeLayer;
+        trace("Placing tile on layer: " + tilemapLayer.name + ", tileset: " + tilemapLayer.tilesetName);
+        var layerTileset = tilemapLayer.tileset;
+        
         // Snap to grid (tiles are positioned by top-left corner)
-        var tileX = Std.int(Math.floor(worldX / tileSize) * tileSize);
-        var tileY = Std.int(Math.floor(worldY / tileSize) * tileSize);
+        var tileX = Std.int(Math.floor(worldX / layerTileset.tileSize) * layerTileset.tileSize);
+        var tileY = Std.int(Math.floor(worldY / layerTileset.tileSize) * layerTileset.tileSize);
         
         // Check if tile is within map bounds
         if (tileX < mapX || tileX >= mapX + mapWidth || 
@@ -601,25 +604,25 @@ class EditorState extends State {
         }
         
         // Convert to grid coordinates
-        var gridX = Std.int(tileX / tileSize);
-        var gridY = Std.int(tileY / tileSize);
+        var gridX = Std.int(tileX / layerTileset.tileSize);
+        var gridY = Std.int(tileY / layerTileset.tileSize);
         var gridKey = gridX + "_" + gridY;
         
         // Check if tile already exists at this grid position (O(1) lookup!)
-        if (tileGrid.exists(gridKey)) {
+        if (tilemapLayer.tileGrid.exists(gridKey)) {
             // Tile already exists at this position, don't add another
             return;
         }
         
-        // Add tile to batch
-        var tileId = tileBatch.addTile(tileX, tileY, tileSize, tileSize, tileRegions[selectedTileRegion]);
+        // Add tile to batch using layer's tileset regions
+        var tileId = tilemapLayer.tileBatch.addTile(tileX, tileY, layerTileset.tileSize, layerTileset.tileSize, layerTileset.tileRegions[selectedTileRegion]);
         
         if (tileId >= 0) {
             // Store in grid index for fast lookups
-            tileGrid.set(gridKey, tileId);
+            tilemapLayer.tileGrid.set(gridKey, tileId);
             
             // Mark buffers as needing update
-            tileBatch.needsBufferUpdate = true;
+            tilemapLayer.tileBatch.needsBufferUpdate = true;
         }
     }
     
@@ -627,9 +630,17 @@ class EditorState extends State {
      * Remove tile at world position
      */
     private function removeTileAt(worldX:Float, worldY:Float):Void {
+        // Check if active layer is a tilemap layer
+        if (activeLayer == null || !Std.isOfType(activeLayer, TilemapLayer)) {
+            return;
+        }
+        
+        var tilemapLayer:TilemapLayer = cast activeLayer;
+        var layerTileset = tilemapLayer.tileset;
+        
         // Snap to grid
-        var tileX = Math.floor(worldX / tileSize) * tileSize;
-        var tileY = Math.floor(worldY / tileSize) * tileSize;
+        var tileX = Math.floor(worldX / layerTileset.tileSize) * layerTileset.tileSize;
+        var tileY = Math.floor(worldY / layerTileset.tileSize) * layerTileset.tileSize;
         
         // Check if position is within map bounds
         if (tileX < mapX || tileX >= mapX + mapWidth || 
@@ -639,34 +650,17 @@ class EditorState extends State {
         }
         
         // Convert to grid coordinates
-        var gridX = Std.int(tileX / tileSize);
-        var gridY = Std.int(tileY / tileSize);
+        var gridX = Std.int(tileX / layerTileset.tileSize);
+        var gridY = Std.int(tileY / layerTileset.tileSize);
         var gridKey = gridX + "_" + gridY;
         
         // Fast lookup in grid index (O(1) instead of O(n)!)
-        if (tileGrid.exists(gridKey)) {
-            var tileId = tileGrid.get(gridKey);
-            tileBatch.removeTile(tileId);
-            tileGrid.remove(gridKey); // Remove from grid index
-            tileBatch.needsBufferUpdate = true;
+        if (tilemapLayer.tileGrid.exists(gridKey)) {
+            var tileId = tilemapLayer.tileGrid.get(gridKey);
+            tilemapLayer.tileBatch.removeTile(tileId);
+            tilemapLayer.tileGrid.remove(gridKey); // Remove from grid index
+            tilemapLayer.tileBatch.needsBufferUpdate = true;
         }
-    }
-    
-    /**
-     * Count tiles that are outside the current map bounds
-     */
-    private function countTilesOutsideBounds():Int {
-        var count = 0;
-        for (tileId in 0...1000) { // MAX_TILES
-            var tile = tileBatch.getTile(tileId);
-            if (tile != null) {
-                if (tile.x < mapX || tile.x >= mapX + mapWidth || 
-                    tile.y < mapY || tile.y >= mapY + mapHeight) {
-                    count++;
-                }
-            }
-        }
-        return count;
     }
     
     /**
@@ -675,31 +669,311 @@ class EditorState extends State {
      */
     public function cleanupTilesOutsideBounds():Int {
         var removed = 0;
-        var keysToRemove:Array<String> = [];
         
-        // Iterate through grid index to find out-of-bounds tiles
-        for (gridKey in tileGrid.keys()) {
-            var tileId = tileGrid.get(gridKey);
-            var tile = tileBatch.getTile(tileId);
-            if (tile != null) {
-                if (tile.x < mapX || tile.x >= mapX + mapWidth || 
-                    tile.y < mapY || tile.y >= mapY + mapHeight) {
-                    tileBatch.removeTile(tileId);
-                    keysToRemove.push(gridKey);
-                    removed++;
+        // Iterate through all tilemap layers
+        for (layer in layers) {
+            if (Std.isOfType(layer, TilemapLayer)) {
+                var tilemapLayer:TilemapLayer = cast layer;
+                var keysToRemove:Array<String> = [];
+                
+                // Iterate through grid index to find out-of-bounds tiles
+                for (gridKey in tilemapLayer.tileGrid.keys()) {
+                    var tileId = tilemapLayer.tileGrid.get(gridKey);
+                    var tile = tilemapLayer.tileBatch.getTile(tileId);
+                    if (tile != null) {
+                        if (tile.x < mapX || tile.x >= mapX + mapWidth || 
+                            tile.y < mapY || tile.y >= mapY + mapHeight) {
+                            tilemapLayer.tileBatch.removeTile(tileId);
+                            keysToRemove.push(gridKey);
+                            removed++;
+                        }
+                    }
+                }
+                
+                // Remove from grid index
+                for (key in keysToRemove) {
+                    tilemapLayer.tileGrid.remove(key);
+                }
+                
+                if (keysToRemove.length > 0) {
+                    tilemapLayer.tileBatch.needsBufferUpdate = true;
                 }
             }
         }
         
-        // Remove from grid index
-        for (key in keysToRemove) {
-            tileGrid.remove(key);
+        return removed;
+    }
+    
+    // ===== LAYER MANAGEMENT =====
+    
+    /**
+     * Add a layer to the layer list (internal use)
+     */
+    private function addLayer(layer:Layer):Void {
+        if (layer != null) {
+            layers.push(layer);
+            
+            // If this is the first layer, make it active
+            if (activeLayer == null) {
+                activeLayer = layer;
+                
+                // Auto-switch tileset if it's a tilemap layer
+                if (Std.isOfType(layer, TilemapLayer)) {
+                    var tilemapLayer:TilemapLayer = cast layer;
+                    setCurrentTileset(tilemapLayer.tilesetName);
+                }
+            }
+        }
+    }
+    
+    /**
+     * Remove a layer from the layer list by name
+     * @param layerName Name of the layer to remove
+     * @return True if layer was found and removed, false otherwise
+     */
+    public function removeLayer(layerName:String):Bool {
+        var layer = getLayerByName(layerName);
+        if (layer == null) {
+            trace("Layer not found: " + layerName);
+            return false;
         }
         
-        if (removed > 0) {
-            tileBatch.needsBufferUpdate = true;
+        if (layers.remove(layer)) {
+            // Remove entity from rendering system if it's a tilemap layer
+            if (Std.isOfType(layer, TilemapLayer)) {
+                var tilemapLayer:TilemapLayer = cast layer;
+                if (tilemapLayer.entity != null && entities != null) {
+                    entities.remove(tilemapLayer.entity);
+                }
+            }
+            
+            // If we removed the active layer, set a new one
+            if (activeLayer == layer) {
+                activeLayer = layers.length > 0 ? layers[0] : null;
+                
+                // Update tileset if new active layer is a tilemap
+                if (activeLayer != null && Std.isOfType(activeLayer, TilemapLayer)) {
+                    var tilemapLayer:TilemapLayer = cast activeLayer;
+                    setCurrentTileset(tilemapLayer.tilesetName);
+                }
+            }
+            
+            layer.release();
+            return true;
         }
-        return removed;
+        return false;
+    }
+    
+    /**
+     * Remove a layer from the layer list by index
+     * @param index Index of the layer to remove
+     * @return True if layer was found and removed, false otherwise
+     */
+    public function removeLayerByIndex(index:Int):Bool {
+        var layer = getLayerAt(index);
+        if (layer == null) {
+            trace("Layer not found at index: " + index);
+            return false;
+        }
+        
+        if (layers.remove(layer)) {
+            // Remove entity from rendering system if it's a tilemap layer
+            if (Std.isOfType(layer, TilemapLayer)) {
+                var tilemapLayer:TilemapLayer = cast layer;
+                if (tilemapLayer.entity != null && entities != null) {
+                    entities.remove(tilemapLayer.entity);
+                }
+            }
+            
+            // If we removed the active layer, set a new one
+            if (activeLayer == layer) {
+                activeLayer = layers.length > 0 ? layers[0] : null;
+                
+                // Update tileset if new active layer is a tilemap
+                if (activeLayer != null && Std.isOfType(activeLayer, TilemapLayer)) {
+                    var tilemapLayer:TilemapLayer = cast activeLayer;
+                    setCurrentTileset(tilemapLayer.tilesetName);
+                }
+            }
+            
+            layer.release();
+            return true;
+        }
+        return false;
+    }
+    
+    /**
+     * Set the active layer by name
+     * Automatically switches to the layer's tileset if it's a TilemapLayer
+     * @param layerName Name of the layer to make active
+     * @return True if layer was found and set, false otherwise
+     */
+    public function setActiveLayer(layerName:String):Bool {
+        var layer = getLayerByName(layerName);
+        if (layer == null) {
+            trace("Layer not found: " + layerName);
+            return false;
+        }
+        
+        activeLayer = layer;
+        
+        // If it's a tilemap layer, automatically switch to its tileset
+        if (Std.isOfType(layer, TilemapLayer)) {
+            var tilemapLayer:TilemapLayer = cast layer;
+            return setCurrentTileset(tilemapLayer.tilesetName);
+        }
+        
+        return true;
+    }
+    
+    /**
+     * Set the active layer by index
+     * @param index Index of the layer to make active
+     * @return True if layer was found and set, false otherwise
+     */
+    public function setActiveLayerByIndex(index:Int):Bool {
+        var layer = getLayerAt(index);
+        if (layer == null) {
+            trace("Layer not found at index: " + index);
+            return false;
+        }
+        
+        activeLayer = layer;
+        
+        // If it's a tilemap layer, automatically switch to its tileset
+        if (Std.isOfType(layer, TilemapLayer)) {
+            var tilemapLayer:TilemapLayer = cast layer;
+            return setCurrentTileset(tilemapLayer.tilesetName);
+        }
+        
+        return true;
+    }
+    
+    /**
+     * Get the active layer
+     */
+    public function getActiveLayer():Layer {
+        return activeLayer;
+    }
+    
+    /**
+     * Get the active layer name
+     * @return Name of the active layer, or empty string if none
+     */
+    public function getActiveLayerName():String {
+        return activeLayer != null ? activeLayer.name : "";
+    }
+    
+    /**
+     * Get the active layer index
+     * @return Index of the active layer, or -1 if none
+     */
+    public function getActiveLayerIndex():Int {
+        if (activeLayer == null) return -1;
+        
+        for (i in 0...layers.length) {
+            if (layers[i] == activeLayer) {
+                return i;
+            }
+        }
+        return -1;
+    }
+    
+    /**
+     * Get layer by name
+     */
+    public function getLayerByName(name:String):Layer {
+        for (layer in layers) {
+            if (layer.name == name) {
+                return layer;
+            }
+            
+            // Search in folder layers
+            if (Std.isOfType(layer, FolderLayer)) {
+                var folder:FolderLayer = cast layer;
+                var found = folder.findLayerByName(name);
+                if (found != null) {
+                    return found;
+                }
+            }
+        }
+        return null;
+    }
+    
+    /**
+     * Get the number of layers
+     */
+    public function getLayerCount():Int {
+        return layers.length;
+    }
+    
+    /**
+     * Get layer at index
+     */
+    public function getLayerAt(index:Int):Layer {
+        if (index >= 0 && index < layers.length) {
+            return layers[index];
+        }
+        return null;
+    }
+    
+    /**
+     * Create a new tilemap layer using a tileset
+     */
+    public function createTilemapLayer(name:String, tilesetName:String):TilemapLayer {
+        var tileset = tilesets.get(tilesetName);
+        if (tileset == null) {
+            trace("Cannot create tilemap layer: tileset not found: " + tilesetName);
+            return null;
+        }
+        
+        // Create a new tile batch for this layer
+        var batch = new ManagedTileBatch(tileset.tileBatch.programInfo, tileset.textureId);
+        batch.depthTest = false;
+        batch.init(app.renderer);
+        
+        // Define tile regions in the batch (same as tileset)
+        for (row in 0...tileset.tilesPerCol) {
+            for (col in 0...tileset.tilesPerRow) {
+                batch.defineRegion(
+                    col * tileset.tileSize,  // atlasX
+                    row * tileset.tileSize,  // atlasY
+                    tileset.tileSize,        // width
+                    tileset.tileSize         // height
+                );
+            }
+        }
+        
+        // Create entity for the batch
+        var entity = new DisplayEntity(batch, "layer_" + name);
+        addEntity(entity);
+        
+        // Create the layer with tileset reference
+        var layer = new TilemapLayer(name, tileset, batch, entity);
+        addLayer(layer);
+        
+        trace("Created tilemap layer: " + name + " with tileset: " + tilesetName);
+        return layer;
+    }
+    
+    /**
+     * Create a new entity layer
+     */
+    public function createEntityLayer(name:String):EntityLayer {
+        var layer = new EntityLayer(name);
+        addLayer(layer);
+        trace("Created entity layer: " + name);
+        return layer;
+    }
+    
+    /**
+     * Create a new folder layer
+     */
+    public function createFolderLayer(name:String):FolderLayer {
+        var layer = new FolderLayer(name);
+        addLayer(layer);
+        trace("Created folder layer: " + name);
+        return layer;
     }
     
     /**
@@ -708,46 +982,50 @@ class EditorState extends State {
      * @return Number of tiles exported
      */
     public function exportToJSON(filePath:String):Int {
-        var layers:Array<Dynamic> = [];
+        var layersData:Array<Dynamic> = [];
         var totalTileCount = 0;
         
-        // Iterate through ALL tilesets and create a layer for each one
-        for (tilesetName in tilesets.keys()) {
-            var tileset = tilesets.get(tilesetName);
-            if (tileset == null || tileset.tileBatch == null) continue;
-            
-            var layerTiles:Array<Dynamic> = [];
-            
-            // Get all tiles from this tileset's batch
-            for (tileId in 0...1000) { // MAX_TILES
-                var tile = tileset.tileBatch.getTile(tileId);
+        // Iterate through all layers and export tilemap layers
+        for (layer in this.layers) {
+            if (Std.isOfType(layer, TilemapLayer)) {
+                var tilemapLayer:TilemapLayer = cast layer;
+                var tileset = tilesets.get(tilemapLayer.tilesetName);
                 
-                if (tile != null) {
-                    // Convert world position back to grid coordinates
-                    var gridX = Std.int(tile.x / tileset.tileSize);
-                    var gridY = Std.int(tile.y / tileset.tileSize);
+                if (tileset == null) continue;
+                
+                var layerTiles:Array<Dynamic> = [];
+                
+                // Get all tiles from this layer's batch
+                for (tileId in 0...1000) { // MAX_TILES
+                    var tile = tilemapLayer.tileBatch.getTile(tileId);
                     
-                    // Get tile region (atlas index)
-                    var region = tile.regionId;
-                    
-                    layerTiles.push({
-                        gridX: gridX,
-                        gridY: gridY,
-                        x: tile.x,
-                        y: tile.y,
-                        region: region
-                    });
+                    if (tile != null) {
+                        // Convert world position back to grid coordinates
+                        var gridX = Std.int(tile.x / tileset.tileSize);
+                        var gridY = Std.int(tile.y / tileset.tileSize);
+                        
+                        // Get tile region (atlas index)
+                        var region = tile.regionId;
+                        
+                        layerTiles.push({
+                            gridX: gridX,
+                            gridY: gridY,
+                            x: tile.x,
+                            y: tile.y,
+                            region: region
+                        });
+                    }
                 }
-            }
-            
-            // Only add layer if it has tiles
-            if (layerTiles.length > 0) {
-                layers.push({
-                    tilesetName: tileset.name,
-                    tiles: layerTiles,
-                    tileCount: layerTiles.length
-                });
-                totalTileCount += layerTiles.length;
+                
+                // Only add layer if it has tiles
+                if (layerTiles.length > 0) {
+                    layersData.push({
+                        tilesetName: tilemapLayer.tilesetName,
+                        tiles: layerTiles,
+                        tileCount: layerTiles.length
+                    });
+                    totalTileCount += layerTiles.length;
+                }
             }
         }
         
@@ -775,7 +1053,7 @@ class EditorState extends State {
                 gridWidth: Std.int(mapWidth / tileSize),
                 gridHeight: Std.int(mapHeight / tileSize)
             },
-            layers: layers,
+            layers: layersData,
             tileCount: totalTileCount
         };
         
@@ -785,7 +1063,7 @@ class EditorState extends State {
         // Write to file
         try {
             sys.io.File.saveContent(filePath, jsonString);
-            trace("Exported " + totalTileCount + " tiles in " + layers.length + " layers to: " + filePath);
+            trace("Exported " + totalTileCount + " tiles in " + layersData.length + " layers to: " + filePath);
             return totalTileCount;
         } catch (e:Dynamic) {
             trace("Error exporting JSON: " + e);
@@ -805,14 +1083,14 @@ class EditorState extends State {
             var jsonString = sys.io.File.getContent(filePath);
             var data:Dynamic = haxe.Json.parse(jsonString);
             
-            // Clear existing tiles from grid index AND all tile batches
-            tileGrid.clear();
-            for (tilesetName in tilesets.keys()) {
-                var tileset = tilesets.get(tilesetName);
-                if (tileset != null && tileset.tileBatch != null) {
-                    tileset.tileBatch.clear();
+            // Clear existing layers
+            for (layer in layers) {
+                if (layer != null) {
+                    layer.release();
                 }
             }
+            layers = [];
+            activeLayer = null;
             
             // Load tilesets first
             if (data.tilesets != null) {
@@ -824,7 +1102,7 @@ class EditorState extends State {
                     
                     // Only load if not already loaded
                     if (!tilesets.exists(name)) {
-                        setupTilemap(path, name, size);
+                        setupTileset(path, name, size);
                         trace("Loaded tileset from JSON: " + name);
                     }
                 }
@@ -859,19 +1137,25 @@ class EditorState extends State {
                 }
             }
             
-            // Place tiles - support both new layer-based format (v1.2) and old flat format (v1.1)
+            // Create layers and place tiles
             var importedCount = 0;
+            var layersData:Array<Dynamic> = data.layers;
             
-            if (data.layers != null) {
-                // New format (v1.2) - layer-based
-                var layers:Array<Dynamic> = data.layers;
-                
-                for (layer in layers) {
-                    var tilesetName:String = layer.tilesetName;
+            if (layersData != null) {
+                for (layerData in layersData) {
+                    var tilesetName:String = layerData.tilesetName;
                     var tileset = tilesets.get(tilesetName);
                     
-                    if (tileset != null && layer.tiles != null) {
-                        var tiles:Array<Dynamic> = layer.tiles;
+                    if (tileset == null) {
+                        trace("Skipping layer with unknown tileset: " + tilesetName);
+                        continue;
+                    }
+                    
+                    // Create a new tilemap layer for this tileset
+                    var tilemapLayer = createTilemapLayer("Layer_" + tilesetName, tilesetName);
+                    
+                    if (tilemapLayer != null && layerData.tiles != null) {
+                        var tiles:Array<Dynamic> = layerData.tiles;
                         
                         for (tileData in tiles) {
                             var x:Float = tileData.x;
@@ -881,49 +1165,20 @@ class EditorState extends State {
                             var gridY:Int = tileData.gridY;
                             var gridKey = gridX + "_" + gridY;
                             
-                            // Add tile using the tileset's batch
-                            var tileId = tileset.tileBatch.addTile(x, y, tileset.tileSize, tileset.tileSize, region);
+                            // Add tile using the layer's batch
+                            var tileId = tilemapLayer.tileBatch.addTile(x, y, tileset.tileSize, tileset.tileSize, region);
                             
                             if (tileId >= 0) {
-                                tileGrid.set(gridKey, tileId);
-                                tileset.tileBatch.needsBufferUpdate = true;
+                                tilemapLayer.tileGrid.set(gridKey, tileId);
+                                tilemapLayer.tileBatch.needsBufferUpdate = true;
                                 importedCount++;
                             }
                         }
                     }
                 }
-                
-                trace("Imported " + importedCount + " tiles from " + layers.length + " layers: " + filePath);
-            } else if (data.tiles != null) {
-                // Old format (v1.1) - flat tiles array
-                var tiles:Array<Dynamic> = data.tiles;
-                
-                for (tileData in tiles) {
-                    var tilesetName:String = tileData.tilesetName != null ? tileData.tilesetName : currentTilesetName;
-                    var tileset = tilesets.get(tilesetName);
-                    
-                    if (tileset != null) {
-                        var x:Float = tileData.x;
-                        var y:Float = tileData.y;
-                        var region:Int = tileData.region;
-                        var gridX:Int = tileData.gridX;
-                        var gridY:Int = tileData.gridY;
-                        var gridKey = gridX + "_" + gridY;
-                        
-                        // Add tile using the tileset's batch
-                        var tileId = tileset.tileBatch.addTile(x, y, tileset.tileSize, tileset.tileSize, region);
-                        
-                        if (tileId >= 0) {
-                            tileGrid.set(gridKey, tileId);
-                            tileset.tileBatch.needsBufferUpdate = true;
-                            importedCount++;
-                        }
-                    }
-                }
-                
-                trace("Imported " + importedCount + " tiles (legacy format) from: " + filePath);
             }
             
+            trace("Imported " + importedCount + " tiles from " + layersData.length + " layers: " + filePath);
             return importedCount;
             
         } catch (e:Dynamic) {
@@ -940,9 +1195,11 @@ class EditorState extends State {
             grid.render(camera.getMatrix());
         }
         
-        // Render tilemap
-        if (tileBatch != null && tileBatch.visible) {
-            tileBatch.render(camera.getMatrix());
+        // Render all layers in order
+        for (layer in layers) {
+            if (layer != null) {
+                layer.render(camera.getMatrix(), renderer);
+            }
         }
         
         // Update map frame (sets uniforms) - actual drawing happens in super.render() via entity
@@ -965,6 +1222,15 @@ class EditorState extends State {
     }
     
     override public function release():Void {
+        // Release all layers
+        for (layer in layers) {
+            if (layer != null) {
+                layer.release();
+            }
+        }
+        layers = [];
+        activeLayer = null;
+        
         super.release();
     }
 }
