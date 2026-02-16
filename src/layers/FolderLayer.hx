@@ -1,9 +1,5 @@
 package layers;
 
-/**
- * Folder layer that contains child layers
- * Used for organizing layers hierarchically
- */
 class FolderLayer extends Layer {
     public var children:Array<Layer>;
     public var expanded:Bool = true; // For UI purposes

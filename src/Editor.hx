@@ -132,12 +132,8 @@ extern "C" {
         ::Editor_obj::getTextureData(path, outData);
     }
     
-    __declspec(dllexport) int getTileset(const char* tilesetName, TilesetInfoStruct* outInfo) {
-        return ::Editor_obj::getTileset(::String(tilesetName), outInfo);
-    }
-    
-    __declspec(dllexport) void setSelectedTile(int tileRegionId) {
-        ::Editor_obj::setSelectedTile(tileRegionId);
+    __declspec(dllexport) void setActiveTile(int tileRegionId) {
+        ::Editor_obj::setActiveTile(tileRegionId);
     }
     
     __declspec(dllexport) int exportMap(const char* filePath) {
@@ -147,21 +143,25 @@ extern "C" {
     __declspec(dllexport) int importMap(const char* filePath) {
         return ::Editor_obj::importMap(::String(filePath));
     }
+
+    __declspec(dllexport) int getTileset(const char* tilesetName, TilesetInfoStruct* outInfo) {
+        return ::Editor_obj::getTileset(::String(tilesetName), outInfo);
+    }
+
+    __declspec(dllexport) int getTilesetAt(int index, TilesetInfoStruct* outInfo) {
+        return ::Editor_obj::getTilesetAt(index, outInfo);
+    }
     
-    __declspec(dllexport) void setupTileset(const char* texturePath, const char* tilesetName, int tileSize) {
-        ::Editor_obj::setupTileset(::String(texturePath), ::String(tilesetName), tileSize);
+    __declspec(dllexport) void setTileset(const char* texturePath, const char* tilesetName, int tileSize) {
+        ::Editor_obj::setTileset(::String(texturePath), ::String(tilesetName), tileSize);
     }
     
     __declspec(dllexport) int getTilesetCount() {
         return ::Editor_obj::getTilesetCount();
     }
     
-    __declspec(dllexport) const char* getTilesetNameAt(int index) {
-        return ::Editor_obj::getTilesetNameAt(index).__s;
-    }
-    
-    __declspec(dllexport) int setCurrentTileset(const char* tilesetName) {
-        return ::Editor_obj::setCurrentTileset(::String(tilesetName));
+    __declspec(dllexport) int setActiveTileset(const char* tilesetName) {
+        return ::Editor_obj::setActiveTileset(::String(tilesetName));
     }
     
     // Layer management functions
@@ -181,16 +181,8 @@ extern "C" {
         return ::Editor_obj::setActiveLayer(::String(layerName));
     }
     
-    __declspec(dllexport) int setActiveLayerByIndex(int index) {
-        return ::Editor_obj::setActiveLayerByIndex(index);
-    }
-    
-    __declspec(dllexport) const char* getActiveLayerName() {
-        return ::Editor_obj::getActiveLayerName().__s;
-    }
-    
-    __declspec(dllexport) int getActiveLayerIndex() {
-        return ::Editor_obj::getActiveLayerIndex();
+    __declspec(dllexport) int setActiveLayerAt(int index) {
+        return ::Editor_obj::setActiveLayerAt(index);
     }
     
     __declspec(dllexport) int removeLayer(const char* layerName) {
@@ -604,13 +596,60 @@ class Editor {
             return 0;
         }
     }
+
+    @:keep
+    public static function getTilesetAt(index:Int, outInfo:cpp.RawPointer<cpp.Void>):Int {
+        if (app == null || !initialized) {
+            log("Editor: Cannot get tileset - engine not initialized");
+            return 0;
+        }
+        
+        if (editorState == null) {
+            log("Editor: EditorState not loaded");
+            return 0;
+        }
+        
+        try {
+            var tilesetInfo = editorState.getTilesetInfoAt(index);
+            
+            if (tilesetInfo == null) {
+                log("Editor: Tileset not found at index: " + index);
+                return 0;
+            }
+            
+            // Fill the struct using untyped C++ code
+            var name = tilesetInfo.name;
+            var texturePath = tilesetInfo.texturePath;
+            var tileSize = tilesetInfo.tileSize;
+            var tilesPerRow = tilesetInfo.tilesPerRow;
+            var tilesPerCol = tilesetInfo.tilesPerCol;
+            var regionCount = tilesetInfo.regionCount;
+            
+            untyped __cpp__("
+                TilesetInfoStruct* outStruct = (TilesetInfoStruct*){0};
+                outStruct->name = {1}.utf8_str();
+                outStruct->texturePath = {2}.utf8_str();
+                outStruct->tileSize = {3};
+                outStruct->tilesPerRow = {4};
+                outStruct->tilesPerCol = {5};
+                outStruct->regionCount = {6};
+            ", outInfo, name, texturePath, tileSize, tilesPerRow, tilesPerCol, regionCount);
+            
+            log("Editor: Retrieved tileset at index " + index + ": " + name + " (" + tilesPerRow + "x" + tilesPerCol + " tiles)");
+            return 1;
+            
+        } catch (e:Dynamic) {
+            log("Editor: Error getting tileset at index " + index + ": " + e);
+            return 0;
+        }
+    }
     
     /**
      * Set the selected tile region for drawing
      * @param tileRegionId The region ID to select (0-based index into tile regions array)
      */
     @:keep
-    public static function setSelectedTile(tileRegionId:Int):Void {
+    public static function setActiveTile(tileRegionId:Int):Void {
         if (app == null || !initialized) {
             log("Editor: Cannot set selected tile - engine not initialized");
             return;
@@ -622,7 +661,7 @@ class Editor {
         }
         
         try {
-            editorState.setSelectedTileRegion(tileRegionId);
+            editorState.setActiveTileRegion(tileRegionId);
             log("Editor: Selected tile region: " + tileRegionId);
         } catch (e:Dynamic) {
             log("Editor: Error setting selected tile: " + e);
@@ -696,14 +735,15 @@ class Editor {
      * @param texturePath Resource path to the texture
      * @param tilesetName Unique name for this tileset
      * @param tileSize Size of each tile in pixels
-*/ @:keep public static function setupTileset(texturePath:String, tilesetName:String, tileSize:Int):Void { if (app == null || !initialized) { log("Editor: Cannot setup tileset - engine not initialized"); return; }
+     */
+    @:keep public static function setTileset(texturePath:String, tilesetName:String, tileSize:Int):Void { if (app == null || !initialized) { log("Editor: Cannot setup tileset - engine not initialized"); return; }
         if (editorState == null) {
             log("Editor: EditorState not loaded");
             return;
         }
         
         try {
-            editorState.setupTileset(texturePath, tilesetName, tileSize);
+            editorState.setTileset(texturePath, tilesetName, tileSize);
             log("Editor: Setup tilemap: " + tilesetName);
         } catch (e:Dynamic) {
             log("Editor: Error setting up tilemap: " + e);
@@ -735,37 +775,12 @@ class Editor {
     }
     
     /**
-     * Get tileset name at specific index
-     * @param index Index of the tileset (0-based)
-     * @return Tileset name or empty string if index out of bounds
-     */
-    @:keep
-    public static function getTilesetNameAt(index:Int):String {
-        if (app == null || !initialized) {
-            log("Editor: Cannot get tileset name - engine not initialized");
-            return "";
-        }
-        
-        if (editorState == null) {
-            log("Editor: EditorState not loaded");
-            return "";
-        }
-        
-        try {
-            return editorState.getTilesetNameAt(index);
-        } catch (e:Dynamic) {
-            log("Editor: Error getting tileset name at index " + index + ": " + e);
-            return "";
-        }
-    }
-    
-    /**
      * Set the current active tileset for drawing
      * @param tilesetName Name of the tileset to make active
      * @return 1 if tileset was found and set, 0 otherwise
      */
     @:keep
-    public static function setCurrentTileset(tilesetName:String):Int {
+    public static function setActiveTileset(tilesetName:String):Int {
         if (app == null || !initialized) {
             log("Editor: Cannot set tileset - engine not initialized");
             return 0;
@@ -777,7 +792,7 @@ class Editor {
         }
         
         try {
-            var result = editorState.setCurrentTileset(tilesetName);
+            var result = editorState.setActiveTileset(tilesetName);
             if (result) {
                 log("Editor: Active tileset set to: " + tilesetName);
                 return 1;
@@ -874,53 +889,17 @@ class Editor {
      * @return 1 if layer was found and set, 0 otherwise
      */
     @:keep
-    public static function setActiveLayerByIndex(index:Int):Int {
+    public static function setActiveLayerAt(index:Int):Int {
         if (app == null || !initialized || editorState == null) {
             log("Editor: Cannot set active layer - engine not initialized");
             return 0;
         }
         
         try {
-            return editorState.setActiveLayerByIndex(index) ? 1 : 0;
+            return editorState.setActiveLayerAt(index) ? 1 : 0;
         } catch (e:Dynamic) {
             log("Editor: Error setting active layer by index: " + e);
             return 0;
-        }
-    }
-    
-    /**
-     * Get the active layer name
-     * @return Name of the active layer, or empty string if none
-     */
-    @:keep
-    public static function getActiveLayerName():String {
-        if (app == null || !initialized || editorState == null) {
-            return "";
-        }
-        
-        try {
-            return editorState.getActiveLayerName();
-        } catch (e:Dynamic) {
-            log("Editor: Error getting active layer name: " + e);
-            return "";
-        }
-    }
-    
-    /**
-     * Get the active layer index
-     * @return Index of the active layer, or -1 if none
-     */
-    @:keep
-    public static function getActiveLayerIndex():Int {
-        if (app == null || !initialized || editorState == null) {
-            return -1;
-        }
-        
-        try {
-            return editorState.getActiveLayerIndex();
-        } catch (e:Dynamic) {
-            log("Editor: Error getting active layer index: " + e);
-            return -1;
         }
     }
     

@@ -4,10 +4,8 @@ import display.ManagedTileBatch;
 import entity.DisplayEntity;
 import Tileset;
 
-/**
- * Tilemap layer that holds tiles using a specific tileset
- */
 class TilemapLayer extends Layer {
+
     public var tilesetName:String;
     public var tileset:Tileset;
     public var tileBatch:ManagedTileBatch;
@@ -36,6 +34,7 @@ class TilemapLayer extends Layer {
             if (tileBatch.needsBufferUpdate) {
                 tileBatch.updateBuffers(renderer);
             }
+            
             tileBatch.render(cameraMatrix);
         }
     }
@@ -44,31 +43,17 @@ class TilemapLayer extends Layer {
         if (tileBatch != null) {
             tileBatch.clear();
         }
+        
         if (tileGrid != null) {
             tileGrid.clear();
         }
     }
     
-    /**
-     * Get the number of tiles in this layer
-     */
     public function getTileCount():Int {
         var count = 0;
         for (key in tileGrid.keys()) {
             count++;
         }
         return count;
-    }
-    
-    /**
-     * Clear all tiles from this layer
-     */
-    public function clear():Void {
-        if (tileBatch != null) {
-            tileBatch.clear();
-        }
-        if (tileGrid != null) {
-            tileGrid.clear();
-        }
     }
 }

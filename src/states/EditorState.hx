@@ -15,10 +15,6 @@ import layers.EntityLayer;
 import layers.FolderLayer;
 import Tileset;
 
-/**
- * Editor state with infinite grid and editable tilemap
- * Allows placing and removing tiles with mouse clicks
- */
 class EditorState extends State {
     
     private var grid:Grid;
@@ -112,7 +108,7 @@ class EditorState extends State {
      * Set the currently selected tile region for drawing
      * @param regionId The region ID to select (0-based index)
      */
-    public function setSelectedTileRegion(regionId:Int):Void {
+    public function setActiveTileRegion(regionId:Int):Void {
         if (regionId >= 0 && regionId < tileRegions.length) {
             selectedTileRegion = regionId;
             trace("Selected tile region: " + regionId + " of " + tileRegions.length);
@@ -140,6 +136,14 @@ class EditorState extends State {
             tilesPerCol: tileset.tilesPerCol,
             regionCount: tileset.tileRegions.length
         };
+    }
+
+    public function getTilesetInfoAt(index:Int):Null<{name:String, texturePath:String, tileSize:Int, tilesPerRow:Int, tilesPerCol:Int, regionCount:Int}> {
+        var tilesetName = getTilesetNameAt(index);
+        if (tilesetName == "") {
+            return null;
+        }
+        return getTilesetInfo(tilesetName);
     }
     
     /**
@@ -179,7 +183,7 @@ class EditorState extends State {
      * @param tilesetName Name of the tileset to make active
      * @return True if tileset was found and set, false otherwise
      */
-    public function setCurrentTileset(tilesetName:String):Bool {
+    public function setActiveTileset(tilesetName:String):Bool {
         var tileset = tilesets.get(tilesetName);
         if (tileset == null) {
             trace("Tileset not found: " + tilesetName);
@@ -238,13 +242,7 @@ class EditorState extends State {
         return true;
     }
     
-    /**
-     * Setup a tileset and add it to the collection
-     * @param texturePath Resource path to the texture (e.g., "textures/devTiles.tga")
-     * @param tilesetName Unique name for this tileset
-     * @param tileSize Size of each tile in pixels
-     */
-    public function setupTileset(texturePath:String, tilesetName:String, tileSize:Int):Void {
+    public function setTileset(texturePath:String, tilesetName:String, tileSize:Int):Void {
         var renderer = app.renderer;
         
         // Load tile atlas texture - check if already loaded, if not load it first
@@ -720,7 +718,7 @@ class EditorState extends State {
                 // Auto-switch tileset if it's a tilemap layer
                 if (Std.isOfType(layer, TilemapLayer)) {
                     var tilemapLayer:TilemapLayer = cast layer;
-                    setCurrentTileset(tilemapLayer.tilesetName);
+                    setActiveTileset(tilemapLayer.tilesetName);
                 }
             }
         }
@@ -754,7 +752,7 @@ class EditorState extends State {
                 // Update tileset if new active layer is a tilemap
                 if (activeLayer != null && Std.isOfType(activeLayer, TilemapLayer)) {
                     var tilemapLayer:TilemapLayer = cast activeLayer;
-                    setCurrentTileset(tilemapLayer.tilesetName);
+                    setActiveTileset(tilemapLayer.tilesetName);
                 }
             }
             
@@ -792,7 +790,7 @@ class EditorState extends State {
                 // Update tileset if new active layer is a tilemap
                 if (activeLayer != null && Std.isOfType(activeLayer, TilemapLayer)) {
                     var tilemapLayer:TilemapLayer = cast activeLayer;
-                    setCurrentTileset(tilemapLayer.tilesetName);
+                    setActiveTileset(tilemapLayer.tilesetName);
                 }
             }
             
@@ -820,7 +818,7 @@ class EditorState extends State {
         // If it's a tilemap layer, automatically switch to its tileset
         if (Std.isOfType(layer, TilemapLayer)) {
             var tilemapLayer:TilemapLayer = cast layer;
-            return setCurrentTileset(tilemapLayer.tilesetName);
+            return setActiveTileset(tilemapLayer.tilesetName);
         }
         
         return true;
@@ -831,7 +829,7 @@ class EditorState extends State {
      * @param index Index of the layer to make active
      * @return True if layer was found and set, false otherwise
      */
-    public function setActiveLayerByIndex(index:Int):Bool {
+    public function setActiveLayerAt(index:Int):Bool {
         var layer = getLayerAt(index);
         if (layer == null) {
             trace("Layer not found at index: " + index);
@@ -843,7 +841,7 @@ class EditorState extends State {
         // If it's a tilemap layer, automatically switch to its tileset
         if (Std.isOfType(layer, TilemapLayer)) {
             var tilemapLayer:TilemapLayer = cast layer;
-            return setCurrentTileset(tilemapLayer.tilesetName);
+            return setActiveTileset(tilemapLayer.tilesetName);
         }
         
         return true;
@@ -854,29 +852,6 @@ class EditorState extends State {
      */
     public function getActiveLayer():Layer {
         return activeLayer;
-    }
-    
-    /**
-     * Get the active layer name
-     * @return Name of the active layer, or empty string if none
-     */
-    public function getActiveLayerName():String {
-        return activeLayer != null ? activeLayer.name : "";
-    }
-    
-    /**
-     * Get the active layer index
-     * @return Index of the active layer, or -1 if none
-     */
-    public function getActiveLayerIndex():Int {
-        if (activeLayer == null) return -1;
-        
-        for (i in 0...layers.length) {
-            if (layers[i] == activeLayer) {
-                return i;
-            }
-        }
-        return -1;
     }
     
     /**
@@ -1102,7 +1077,7 @@ class EditorState extends State {
                     
                     // Only load if not already loaded
                     if (!tilesets.exists(name)) {
-                        setupTileset(path, name, size);
+                        setTileset(path, name, size);
                         trace("Loaded tileset from JSON: " + name);
                     }
                 }
