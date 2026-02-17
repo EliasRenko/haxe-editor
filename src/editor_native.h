@@ -99,6 +99,11 @@ extern "C" {
     __declspec(dllexport) int removeLayer(const char* layerName);
     __declspec(dllexport) int removeLayerByIndex(int index);
     __declspec(dllexport) const char* getLayerNameAt(int index);
+    
+    __declspec(dllexport) int moveLayerUp(const char* layerName);
+    __declspec(dllexport) int moveLayerDown(const char* layerName);
+    __declspec(dllexport) int moveLayerUpByIndex(int index);
+    __declspec(dllexport) int moveLayerDownByIndex(int index);
 }
 
 #endif // EDITOR_NATIVE_H

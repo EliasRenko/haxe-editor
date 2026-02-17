@@ -209,6 +209,22 @@ extern "C" {
         ::String hxLayerName = ::String(layerName);
         return ::Editor_obj::getLayerInfo(hxLayerName, outInfo);
     }
+    
+    __declspec(dllexport) int moveLayerUp(const char* layerName) {
+        return ::Editor_obj::moveLayerUp(::String(layerName));
+    }
+    
+    __declspec(dllexport) int moveLayerDown(const char* layerName) {
+        return ::Editor_obj::moveLayerDown(::String(layerName));
+    }
+    
+    __declspec(dllexport) int moveLayerUpByIndex(int index) {
+        return ::Editor_obj::moveLayerUpByIndex(index);
+    }
+    
+    __declspec(dllexport) int moveLayerDownByIndex(int index) {
+        return ::Editor_obj::moveLayerDownByIndex(index);
+    }
 }
 ')
 
@@ -939,6 +955,86 @@ class Editor {
             return editorState.removeLayerByIndex(index) ? 1 : 0;
         } catch (e:Dynamic) {
             log("Editor: Error removing layer by index: " + e);
+            return 0;
+        }
+    }
+    
+    /**
+     * Move layer up in rendering order (earlier = behind)
+     * @param layerName Name of the layer to move
+     * @return 1 if layer was moved, 0 otherwise
+     */
+    @:keep
+    public static function moveLayerUp(layerName:String):Int {
+        if (app == null || !initialized || editorState == null) {
+            log("Editor: Cannot move layer - engine not initialized");
+            return 0;
+        }
+        
+        try {
+            return editorState.moveLayerUp(layerName) ? 1 : 0;
+        } catch (e:Dynamic) {
+            log("Editor: Error moving layer up: " + e);
+            return 0;
+        }
+    }
+    
+    /**
+     * Move layer down in rendering order (later = on top)
+     * @param layerName Name of the layer to move
+     * @return 1 if layer was moved, 0 otherwise
+     */
+    @:keep
+    public static function moveLayerDown(layerName:String):Int {
+        if (app == null || !initialized || editorState == null) {
+            log("Editor: Cannot move layer - engine not initialized");
+            return 0;
+        }
+        
+        try {
+            return editorState.moveLayerDown(layerName) ? 1 : 0;
+        } catch (e:Dynamic) {
+            log("Editor: Error moving layer down: " + e);
+            return 0;
+        }
+    }
+    
+    /**
+     * Move layer up by index
+     * @param index Index of the layer to move
+     * @return 1 if layer was moved, 0 otherwise
+     */
+    @:keep
+    public static function moveLayerUpByIndex(index:Int):Int {
+        if (app == null || !initialized || editorState == null) {
+            log("Editor: Cannot move layer - engine not initialized");
+            return 0;
+        }
+        
+        try {
+            return editorState.moveLayerUpByIndex(index) ? 1 : 0;
+        } catch (e:Dynamic) {
+            log("Editor: Error moving layer up by index: " + e);
+            return 0;
+        }
+    }
+    
+    /**
+     * Move layer down by index
+     * @param index Index of the layer to move
+     * @return 1 if layer was moved, 0 otherwise
+     */
+    @:keep
+    public static function moveLayerDownByIndex(index:Int):Int {
+        if (app == null || !initialized || editorState == null) {
+            log("Editor: Cannot move layer - engine not initialized");
+            return 0;
+        }
+        
+        try {
+            return editorState.moveLayerDownByIndex(index) ? 1 : 0;
+        } catch (e:Dynamic) {
+            log("Editor: Error moving layer down by index: " + e);
             return 0;
         }
     }

@@ -33,7 +33,7 @@ class EditorState extends State {
     
     // Tile editor settings
     private var tileSize:Int = 32; // Size of each tile in pixels
-    private var selectedTileRegion:Int = 0; // Currently selected tile to place
+    private var selectedTileRegion:Int = 1; // Currently selected tile to place (1-indexed)
     private var tileRegions:Array<Int> = []; // Available tile regions (for backward compatibility)
     
     // Layer management (layers are stored in entities array)
@@ -105,15 +105,12 @@ class EditorState extends State {
     
     /**
      * Set the currently selected tile region for drawing
-     * @param regionId The region ID to select (0-based index)
+     * @param regionId The region ID to select (0-based index from C#, converted to 1-based region ID)
      */
     public function setActiveTileRegion(regionId:Int):Void {
-        if (regionId >= 0 && regionId < tileRegions.length) {
-            selectedTileRegion = regionId;
-            trace("Selected tile region: " + regionId + " of " + tileRegions.length);
-        } else {
-            trace("Invalid tile region ID: " + regionId + " (valid range: 0-" + (tileRegions.length - 1) + ")");
-        }
+        // Convert from 0-based index to 1-based region ID
+        selectedTileRegion = regionId + 1;
+        trace("Selected tile region: " + selectedTileRegion + " (from index " + regionId + ")");
     }
     
     /**
@@ -857,6 +854,129 @@ class EditorState extends State {
     }
     
     /**
+     * Move layer up in rendering order (earlier in the list = rendered first/behind)
+     * @param layerName Name of the layer to move
+     * @return True if layer was moved, false otherwise
+     */
+    public function moveLayerUp(layerName:String):Bool {
+        var layer = getLayerByName(layerName);
+        if (layer == null) {
+            trace("Layer not found: " + layerName);
+            return false;
+        }
+        
+        // Find the layer's position in entities array
+        var currentIndex = -1;
+        for (i in 0...entities.length) {
+            if (entities[i] == layer) {
+                currentIndex = i;
+                break;
+            }
+        }
+        
+        if (currentIndex <= 0) {
+            trace("Layer is already at the top or not found");
+            return false;
+        }
+        
+        // Find the previous Layer entity (skip non-layer entities like grid, mapFrame)
+        var targetIndex = -1;
+        for (i in 0...currentIndex) {
+            var prevIndex = currentIndex - 1 - i;
+            if (Std.isOfType(entities[prevIndex], Layer)) {
+                targetIndex = prevIndex;
+                break;
+            }
+        }
+        
+        if (targetIndex == -1) {
+            trace("No layer above to swap with");
+            return false;
+        }
+        
+        // Swap positions
+        var temp = entities[currentIndex];
+        entities[currentIndex] = entities[targetIndex];
+        entities[targetIndex] = temp;
+        
+        return true;
+    }
+    
+    /**
+     * Move layer down in rendering order (later in the list = rendered last/on top)
+     * @param layerName Name of the layer to move
+     * @return True if layer was moved, false otherwise
+     */
+    public function moveLayerDown(layerName:String):Bool {
+        var layer = getLayerByName(layerName);
+        if (layer == null) {
+            trace("Layer not found: " + layerName);
+            return false;
+        }
+        
+        // Find the layer's position in entities array
+        var currentIndex = -1;
+        for (i in 0...entities.length) {
+            if (entities[i] == layer) {
+                currentIndex = i;
+                break;
+            }
+        }
+        
+        if (currentIndex == -1 || currentIndex >= entities.length - 1) {
+            trace("Layer is already at the bottom or not found");
+            return false;
+        }
+        
+        // Find the next Layer entity (skip non-layer entities)
+        var targetIndex = -1;
+        for (i in (currentIndex + 1)...entities.length) {
+            if (Std.isOfType(entities[i], Layer)) {
+                targetIndex = i;
+                break;
+            }
+        }
+        
+        if (targetIndex == -1) {
+            trace("No layer below to swap with");
+            return false;
+        }
+        
+        // Swap positions
+        var temp = entities[currentIndex];
+        entities[currentIndex] = entities[targetIndex];
+        entities[targetIndex] = temp;
+        
+        return true;
+    }
+    
+    /**
+     * Move layer up by index
+     * @param index Index of the layer to move (layer index, not entity index)
+     * @return True if layer was moved, false otherwise
+     */
+    public function moveLayerUpByIndex(index:Int):Bool {
+        var layer = getLayerAt(index);
+        if (layer == null) {
+            return false;
+        }
+        return moveLayerUp(layer.id);
+    }
+    
+    /**
+     * Move layer down by index
+     * @param index Index of the layer to move (layer index, not entity index)
+     * @return True if layer was moved, false otherwise
+     */
+    public function moveLayerDownByIndex(index:Int):Bool {
+        var layer = getLayerAt(index);
+        if (layer == null) {
+            return false;
+        }
+        return moveLayerDown(layer.id);
+    }
+    
+    /**
      * Create a new tilemap layer using a tileset
      */
     public function createTilemapLayer(name:String, tilesetName:String):TilemapLayer {
@@ -1095,15 +1215,15 @@ class EditorState extends State {
             
             if (layersData != null) {
                 for (layerData in layersData) {
-                    var tileset = tilesets.get(layerData.tileset.name);
+                    var tileset = tilesets.get(layerData.tilesetName);
                     
                     if (tileset == null) {
-                        trace("Skipping layer with unknown tileset: " + layerData.tileset.name);
+                        trace("Skipping layer with unknown tileset: " + layerData.tilesetName);
                         continue;
                     }
                     
                     // Create a new tilemap layer for this tileset
-                    var tilemapLayer = createTilemapLayer("Layer_" + layerData.tileset.name, layerData.tileset.name);
+                    var tilemapLayer = createTilemapLayer("Layer_" + layerData.tilesetName, layerData.tilesetName);
                     
                     if (tilemapLayer != null && layerData.tiles != null) {
                         var tiles:Array<Dynamic> = layerData.tiles;
