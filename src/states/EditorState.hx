@@ -1170,13 +1170,6 @@ class EditorState extends State {
             grid.render(camera.getMatrix());
         }
         
-        // Render all layers in order
-        for (layer in layers) {
-            if (layer != null) {
-                layer.render(camera.getMatrix(), renderer);
-            }
-        }
-        
         // Update map frame (sets uniforms) - actual drawing happens in super.render() via entity
         if (mapFrame != null && mapFrame.visible) {
             var lineBatch = mapFrame.getLineBatch();
