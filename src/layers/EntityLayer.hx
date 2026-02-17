@@ -17,22 +17,24 @@ class EntityLayer extends Layer {
         return "entity";
     }
     
-    override public function render(cameraMatrix:Dynamic, renderer:Dynamic):Void {
+    override public function render(renderer:Dynamic, viewProjectionMatrix:Dynamic):Void {
         if (visible && entities != null) {
             for (entity in entities) {
                 if (entity != null && entity.displayObject != null && entity.displayObject.visible) {
-                    entity.displayObject.render(cameraMatrix);
+                    entity.displayObject.render(viewProjectionMatrix);
                 }
             }
         }
     }
     
-    override public function release():Void {
+    override public function cleanup(renderer:Dynamic):Void {
         if (entities != null) {
-            // Note: We don't release the entities themselves, just clear the array
+            // Note: We don't cleanup the entities themselves, just clear the array
             // The entities might be managed elsewhere
             entities = [];
         }
+        
+        super.cleanup(renderer);
     }
     
     /**

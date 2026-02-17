@@ -974,7 +974,7 @@ class Editor {
         
         try {
             var layer = editorState.getLayerAt(index);
-            return layer != null ? layer.name : "";
+            return layer != null ? layer.id : "";
         } catch (e:Dynamic) {
             log("Editor: Error getting layer name at index: " + e);
             return "";
@@ -1001,7 +1001,7 @@ class Editor {
                 return 0;
             }
             
-            var name = layer.name;
+            var name = layer.id;
             var type = 0; // 0 = TilemapLayer, 1 = EntityLayer, 2 = FolderLayer
             var tilesetName = "";
             var visible = layer.visible ? 1 : 0;
@@ -1010,7 +1010,7 @@ class Editor {
             if (Std.isOfType(layer, layers.TilemapLayer)) {
                 type = 0;
                 var tilemapLayer:layers.TilemapLayer = cast layer;
-                tilesetName = tilemapLayer.tilesetName;
+                tilesetName = tilemapLayer.tileset.name;
             } else if (Std.isOfType(layer, layers.EntityLayer)) {
                 type = 1;
             } else if (Std.isOfType(layer, layers.FolderLayer)) {
@@ -1018,7 +1018,7 @@ class Editor {
             }
             
             untyped __cpp__("
-                LayerInfoStruct* outStruct = (LayerInfoStruct*){0};
+                LayerInfoStruct* outStruct = (LayerInfoStruct*)({0});
                 outStruct->name = {1}.utf8_str();
                 outStruct->type = {2};
                 outStruct->tilesetName = {3}.utf8_str();
@@ -1053,7 +1053,7 @@ class Editor {
                 return 0;
             }
             
-            var name = layer.name;
+            var name = layer.id;
             var type = 0; // 0 = TilemapLayer, 1 = EntityLayer, 2 = FolderLayer
             var tilesetName = "";
             var visible = layer.visible ? 1 : 0;
@@ -1062,7 +1062,7 @@ class Editor {
             if (Std.isOfType(layer, layers.TilemapLayer)) {
                 type = 0;
                 var tilemapLayer:layers.TilemapLayer = cast layer;
-                tilesetName = tilemapLayer.tilesetName;
+                tilesetName = tilemapLayer.tileset.name;
             } else if (Std.isOfType(layer, layers.EntityLayer)) {
                 type = 1;
             } else if (Std.isOfType(layer, layers.FolderLayer)) {
@@ -1070,7 +1070,7 @@ class Editor {
             }
             
             untyped __cpp__("
-                LayerInfoStruct* outStruct = (LayerInfoStruct*){0};
+                LayerInfoStruct* outStruct = (LayerInfoStruct*)({0});
                 outStruct->name = {1}.utf8_str();
                 outStruct->type = {2};
                 outStruct->tilesetName = {3}.utf8_str();

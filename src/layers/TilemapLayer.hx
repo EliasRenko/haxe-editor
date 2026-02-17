@@ -1,26 +1,22 @@
 package layers;
 
 import display.ManagedTileBatch;
-import entity.DisplayEntity;
 import Tileset;
 
 class TilemapLayer extends Layer {
 
-    public var tilesetName:String;
     public var tileset:Tileset;
     public var tileBatch:ManagedTileBatch;
-    public var entity:DisplayEntity;
     
     // Grid-based tile storage index (faster lookups than iterating ManagedTileBatch)
     // Key format: "gridX_gridY" -> tileId in ManagedTileBatch
     public var tileGrid:Map<String, Int>;
     
-    public function new(name:String, tileset:Tileset, tileBatch:ManagedTileBatch, entity:DisplayEntity) {
+    public function new(name:String, tileset:Tileset, tileBatch:ManagedTileBatch) {
         super(name);
-        this.tilesetName = tileset.name;
+
         this.tileset = tileset;
         this.tileBatch = tileBatch;
-        this.entity = entity;
         this.tileGrid = new Map<String, Int>();
     }
     
@@ -28,18 +24,22 @@ class TilemapLayer extends Layer {
         return "tilemap";
     }
     
-    override public function render(cameraMatrix:Dynamic, renderer:Dynamic):Void {
+    override public function render(renderer:Dynamic, viewProjectionMatrix:Dynamic):Void {
         if (visible && tileBatch != null && tileBatch.visible) {
             // Update buffers if needed
             if (tileBatch.needsBufferUpdate) {
                 tileBatch.updateBuffers(renderer);
             }
             
-            tileBatch.render(cameraMatrix);
+            // Set up batch transform
+            tileBatch.render(viewProjectionMatrix);
+            
+            // Actually draw to screen
+            renderer.renderDisplayObject(tileBatch, viewProjectionMatrix);
         }
     }
     
-    override public function release():Void {
+    override public function cleanup(renderer:Dynamic):Void {
         if (tileBatch != null) {
             tileBatch.clear();
         }
@@ -47,6 +47,8 @@ class TilemapLayer extends Layer {
         if (tileGrid != null) {
             tileGrid.clear();
         }
+        
+        super.cleanup(renderer);
     }
     
     public function getTileCount():Int {

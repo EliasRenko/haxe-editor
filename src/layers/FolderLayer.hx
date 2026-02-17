@@ -13,25 +13,27 @@ class FolderLayer extends Layer {
         return "folder";
     }
     
-    override public function render(cameraMatrix:Dynamic, renderer:Dynamic):Void {
+    override public function render(renderer:Dynamic, viewProjectionMatrix:Dynamic):Void {
         if (visible && children != null) {
             for (child in children) {
-                if (child != null) {
-                    child.render(cameraMatrix, renderer);
+                if (child != null && child.visible) {
+                    child.render(renderer, viewProjectionMatrix);
                 }
             }
         }
     }
     
-    override public function release():Void {
+    override public function cleanup(renderer:Dynamic):Void {
         if (children != null) {
             for (child in children) {
                 if (child != null) {
-                    child.release();
+                    child.cleanup(renderer);
                 }
             }
             children = [];
         }
+        
+        super.cleanup(renderer);
     }
     
     /**
@@ -74,13 +76,13 @@ class FolderLayer extends Layer {
      * Find a layer by name (recursive search)
      */
     public function findLayerByName(name:String):Layer {
-        if (this.name == name) {
+        if (this.id == name) {
             return this;
         }
         
         if (children != null) {
             for (child in children) {
-                if (child.name == name) {
+                if (child.id == name) {
                     return child;
                 }
                 
