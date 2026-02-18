@@ -86,7 +86,7 @@ extern "C" {
     __declspec(dllexport) void setActiveTile(int tileRegionId);
     
     // Layer management
-    __declspec(dllexport) void createTilemapLayer(const char* layerName, const char* tilesetName);
+    __declspec(dllexport) void createTilemapLayer(const char* layerName, const char* tilesetName, int index);
     __declspec(dllexport) void createEntityLayer(const char* layerName);
     __declspec(dllexport) void createFolderLayer(const char* layerName);
 

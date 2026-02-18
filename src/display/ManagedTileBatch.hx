@@ -1,15 +1,8 @@
 package display;
 
-import cpp.Float32;
-import cpp.UInt32;
-import GL;
-import DisplayObject;
 import ProgramInfo;
 import Renderer;
 import Texture;
-import math.Matrix;
-import data.Vertices;
-import data.Indices;
 import display.Tile;
 
 /**

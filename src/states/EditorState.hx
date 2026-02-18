@@ -22,7 +22,6 @@ class EditorState extends State {
     private var tileBatchEntity:DisplayEntity;
     private var mapFrame:MapFrame;
     private var worldAxes:LineBatch;
-    private var worldAxesEntity:DisplayEntity;
     
     // Visual options
     public var showWorldAxes:Bool = true; // Show X/Y axes at origin (0,0)
@@ -91,8 +90,8 @@ class EditorState extends State {
         // Clip grid to map bounds
         grid.setBounds(mapX, mapY, mapX + mapWidth, mapY + mapHeight);
         
-        var gridEntity = new DisplayEntity(grid, "grid");
-        addEntity(gridEntity);
+        //var gridEntity = new DisplayEntity(grid, "grid");
+        //addEntity(gridEntity);
         
         // No default tilemap - use setupTilemap() or importFromJSON() to load tilesets
         
@@ -294,23 +293,18 @@ class EditorState extends State {
      * Red = X axis (horizontal), Green = Y axis (vertical)
      */
     private function setupWorldAxes(renderer:Renderer):Void {
-        trace("[AXES DEBUG] Setting up world axes...");
         
         var lineProgramInfo = app.renderer.getProgramInfo("line");
         if (lineProgramInfo == null) {
-            trace("[AXES DEBUG] ERROR: line program info is null!");
             return;
         }
-        trace("[AXES DEBUG] Got line program info: " + lineProgramInfo);
         
         worldAxes = new LineBatch(lineProgramInfo, true);
         worldAxes.depthTest = false;
         worldAxes.visible = showWorldAxes;
-        trace("[AXES DEBUG] Created LineBatch, visible=" + worldAxes.visible);
         
         // Initialize first (creates buffers)
         worldAxes.init(renderer);
-        trace("[AXES DEBUG] After init: VBO=" + worldAxes.vbo + ", EBO=" + worldAxes.ebo);
         
         // THEN add the lines
         var axisLength = 10000.0;
@@ -319,22 +313,18 @@ class EditorState extends State {
         // X axis - Red
         var redColor = [1.0, 0.0, 0.0, 1.0];
         worldAxes.addLine(-axisLength, 0, z, axisLength, 0, z, redColor, redColor);
-        trace("[AXES DEBUG] Added X axis line (red)");
         
         // Y axis - Green
         var greenColor = [0.0, 1.0, 0.0, 1.0];
         worldAxes.addLine(0, -axisLength, z, 0, axisLength, z, greenColor, greenColor);
-        trace("[AXES DEBUG] Added Y axis line (green)");
         
         
         // Upload the vertex data to GPU immediately
         worldAxes.updateBuffers(renderer);
-        trace("[AXES DEBUG] Called updateBuffers, needsBufferUpdate now=" + worldAxes.needsBufferUpdate);
         
         // Add to entity system for rendering
-        worldAxesEntity = new DisplayEntity(worldAxes, "worldAxes");
-        addEntity(worldAxesEntity);
-        trace("[AXES DEBUG] Added worldAxes entity to render system");
+        //worldAxesEntity = new DisplayEntity(worldAxes, "worldAxes");
+        //addEntity(worldAxesEntity);
     }
     
     private var updateCount:Int = 0;
@@ -677,6 +667,50 @@ class EditorState extends State {
     }
     
     /**
+     * Add a layer at a specific position in the entity system
+     * @param layer The layer to add
+     * @param index Position to insert (-1 to append at end, 0 for first layer position)
+     */
+    private function addLayerAtIndex(layer:Layer, index:Int):Void {
+        if (layer == null) return;
+        
+        layer.state = this;
+        
+        // If index is -1 or out of bounds, append to end
+        if (index < 0 || index >= entities.length) {
+            entities.push(layer);
+        } else {
+            // Find the actual entity index for the Nth layer
+            var layerCount = 0;
+            var insertIndex = 0;
+            
+            for (i in 0...entities.length) {
+                if (Std.isOfType(entities[i], Layer)) {
+                    if (layerCount == index) {
+                        insertIndex = i;
+                        break;
+                    }
+                    layerCount++;
+                }
+                insertIndex = i + 1; // Insert after last checked entity
+            }
+            
+            entities.insert(insertIndex, layer);
+        }
+        
+        // If this is the first layer, make it active
+        if (activeLayer == null) {
+            activeLayer = layer;
+            
+            // Auto-switch tileset if it's a tilemap layer
+            if (Std.isOfType(layer, TilemapLayer)) {
+                var tilemapLayer:TilemapLayer = cast layer;
+                setActiveTileset(tilemapLayer.tileset.name);
+            }
+        }
+    }
+    
+    /**
      * Remove a layer from the layer list by name
      * @param layerName Name of the layer to remove
      * @return True if layer was found and removed, false otherwise
@@ -978,8 +1012,11 @@ class EditorState extends State {
     
     /**
      * Create a new tilemap layer using a tileset
+     * @param name Name for the new layer
+     * @param tilesetName Name of the tileset to use
+     * @param index Position in the hierarchy (-1 to append at the end, 0 for first layer position)
      */
-    public function createTilemapLayer(name:String, tilesetName:String):TilemapLayer {
+    public function createTilemapLayer(name:String, tilesetName:String, index:Int = -1):TilemapLayer {
         var tileset = tilesets.get(tilesetName);
         if (tileset == null) {
             trace("Cannot create tilemap layer: tileset not found: " + tilesetName);
@@ -1012,9 +1049,9 @@ class EditorState extends State {
         
         // Create the layer with tileset reference
         var layer = new TilemapLayer(name, tileset, batch);
-        addLayer(layer);
+        addLayerAtIndex(layer, index);
         
-        trace("Created tilemap layer: " + name + " with tileset: " + tilesetName);
+        trace("Created tilemap layer: " + name + " with tileset: " + tilesetName + " at index: " + index);
         return layer;
     }
     
@@ -1222,8 +1259,8 @@ class EditorState extends State {
                         continue;
                     }
                     
-                    // Create a new tilemap layer for this tileset
-                    var tilemapLayer = createTilemapLayer("Layer_" + layerData.tilesetName, layerData.tilesetName);
+                    // Create a new tilemap layer for this tileset (append to end)
+                    var tilemapLayer = createTilemapLayer("Layer_" + layerData.tilesetName, layerData.tilesetName, -1);
                     
                     if (tilemapLayer != null && layerData.tiles != null) {
                         var tiles:Array<Dynamic> = layerData.tiles;
@@ -1262,27 +1299,41 @@ class EditorState extends State {
     }
     
     override public function render(renderer:Renderer):Void {
-        // WORKAROUND: Call render() directly due to C++ virtual method dispatch issue
-        if (grid != null && grid.visible) {
-            grid.render(camera.getMatrix());
-        }
+        if (!active) return;
+
+        var size = app.window.size;
+        camera.renderMatrix(size.x, size.y);
+        var viewProjectionMatrix = camera.getMatrix();
+
+        renderDisplayObject(renderer, viewProjectionMatrix, grid);
+        renderDisplayObject(renderer, viewProjectionMatrix, mapFrame.getLineBatch());
+
+        // Update map frame (sets uniforms)
+        // if (mapFrame != null && mapFrame.visible) {
+        //     var lineBatch = mapFrame.getLineBatch();
+        //     if (lineBatch.needsBufferUpdate) {
+        //         lineBatch.updateBuffers(renderer);
+        //     }
+        //     lineBatch.render(viewProjectionMatrix);
+        // }
         
-        // Update map frame (sets uniforms) - actual drawing happens in super.render() via entity
-        if (mapFrame != null && mapFrame.visible) {
-            var lineBatch = mapFrame.getLineBatch();
-            if (lineBatch.needsBufferUpdate) {
-                lineBatch.updateBuffers(renderer);
-            }
-            lineBatch.render(camera.getMatrix());
-        }
-        
-        // Entity system handles worldAxes rendering automatically
-        // Just update visibility flag
+        // Update world axes visibility
         if (worldAxes != null) {
             worldAxes.visible = showWorldAxes;
         }
-        
-        super.render(renderer);
+
+        renderDisplayObject(renderer, viewProjectionMatrix, worldAxes);
+
+        // Render entities from last to first (Photoshop-style: top of list renders on top)
+        // This makes layer order intuitive - first layer in list = bottom, last layer = top
+        var i = entities.length - 1;
+        while (i >= 0) {
+            var entity = entities[i];
+            if (entity != null && entity.active && entity.visible) {
+                entity.render(renderer, viewProjectionMatrix);
+            }
+            i--;
+        }
     }
     
     override public function release():Void {

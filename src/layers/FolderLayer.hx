@@ -1,6 +1,7 @@
 package layers;
 
 class FolderLayer extends Layer {
+    
     public var children:Array<Layer>;
     public var expanded:Bool = true; // For UI purposes
     

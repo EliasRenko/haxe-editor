@@ -165,8 +165,8 @@ extern "C" {
     }
     
     // Layer management functions
-    __declspec(dllexport) void createTilemapLayer(const char* layerName, const char* tilesetName) {
-        ::Editor_obj::createTilemapLayer(::String(layerName), ::String(tilesetName));
+    __declspec(dllexport) void createTilemapLayer(const char* layerName, const char* tilesetName, int index) {
+        ::Editor_obj::createTilemapLayer(::String(layerName), ::String(tilesetName), index);
     }
     
     __declspec(dllexport) void createEntityLayer(const char* layerName) {
@@ -828,16 +828,17 @@ class Editor {
      * Create a new tilemap layer
      * @param layerName Name for the new layer
      * @param tilesetName Name of the tileset to use
+     * @param index Position in the hierarchy (-1 to append at the end, 0 for first layer position)
      */
     @:keep
-    public static function createTilemapLayer(layerName:String, tilesetName:String):Void {
+    public static function createTilemapLayer(layerName:String, tilesetName:String, index:Int = -1):Void {
         if (app == null || !initialized || editorState == null) {
             log("Editor: Cannot create tilemap layer - engine not initialized");
             return;
         }
         
         try {
-            editorState.createTilemapLayer(layerName, tilesetName);
+            editorState.createTilemapLayer(layerName, tilesetName, index);
         } catch (e:Dynamic) {
             log("Editor: Error creating tilemap layer: " + e);
         }
