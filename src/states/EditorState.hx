@@ -33,7 +33,7 @@ class EditorState extends State {
     
     // Tile editor settings
     private var tileSize:Int = 32; // Size of each tile in pixels
-    private var selectedTileRegion:Int = 1; // Currently selected tile to place (1-indexed)
+    private var selectedTileRegion:Int = 0; // Currently selected tile region ID (matches C# tile selection)
     private var tileRegions:Array<Int> = []; // Available tile regions (for backward compatibility)
     
     // Layer management (layers are stored in entities array)
@@ -105,12 +105,12 @@ class EditorState extends State {
     
     /**
      * Set the currently selected tile region for drawing
-     * @param regionId The region ID to select (0-based index from C#, converted to 1-based region ID)
+     * @param regionId The region ID to select (0-based from C#, converted to 1-based for Haxe)
      */
     public function setActiveTileRegion(regionId:Int):Void {
-        // Convert from 0-based index to 1-based region ID
+        // C# sends 0-based indices, but Haxe region IDs start from 1
         selectedTileRegion = regionId + 1;
-        trace("Selected tile region: " + selectedTileRegion + " (from index " + regionId + ")");
+        trace("Selected tile region: " + selectedTileRegion + " (from C# index: " + regionId + ")");
     }
     
     /**
