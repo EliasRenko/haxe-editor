@@ -8,7 +8,6 @@ import display.Grid;
 import display.ManagedTileBatch;
 import display.MapFrame;
 import display.LineBatch;
-import entity.DisplayEntity;
 import layers.Layer;
 import layers.TilemapLayer;
 import layers.EntityLayer;
@@ -20,7 +19,6 @@ class EditorState extends State {
     
     private var grid:Grid;
     private var tileBatch:ManagedTileBatch;
-    private var tileBatchEntity:DisplayEntity;
     private var mapFrame:MapFrame;
     private var worldAxes:LineBatch;
     
@@ -33,6 +31,7 @@ class EditorState extends State {
     
     // Entity definition management
     private var entityDefinitions:Map<String, EntityDefinition> = new Map<String, EntityDefinition>();
+    private var selectedEntityName:String = ""; // Currently selected entity for placement
     
     // Tile editor settings
     private var tileSize:Int = 32; // Size of each tile in pixels
@@ -320,12 +319,20 @@ class EditorState extends State {
             return;
         }
         
-        entity.regionX = x;
-        entity.regionY = y;
-        entity.regionWidth = width;
-        entity.regionHeight = height;
+        // Get the tileset to determine tile size
+        var tileset = tilesets.get(entity.tilesetName);
+        if (tileset == null) {
+            trace("Cannot set region: tileset not found: " + entity.tilesetName);
+            return;
+        }
         
-        trace("Set entity region for " + entityName + ": (" + x + "," + y + "," + width + "," + height + ")");
+        // Convert tile indices to pixel coordinates
+        entity.regionX = x * tileset.tileSize;
+        entity.regionY = y * tileset.tileSize;
+        entity.regionWidth = width * tileset.tileSize;
+        entity.regionHeight = height * tileset.tileSize;
+        
+        trace("Set entity region for " + entityName + ": tile(" + x + "," + y + "," + width + "," + height + ") -> pixels(" + entity.regionX + "," + entity.regionY + "," + entity.regionWidth + "," + entity.regionHeight + ")");
     }
     
     /**
@@ -402,6 +409,22 @@ class EditorState extends State {
     }
     
     /**
+     * Set the currently active entity for placement
+     * @param entityName Name of the entity to make active
+     * @return True if entity exists, false otherwise
+     */
+    public function setActiveEntity(entityName:String):Bool {
+        if (!entityDefinitions.exists(entityName)) {
+            trace("Cannot set active entity: entity not found: " + entityName);
+            return false;
+        }
+        
+        selectedEntityName = entityName;
+        trace("Active entity set to: " + entityName);
+        return true;
+    }
+    
+    /**
      * Setup the map frame (visual boundary)
      */
     private function setupMapFrame(renderer:Renderer):Void {
@@ -414,9 +437,8 @@ class EditorState extends State {
         mapFrame = new MapFrame(lineProgramInfo, mapX, mapY, mapWidth, mapHeight);
         mapFrame.init(renderer);
         
-        // Add the lineBatch as an entity so it gets rendered automatically
-        var lineBatchEntity = new DisplayEntity(mapFrame.getLineBatch(), "mapFrame");
-        addEntity(lineBatchEntity);
+        // MapFrame renders its own LineBatch internally
+        // No need to add it as an entity
     }
     
     /**
@@ -517,14 +539,22 @@ class EditorState extends State {
             }
         }
         
-        // Left click to place tile (continuous while holding)
+        // Left click to place tile/entity (continuous while holding)
         if (mouse.check(1)) { // Button 1 = left
-            placeTileAt(worldPos.x, worldPos.y);
+            if (activeLayer != null && Std.isOfType(activeLayer, EntityLayer)) {
+                placeEntityAt(worldPos.x, worldPos.y);
+            } else {
+                placeTileAt(worldPos.x, worldPos.y);
+            }
         }
 
-        // Right click to remove tile (continuous while holding)
+        // Right click to remove tile/entity (continuous while holding)
         if (mouse.check(3)) { // Button 3 = right
-            removeTileAt(worldPos.x, worldPos.y);
+            if (activeLayer != null && Std.isOfType(activeLayer, EntityLayer)) {
+                removeEntityAt(worldPos.x, worldPos.y);
+            } else {
+                removeTileAt(worldPos.x, worldPos.y);
+            }
         }
     }
     
@@ -646,6 +676,65 @@ class EditorState extends State {
         var worldY = (screenY - zoomCenterY) / camera.zoom + zoomCenterY + camera.y;
 
         return {x: worldX, y: worldY};
+    }
+    
+    /**
+     * Place an entity at world position
+     */
+    private function placeEntityAt(worldX:Float, worldY:Float):Void {
+        // Check if active layer is an entity layer
+        if (activeLayer == null || !Std.isOfType(activeLayer, EntityLayer)) {
+            return;
+        }
+        
+        // Check if we have a selected entity
+        if (selectedEntityName == "" || !entityDefinitions.exists(selectedEntityName)) {
+            return;
+        }
+        
+        var entityLayer:EntityLayer = cast activeLayer;
+        var entityDef = entityDefinitions.get(selectedEntityName);
+        
+        // Check if position is within map bounds
+        if (worldX < mapX || worldX >= mapX + mapWidth || 
+            worldY < mapY || worldY >= mapY + mapHeight) {
+            return;
+        }
+        
+        // Add entity as a tile in the batch
+        var entityId = entityLayer.addEntity(
+            entityDef.name,
+            worldX,
+            worldY,
+            entityDef.width,
+            entityDef.height,
+            entityDef.regionX,
+            entityDef.regionY,
+            entityDef.regionWidth,
+            entityDef.regionHeight
+        );
+        
+        trace("Placed entity: " + entityDef.name + " (ID: " + entityId + ") at (" + worldX + ", " + worldY + ")");
+    }
+    
+    /**
+     * Remove entity at world position
+     */
+    private function removeEntityAt(worldX:Float, worldY:Float):Void {
+        // Check if active layer is an entity layer
+        if (activeLayer == null || !Std.isOfType(activeLayer, EntityLayer)) {
+            return;
+        }
+        
+        var entityLayer:EntityLayer = cast activeLayer;
+        
+        // Find entity at this position
+        var entityId = entityLayer.getEntityAt(worldX, worldY, 16.0);
+        
+        if (entityId >= 0) {
+            entityLayer.removeEntity(entityId);
+            trace("Removed entity ID: " + entityId + " at (" + worldX + ", " + worldY + ")");
+        }
     }
     
     /**
@@ -1163,6 +1252,7 @@ class EditorState extends State {
         
         // Create a new tile batch for this layer
         var batch = new ManagedTileBatch(textureProgramInfo, tileset.textureId);
+        batch.debugName = "TilemapLayer:" + name;
         batch.depthTest = false;
         batch.init(app.renderer);
         
@@ -1189,10 +1279,27 @@ class EditorState extends State {
     /**
      * Create a new entity layer
      */
-    public function createEntityLayer(name:String):EntityLayer {
-        var layer = new EntityLayer(name);
+    public function createEntityLayer(name:String, tilesetName:String):EntityLayer {
+        var tileset = tilesets.get(tilesetName);
+        if (tileset == null) {
+            trace("Cannot create entity layer: tileset '" + tilesetName + "' not found");
+            return null;
+        }
+        
+        var textureProgramInfo = app.renderer.getProgramInfo("texture");
+        if (textureProgramInfo == null) {
+            trace("Cannot create entity layer: texture program not found");
+            return null;
+        }
+        
+        var entityBatch = new ManagedTileBatch(textureProgramInfo, tileset.textureId);
+        entityBatch.debugName = "EntityLayer:" + name;
+        entityBatch.depthTest = false; // Disable depth testing for 2D rendering
+        entityBatch.init(app.renderer);
+        
+        var layer = new EntityLayer(name, tileset, entityBatch);
         addLayer(layer);
-        trace("Created entity layer: " + name);
+        trace("Created entity layer: " + name + " with tileset: " + tilesetName);
         return layer;
     }
     

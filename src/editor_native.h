@@ -102,11 +102,12 @@ extern "C" {
     __declspec(dllexport) int getEntityCount();
 
     __declspec(dllexport) void setEntity(const char* entityName, int width, int height, const char* tilesetName);
+    __declspec(dllexport) int setActiveEntity(const char* entityName);
     __declspec(dllexport) void setEntityRegion(const char* entityName, int x, int y, int width, int height);
 
     // Layer management
     __declspec(dllexport) void createTilemapLayer(const char* layerName, const char* tilesetName, int index);
-    __declspec(dllexport) void createEntityLayer(const char* layerName);
+    __declspec(dllexport) void createEntityLayer(const char* layerName, const char* tilesetName);
     __declspec(dllexport) void createFolderLayer(const char* layerName);
 
     __declspec(dllexport) int getLayerInfo(const char* layerName, LayerInfoStruct* outInfo);

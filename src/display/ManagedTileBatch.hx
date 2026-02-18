@@ -19,6 +19,8 @@ class ManagedTileBatch extends TileBatch {
     private var tiles:Map<Int, Tile> = new Map(); // tileId -> TileInstance
     private var __nextTileId:Int = 1; // Auto-incrementing tile ID
     
+    public var debugName:String = "unnamed"; // For debugging
+    
     /**
      * Create a new ManagedTileBatch
      * @param programInfo Shader program for rendering
@@ -139,12 +141,18 @@ class ManagedTileBatch extends TileBatch {
      * Update buffers - build tile data from stored tiles and pass to base class
      */
     override public function updateBuffers(renderer:Renderer):Void {
-
+        trace("ManagedTileBatch.updateBuffers[" + debugName + "]: " + Lambda.count(tiles) + " tiles, vertices.length before=" + vertices.length);
+        
+        // Build all tiles into the vertices/indices arrays
         for (tile in tiles) {
             buildTile(tile);
         }
         
-        // Call base class updateBuffers (which will use the set tile data)
+        trace("ManagedTileBatch.updateBuffers[" + debugName + "]: vertices.length after buildTile=" + vertices.length);
+        
+        // Call base class updateBuffers to upload to GPU
         super.updateBuffers(renderer);
+        
+        trace("ManagedTileBatch.updateBuffers[" + debugName + "]: complete, vertices.length=" + vertices.length);
     }
 }

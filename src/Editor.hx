@@ -169,8 +169,8 @@ extern "C" {
         ::Editor_obj::createTilemapLayer(::String(layerName), ::String(tilesetName), index);
     }
     
-    __declspec(dllexport) void createEntityLayer(const char* layerName) {
-        ::Editor_obj::createEntityLayer(::String(layerName));
+    __declspec(dllexport) void createEntityLayer(const char* layerName, const char* tilesetName) {
+        ::Editor_obj::createEntityLayer(::String(layerName), ::String(tilesetName));
     }
     
     __declspec(dllexport) void createFolderLayer(const char* layerName) {
@@ -245,6 +245,10 @@ extern "C" {
     
     __declspec(dllexport) int getEntityCount() {
         return ::Editor_obj::getEntityCount();
+    }
+    
+    __declspec(dllexport) int setActiveEntity(const char* entityName) {
+        return ::Editor_obj::setActiveEntity(::String(entityName));
     }
 }
 ')
@@ -1003,6 +1007,26 @@ class Editor {
         }
     }
     
+    /**
+     * Set the currently active entity for placement
+     * @param entityName Name of the entity to make active
+     * @return 1 if entity exists, 0 otherwise
+     */
+    @:keep
+    public static function setActiveEntity(entityName:String):Int {
+        if (app == null || !initialized || editorState == null) {
+            log("Editor: Cannot set active entity - engine not initialized");
+            return 0;
+        }
+        
+        try {
+            return editorState.setActiveEntity(entityName) ? 1 : 0;
+        } catch (e:Dynamic) {
+            log("Editor: Error setting active entity: " + e);
+            return 0;
+        }
+    }
+    
     // ===== LAYER MANAGEMENT =====
     
     /**
@@ -1030,14 +1054,14 @@ class Editor {
      * @param layerName Name for the new layer
      */
     @:keep
-    public static function createEntityLayer(layerName:String):Void {
+    public static function createEntityLayer(layerName:String, tilesetName:String):Void {
         if (app == null || !initialized || editorState == null) {
             log("Editor: Cannot create entity layer - engine not initialized");
             return;
         }
         
         try {
-            editorState.createEntityLayer(layerName);
+            editorState.createEntityLayer(layerName, tilesetName);
         } catch (e:Dynamic) {
             log("Editor: Error creating entity layer: " + e);
         }

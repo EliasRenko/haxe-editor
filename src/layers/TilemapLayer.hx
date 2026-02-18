@@ -26,15 +26,7 @@ class TilemapLayer extends Layer {
     
     override public function render(renderer:Dynamic, viewProjectionMatrix:Dynamic):Void {
         if (visible && tileBatch != null && tileBatch.visible) {
-            // Update buffers if needed
-            if (tileBatch.needsBufferUpdate) {
-                tileBatch.updateBuffers(renderer);
-            }
-            
-            // Set up batch transform
-            tileBatch.render(viewProjectionMatrix);
-            
-            // Actually draw to screen
+            // renderer.renderDisplayObject() automatically calls updateBuffers() and render()
             renderer.renderDisplayObject(tileBatch, viewProjectionMatrix);
         }
     }
