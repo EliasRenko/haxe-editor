@@ -31,6 +31,17 @@ typedef struct {
 
 typedef struct {
     const char* name;
+    int width;
+    int height;
+    const char* tilesetName;
+    int regionX;
+    int regionY;
+    int regionWidth;
+    int regionHeight;
+} EntityDataStruct;
+
+typedef struct {
+    const char* name;
     int type;                // 0 = TilemapLayer, 1 = EntityLayer, 2 = FolderLayer
     const char* tilesetName; // For TilemapLayer only (null for others)
     int visible;             // 0 = hidden, 1 = visible
@@ -85,6 +96,14 @@ extern "C" {
     __declspec(dllexport) int setActiveTileset(const char* tilesetName);
     __declspec(dllexport) void setActiveTile(int tileRegionId);
     
+    // Entity management
+    __declspec(dllexport) void getEntity(const char* entityName, EntityDataStruct* outData);
+    __declspec(dllexport) void getEntityAt(int index, EntityDataStruct* outData);
+    __declspec(dllexport) int getEntityCount();
+
+    __declspec(dllexport) void setEntity(const char* entityName, int width, int height, const char* tilesetName);
+    __declspec(dllexport) void setEntityRegion(const char* entityName, int x, int y, int width, int height);
+
     // Layer management
     __declspec(dllexport) void createTilemapLayer(const char* layerName, const char* tilesetName, int index);
     __declspec(dllexport) void createEntityLayer(const char* layerName);

@@ -225,6 +225,27 @@ extern "C" {
     __declspec(dllexport) int moveLayerDownByIndex(int index) {
         return ::Editor_obj::moveLayerDownByIndex(index);
     }
+    
+    // Entity definition management
+    __declspec(dllexport) void setEntity(const char* entityName, int width, int height, const char* tilesetName) {
+        ::Editor_obj::setEntity(::String(entityName), width, height, ::String(tilesetName));
+    }
+    
+    __declspec(dllexport) void setEntityRegion(const char* entityName, int x, int y, int width, int height) {
+        ::Editor_obj::setEntityRegion(::String(entityName), x, y, width, height);
+    }
+    
+    __declspec(dllexport) void getEntity(const char* entityName, EntityDataStruct* outData) {
+        ::Editor_obj::getEntity(::String(entityName), outData);
+    }
+    
+    __declspec(dllexport) void getEntityAt(int index, EntityDataStruct* outData) {
+        ::Editor_obj::getEntityAt(index, outData);
+    }
+    
+    __declspec(dllexport) int getEntityCount() {
+        return ::Editor_obj::getEntityCount();
+    }
 }
 ')
 
@@ -818,6 +839,166 @@ class Editor {
             }
         } catch (e:Dynamic) {
             log("Editor: Error setting tileset: " + e);
+            return 0;
+        }
+    }
+    
+    // ===== ENTITY DEFINITION MANAGEMENT =====
+    
+    /**
+     * Create or update an entity definition
+     * @param entityName Name of the entity
+     * @param width Entity width in pixels
+     * @param height Entity height in pixels
+     * @param tilesetName Tileset to use for this entity
+     */
+    @:keep
+    public static function setEntity(entityName:String, width:Int, height:Int, tilesetName:String):Void {
+        if (app == null || !initialized || editorState == null) {
+            log("Editor: Cannot set entity - engine not initialized");
+            return;
+        }
+        
+        try {
+            editorState.setEntity(entityName, width, height, tilesetName);
+        } catch (e:Dynamic) {
+            log("Editor: Error setting entity: " + e);
+        }
+    }
+    
+    /**
+     * Set the atlas region for an entity definition
+     * @param entityName Name of the entity
+     * @param x Atlas region X position
+     * @param y Atlas region Y position
+     * @param width Atlas region width
+     * @param height Atlas region height
+     */
+    @:keep
+    public static function setEntityRegion(entityName:String, x:Int, y:Int, width:Int, height:Int):Void {
+        if (app == null || !initialized || editorState == null) {
+            log("Editor: Cannot set entity region - engine not initialized");
+            return;
+        }
+        
+        try {
+            editorState.setEntityRegion(entityName, x, y, width, height);
+        } catch (e:Dynamic) {
+            log("Editor: Error setting entity region: " + e);
+        }
+    }
+    
+    /**
+     * Get entity definition by name
+     * @param entityName Name of the entity
+     * @param outData Pointer to EntityDataStruct to fill
+     */
+    @:keep
+    public static function getEntity(entityName:String, outData:cpp.RawPointer<cpp.Void>):Void {
+        if (app == null || !initialized || editorState == null) {
+            log("Editor: Cannot get entity - engine not initialized");
+            return;
+        }
+        
+        try {
+            var entity = editorState.getEntityDefinition(entityName);
+            
+            if (entity == null) {
+                log("Editor: Entity not found: " + entityName);
+                return;
+            }
+            
+            // Fill the struct using untyped C++ code
+            var name = entity.name;
+            var width = entity.width;
+            var height = entity.height;
+            var tilesetName = entity.tilesetName;
+            var regionX = entity.regionX;
+            var regionY = entity.regionY;
+            var regionWidth = entity.regionWidth;
+            var regionHeight = entity.regionHeight;
+            
+            untyped __cpp__("EntityDataStruct* outStruct = (EntityDataStruct*){0};
+                outStruct->name = {1}.utf8_str();
+                outStruct->width = {2};
+                outStruct->height = {3};
+                outStruct->tilesetName = {4}.utf8_str();
+                outStruct->regionX = {5};
+                outStruct->regionY = {6};
+                outStruct->regionWidth = {7};
+                outStruct->regionHeight = {8};
+            ", outData, name, width, height, tilesetName, regionX, regionY, regionWidth, regionHeight);
+            
+            log("Editor: Retrieved entity: " + entityName);
+            
+        } catch (e:Dynamic) {
+            log("Editor: Error getting entity: " + e);
+        }
+    }
+    
+    /**
+     * Get entity definition at specific index
+     * @param index Index of the entity (0-based)
+     * @param outData Pointer to EntityDataStruct to fill
+     */
+    @:keep
+    public static function getEntityAt(index:Int, outData:cpp.RawPointer<cpp.Void>):Void {
+        if (app == null || !initialized || editorState == null) {
+            log("Editor: Cannot get entity - engine not initialized");
+            return;
+        }
+        
+        try {
+            var entity = editorState.getEntityDefinitionAt(index);
+            
+            if (entity == null) {
+                log("Editor: Entity not found at index: " + index);
+                return;
+            }
+            
+            // Fill the struct using untyped C++ code
+            var name = entity.name;
+            var width = entity.width;
+            var height = entity.height;
+            var tilesetName = entity.tilesetName;
+            var regionX = entity.regionX;
+            var regionY = entity.regionY;
+            var regionWidth = entity.regionWidth;
+            var regionHeight = entity.regionHeight;
+            
+            untyped __cpp__("EntityDataStruct* outStruct = (EntityDataStruct*){0};
+                outStruct->name = {1}.utf8_str();
+                outStruct->width = {2};
+                outStruct->height = {3};
+                outStruct->tilesetName = {4}.utf8_str();
+                outStruct->regionX = {5};
+                outStruct->regionY = {6};
+                outStruct->regionWidth = {7};
+                outStruct->regionHeight = {8};
+            ", outData, name, width, height, tilesetName, regionX, regionY, regionWidth, regionHeight);
+            
+            log("Editor: Retrieved entity at index " + index + ": " + name);
+            
+        } catch (e:Dynamic) {
+            log("Editor: Error getting entity at index: " + e);
+        }
+    }
+    
+    /**
+     * Get the count of entity definitions
+     * @return Number of entity definitions
+     */
+    @:keep
+    public static function getEntityCount():Int {
+        if (app == null || !initialized || editorState == null) {
+            log("Editor: Cannot get entity count - engine not initialized");
+            return 0;
+        }
+        
+        try {
+            return editorState.getEntityDefinitionCount();
+        } catch (e:Dynamic) {
+            log("Editor: Error getting entity count: " + e);
             return 0;
         }
     }

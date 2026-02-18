@@ -14,6 +14,7 @@ import layers.TilemapLayer;
 import layers.EntityLayer;
 import layers.FolderLayer;
 import Tileset;
+import EntityDefinition;
 
 class EditorState extends State {
     
@@ -29,6 +30,9 @@ class EditorState extends State {
     // Tileset management
     private var tilesets:Map<String, Tileset> = new Map<String, Tileset>();
     private var currentTilesetName:String = "devTiles"; // Currently active tileset
+    
+    // Entity definition management
+    private var entityDefinitions:Map<String, EntityDefinition> = new Map<String, EntityDefinition>();
     
     // Tile editor settings
     private var tileSize:Int = 32; // Size of each tile in pixels
@@ -268,6 +272,133 @@ class EditorState extends State {
         }
         
         trace("Loaded tileset: " + tilesetName + " (" + tilesPerRow + "x" + tilesPerCol + " tiles)");
+    }
+    
+    // ===== ENTITY DEFINITION MANAGEMENT =====
+    
+    /**
+     * Create or update an entity definition
+     * @param entityName Name of the entity
+     * @param width Entity width in pixels
+     * @param height Entity height in pixels
+     * @param tilesetName Tileset to use for this entity
+     */
+    public function setEntity(entityName:String, width:Int, height:Int, tilesetName:String):Void {
+        // Verify tileset exists
+        if (!tilesets.exists(tilesetName)) {
+            trace("Cannot create entity: tileset not found: " + tilesetName);
+            return;
+        }
+        
+        var entity:EntityDefinition = {
+            name: entityName,
+            width: width,
+            height: height,
+            tilesetName: tilesetName,
+            regionX: 0,
+            regionY: 0,
+            regionWidth: width,
+            regionHeight: height
+        };
+        
+        entityDefinitions.set(entityName, entity);
+        trace("Created/updated entity definition: " + entityName + " (" + width + "x" + height + ") using tileset: " + tilesetName);
+    }
+    
+    /**
+     * Set the atlas region for an entity definition
+     * @param entityName Name of the entity
+     * @param x Atlas region X position
+     * @param y Atlas region Y position
+     * @param width Atlas region width
+     * @param height Atlas region height
+     */
+    public function setEntityRegion(entityName:String, x:Int, y:Int, width:Int, height:Int):Void {
+        var entity = entityDefinitions.get(entityName);
+        if (entity == null) {
+            trace("Cannot set region: entity not found: " + entityName);
+            return;
+        }
+        
+        entity.regionX = x;
+        entity.regionY = y;
+        entity.regionWidth = width;
+        entity.regionHeight = height;
+        
+        trace("Set entity region for " + entityName + ": (" + x + "," + y + "," + width + "," + height + ")");
+    }
+    
+    /**
+     * Get entity definition by name
+     * @param entityName Name of the entity
+     * @return Entity definition or null if not found
+     */
+    public function getEntityDefinition(entityName:String):Null<EntityDefinition> {
+        return entityDefinitions.get(entityName);
+    }
+    
+    /**
+     * Get entity definition at specific index
+     * @param index Index of the entity (0-based)
+     * @return Entity definition or null if index out of bounds
+     */
+    public function getEntityDefinitionAt(index:Int):Null<EntityDefinition> {
+        if (index < 0) return null;
+        
+        var i = 0;
+        for (name in entityDefinitions.keys()) {
+            if (i == index) {
+                return entityDefinitions.get(name);
+            }
+            i++;
+        }
+        return null;
+    }
+    
+    /**
+     * Get the count of entity definitions
+     * @return Number of entity definitions
+     */
+    public function getEntityDefinitionCount():Int {
+        var count = 0;
+        for (_ in entityDefinitions.keys()) {
+            count++;
+        }
+        return count;
+    }
+    
+    /**
+     * Get entity definition name at specific index
+     * @param index Index of the entity (0-based)
+     * @return Entity name or empty string if index out of bounds
+     */
+    public function getEntityDefinitionNameAt(index:Int):String {
+        if (index < 0) return "";
+        
+        var i = 0;
+        for (name in entityDefinitions.keys()) {
+            if (i == index) {
+                return name;
+            }
+            i++;
+        }
+        return "";
+    }
+    
+    /**
+     * Delete an entity definition by name
+     * @param entityName Name of the entity to delete
+     * @return True if entity was found and deleted, false otherwise
+     */
+    public function deleteEntityDefinition(entityName:String):Bool {
+        if (!entityDefinitions.exists(entityName)) {
+            trace("Entity definition not found: " + entityName);
+            return false;
+        }
+        
+        entityDefinitions.remove(entityName);
+        trace("Deleted entity definition: " + entityName);
+        return true;
     }
     
     /**
@@ -1141,10 +1272,27 @@ class EditorState extends State {
             });
         }
         
+        // Collect entity definitions
+        var entitiesArray:Array<Dynamic> = [];
+        for (entityName in entityDefinitions.keys()) {
+            var entity = entityDefinitions.get(entityName);
+            entitiesArray.push({
+                name: entity.name,
+                width: entity.width,
+                height: entity.height,
+                tilesetName: entity.tilesetName,
+                regionX: entity.regionX,
+                regionY: entity.regionY,
+                regionWidth: entity.regionWidth,
+                regionHeight: entity.regionHeight
+            });
+        }
+        
         // Create JSON structure
         var data = {
-            version: "1.2",
+            version: "1.3",
             tilesets: tilesetsArray,
+            entityDefinitions: entitiesArray,
             currentTileset: currentTilesetName,
             mapBounds: {
                 x: mapX,
@@ -1217,6 +1365,25 @@ class EditorState extends State {
                         setTileset(path, name, size);
                         trace("Loaded tileset from JSON: " + name);
                     }
+                }
+            }
+            
+            // Load entity definitions
+            if (data.entityDefinitions != null) {
+                var entitiesArray:Array<Dynamic> = data.entityDefinitions;
+                for (entityData in entitiesArray) {
+                    var name:String = entityData.name;
+                    var width:Int = entityData.width;
+                    var height:Int = entityData.height;
+                    var tilesetName:String = entityData.tilesetName;
+                    var regionX:Int = entityData.regionX;
+                    var regionY:Int = entityData.regionY;
+                    var regionWidth:Int = entityData.regionWidth;
+                    var regionHeight:Int = entityData.regionHeight;
+                    
+                    setEntity(name, width, height, tilesetName);
+                    setEntityRegion(name, regionX, regionY, regionWidth, regionHeight);
+                    trace("Loaded entity definition from JSON: " + name);
                 }
             }
             
