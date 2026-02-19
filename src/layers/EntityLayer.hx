@@ -39,11 +39,8 @@ class EntityLayer extends Layer {
         }
         
         if (!entityBatch.visible) {
-            trace("EntityLayer '" + id + "': entityBatch not visible");
             return;
         }
-        
-        trace("EntityLayer.render: batch has " + entityBatch.getTileCount() + " tiles, " + entityBatch.vertices.length + " vertices");
         
         // renderer.renderDisplayObject() automatically calls updateBuffers() and render()
         renderer.renderDisplayObject(entityBatch, viewProjectionMatrix);
@@ -74,25 +71,15 @@ class EntityLayer extends Layer {
         
         // Define a new region for this entity
         var regionId = entityBatch.defineRegion(atlasX, atlasY, atlasWidth, atlasHeight);
-        trace("EntityLayer.addEntity: defined region " + regionId + " for atlas(" + atlasX + "," + atlasY + "," + atlasWidth + "," + atlasHeight + ")");
-        
         if (regionId < 0) {
-            trace("EntityLayer.addEntity: ERROR - defineRegion failed! Returned: " + regionId);
-            return -1;
-        }
-        
-        // Verify the region exists before adding tile
-        if (!entityBatch.atlasRegions.exists(regionId)) {
-            trace("EntityLayer.addEntity: ERROR - Region " + regionId + " does not exist in atlasRegions after defineRegion!");
+            trace("EntityLayer.addEntity: ERROR - defineRegion failed!");
             return -1;
         }
         
         // Add tile to batch
         var tileId = entityBatch.addTile(x, y, width, height, regionId);
-        trace("EntityLayer.addEntity: added tile " + tileId + " at (" + x + "," + y + ") size(" + width + "," + height + ") regionId=" + regionId);
-        
         if (tileId < 0) {
-            trace("EntityLayer.addEntity: ERROR - addTile failed! Returned: " + tileId);
+            trace("EntityLayer.addEntity: ERROR - addTile failed!");
             return -1;
         }
         
@@ -103,7 +90,6 @@ class EntityLayer extends Layer {
         var entityId = nextEntityId++;
         entities.set(entityId, {name: name, tileId: tileId, x: x, y: y});
         
-        trace("EntityLayer.addEntity: created entity " + entityId + ", batch now has " + entityBatch.getTileCount() + " tiles");
         return entityId;
     }
     

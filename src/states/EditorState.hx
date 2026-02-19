@@ -471,7 +471,6 @@ class EditorState extends State {
         var greenColor = [0.0, 1.0, 0.0, 1.0];
         worldAxes.addLine(0, -axisLength, z, 0, axisLength, z, greenColor, greenColor);
         
-        
         // Upload the vertex data to GPU immediately
         worldAxes.updateBuffers(renderer);
         
@@ -487,11 +486,6 @@ class EditorState extends State {
         
         // Handle mouse input for tile placement/removal
         handleTileInput();
-        
-        if (updateCount < 3) {
-            trace("EditorState: update() frame " + updateCount);
-            updateCount++;
-        }
     }
     
     /**
@@ -538,21 +532,19 @@ class EditorState extends State {
                 return;
             }
         }
-        
-        // Left click to place tile/entity (continuous while holding)
-        if (mouse.check(1)) { // Button 1 = left
-            if (activeLayer != null && Std.isOfType(activeLayer, EntityLayer)) {
-                placeEntityAt(worldPos.x, worldPos.y);
-            } else {
-                placeTileAt(worldPos.x, worldPos.y);
-            }
-        }
 
-        // Right click to remove tile/entity (continuous while holding)
-        if (mouse.check(3)) { // Button 3 = right
-            if (activeLayer != null && Std.isOfType(activeLayer, EntityLayer)) {
+		if (activeLayer != null && Std.isOfType(activeLayer, EntityLayer)) {
+            if (mouse.pressed(1)) {
+                placeEntityAt(worldPos.x, worldPos.y);
+            } else if (mouse.pressed(3)) {
                 removeEntityAt(worldPos.x, worldPos.y);
-            } else {
+            }
+		}
+
+        if (activeLayer != null && Std.isOfType(activeLayer, TilemapLayer)) {
+            if (mouse.check(1)) {
+                placeTileAt(worldPos.x, worldPos.y);
+            } else if (mouse.check(3)) {
                 removeTileAt(worldPos.x, worldPos.y);
             }
         }
@@ -713,8 +705,6 @@ class EditorState extends State {
             entityDef.regionWidth,
             entityDef.regionHeight
         );
-        
-        trace("Placed entity: " + entityDef.name + " (ID: " + entityId + ") at (" + worldX + ", " + worldY + ")");
     }
     
     /**

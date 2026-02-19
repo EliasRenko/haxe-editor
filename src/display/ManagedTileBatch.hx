@@ -141,18 +141,12 @@ class ManagedTileBatch extends TileBatch {
      * Update buffers - build tile data from stored tiles and pass to base class
      */
     override public function updateBuffers(renderer:Renderer):Void {
-        trace("ManagedTileBatch.updateBuffers[" + debugName + "]: " + Lambda.count(tiles) + " tiles, vertices.length before=" + vertices.length);
-        
         // Build all tiles into the vertices/indices arrays
         for (tile in tiles) {
             buildTile(tile);
         }
         
-        trace("ManagedTileBatch.updateBuffers[" + debugName + "]: vertices.length after buildTile=" + vertices.length);
-        
         // Call base class updateBuffers to upload to GPU
         super.updateBuffers(renderer);
-        
-        trace("ManagedTileBatch.updateBuffers[" + debugName + "]: complete, vertices.length=" + vertices.length);
     }
 }
