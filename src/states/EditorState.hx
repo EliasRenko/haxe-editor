@@ -12,8 +12,6 @@ import layers.Layer;
 import layers.TilemapLayer;
 import layers.EntityLayer;
 import layers.FolderLayer;
-import Tileset;
-import EntityDefinition;
 import manager.TilesetManager;
 import manager.EntityManager;
 import utils.MapSerializer;
@@ -25,16 +23,13 @@ class EditorState extends State {
     private var mapFrame:MapFrame;
     private var worldAxes:LineBatch;
     
-    // Visual options
+    // Options
     public var showWorldAxes:Bool = true; // Show X/Y axes at origin (0,0)
-    
-    // Tileset management
-    //private var tilesets:Map<String, Tileset> = new Map<String, Tileset>();
+    public var deleteOutOfBoundsTilesOnResize:Bool = true; // Auto-delete tiles when shrinking frame
+
+    // Managers
     public var tilesetManager:TilesetManager = new TilesetManager();
     public var entityManager:EntityManager = new EntityManager();
-    // Entity definition management
-    //private var entityDefinitions:Map<String, EntityDefinition> = new Map<String, EntityDefinition>();
-    //private var selectedEntityName:String = ""; // Currently selected entity for placement
     
     // Tile editor settings
     private var tileSize:Int = 32; // Size of each tile in pixels
@@ -43,9 +38,6 @@ class EditorState extends State {
     
     // Layer management (layers are stored in entities array)
     private var activeLayer:Layer = null;
-    
-    // Resize behavior options
-    public var deleteOutOfBoundsTilesOnResize:Bool = true; // Auto-delete tiles when shrinking frame
     
     // Map bounds (defines the editable area)
     private var mapX:Float = 0;
@@ -96,50 +88,28 @@ class EditorState extends State {
         // Clip grid to map bounds
         grid.setBounds(mapX, mapY, mapX + mapWidth, mapY + mapHeight);
         
-        //var gridEntity = new DisplayEntity(grid, "grid");
-        //addEntity(gridEntity);
-        
-        // No default tilemap - use setupTilemap() or importFromJSON() to load tilesets
-        
         // Setup map frame
         setupMapFrame(renderer);
         
         // Setup world axes
         setupWorldAxes(renderer);
+
+        // Create default programInfo
+        var textureVertShader = app.resources.getText("shaders/texture.vert");
+        var textureFragShader = app.resources.getText("shaders/texture.frag");
+        app.renderer.createProgramInfo("texture", textureVertShader, textureFragShader);
     }
 
+    // CHECKED!
     public function setTileset(texturePath:String, tilesetName:String, tileSize:Int):Void {
-        var renderer = app.renderer;
-        
-        // Load tile atlas texture - check if already loaded, if not load it first
         if (!app.resources.cached(texturePath)) {
-            app.logDebug(LogCategory.APP,"Texture not cached, loading: " + texturePath);
             app.resources.loadTexture(texturePath, false);
         }
         
-        var tileTextureData = app.resources.getTexture(texturePath, false);
-        if (tileTextureData == null) {
-            app.logDebug(LogCategory.APP,"Error: Could not load texture: " + texturePath);
-            return;
-        }
-        
-        var tileTexture = renderer.uploadTexture(tileTextureData);
-        
-        // Create texture shader for tiles (reuse if already exists)
-        var textureProgramInfo = renderer.getProgramInfo("texture");
-        if (textureProgramInfo == null) {
-            var textureVertShader = app.resources.getText("shaders/texture.vert");
-            var textureFragShader = app.resources.getText("shaders/texture.frag");
-            textureProgramInfo = renderer.createProgramInfo("texture", textureVertShader, textureFragShader);
-        }
-
+        var tileTexture:Texture = app.renderer.uploadTexture(app.resources.getTexture(texturePath, false));
         tilesetManager.setTileset(tileTexture, tilesetName, texturePath, tileSize);
     }
     
-    /**
-     * Set the currently selected tile region for drawing
-     * @param regionId The region ID to select (0-based from C#, converted to 1-based for Haxe)
-     */
     public function setActiveTileRegion(regionId:Int):Void {
         // C# sends 0-based indices, but Haxe region IDs start from 1
         selectedTileRegion = regionId + 1;
@@ -272,8 +242,6 @@ class EditorState extends State {
         //worldAxesEntity = new DisplayEntity(worldAxes, "worldAxes");
         //addEntity(worldAxesEntity);
     }
-    
-    private var updateCount:Int = 0;
     
     override public function update(deltaTime:Float):Void {
         super.update(deltaTime);
