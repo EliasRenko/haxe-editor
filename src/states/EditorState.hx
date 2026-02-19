@@ -16,6 +16,7 @@ import Tileset;
 import EntityDefinition;
 import manager.TilesetManager;
 import manager.EntityManager;
+import utils.MapSerializer;
 
 class EditorState extends State {
     
@@ -1105,142 +1106,21 @@ class EditorState extends State {
      * @return Number of tiles exported
      */
     public function exportToJSON(filePath:String):Int {
-        var layersData:Array<Dynamic> = [];
-        var totalTileCount = 0;
-        
-        // Iterate through all layers and export both tilemap and entity layers
-        for (entity in this.entities) {
-            if (!Std.isOfType(entity, Layer)) continue;
-            var layer:Layer = cast entity;
-            
-            if (Std.isOfType(layer, TilemapLayer)) {
-                var tilemapLayer:TilemapLayer = cast layer;
-                //TODO:FIX THIS - 
-                var tileset = tilesetManager.tilesets.get(tilemapLayer.tileset.name);
-                
-                if (tileset == null) continue;
-                
-                var layerTiles:Array<Dynamic> = [];
-                
-                // Get all tiles from this layer's batch
-                for (tileId in 0...1000) { // MAX_TILES
-                    var tile = tilemapLayer.tileBatch.getTile(tileId);
-                    
-                    if (tile != null) {
-                        // Convert world position back to grid coordinates
-                        var gridX = Std.int(tile.x / tileset.tileSize);
-                        var gridY = Std.int(tile.y / tileset.tileSize);
-                        
-                        // Get tile region (atlas index)
-                        var region = tile.regionId;
-                        
-                        layerTiles.push({
-                            gridX: gridX,
-                            gridY: gridY,
-                            x: tile.x,
-                            y: tile.y,
-                            region: region
-                        });
-                    }
-                }
-                
-                // Only add layer if it has tiles
-                if (layerTiles.length > 0) {
-                    layersData.push({
-                        type: "tilemap",
-                        name: tilemapLayer.id,
-                        tilesetName: tilemapLayer.tileset.name,
-                        visible: tilemapLayer.visible,
-                        tiles: layerTiles,
-                        tileCount: layerTiles.length
-                    });
-                    totalTileCount += layerTiles.length;
-                }
-            } else if (Std.isOfType(layer, EntityLayer)) {
-                var entityLayer:EntityLayer = cast layer;
-                var layerEntities:Array<Dynamic> = [];
-                
-                // Export all entities from this layer
-                for (entityId in entityLayer.entities.keys()) {
-                    var entityData = entityLayer.entities.get(entityId);
-                    layerEntities.push({
-                        name: entityData.name,
-                        x: entityData.x,
-                        y: entityData.y
-                    });
-                }
-                
-                // Only add layer if it has entities
-                if (layerEntities.length > 0) {
-                    layersData.push({
-                        type: "entity",
-                        name: entityLayer.id,
-                        tilesetName: entityLayer.tileset.name,
-                        visible: entityLayer.visible,
-                        entities: layerEntities,
-                        entityCount: layerEntities.length
-                    });
-                }
-            }
-        }
-        
-        // Collect tileset info
-        var tilesetsArray:Array<Dynamic> = [];
-        for (tilesetName in tilesetManager.tilesets.keys()) {
-            var tileset = tilesetManager.tilesets.get(tilesetName);
-            tilesetsArray.push({
-                name: tileset.name,
-                texturePath: tileset.texturePath,
-                tileSize: tileset.tileSize
-            });
-        }
-        
-        // Collect entity definitions
-        var entitiesArray:Array<Dynamic> = [];
-        for (entityName in entityManager.entityDefinitions.keys()) {
-            var entity = entityManager.getEntityDefinition(entityName);
-            entitiesArray.push({
-                name: entity.name,
-                width: entity.width,
-                height: entity.height,
-                tilesetName: entity.tilesetName,
-                regionX: entity.regionX,
-                regionY: entity.regionY,
-                regionWidth: entity.regionWidth,
-                regionHeight: entity.regionHeight
-            });
-        }
-        
-        // Create JSON structure
-        var data = {
-            version: "1.3",
-            tilesets: tilesetsArray,
-            entityDefinitions: entitiesArray,
-            currentTileset: tilesetManager.currentTilesetName,
-            mapBounds: {
-                x: mapX,
-                y: mapY,
-                width: mapWidth,
-                height: mapHeight,
-                gridWidth: Std.int(mapWidth / tileSize),
-                gridHeight: Std.int(mapHeight / tileSize)
-            },
-            layers: layersData,
-            tileCount: totalTileCount
+        var mapBounds = {
+            x: mapX,
+            y: mapY,
+            width: mapWidth,
+            height: mapHeight
         };
         
-        // Convert to JSON string with pretty formatting
-        var jsonString = haxe.Json.stringify(data, null, "  ");
-        
-        // Write to file
-        try {
-            sys.io.File.saveContent(filePath, jsonString);
-            trace("Exported " + totalTileCount + " tiles in " + layersData.length + " layers to: " + filePath);
-            return totalTileCount;
-        } catch (e:Dynamic) {
-            trace("Error exporting JSON: " + e);
-            return -1;
-        }
+        return MapSerializer.exportToJSON(
+            this.entities,
+            tilesetManager,
+            entityManager,
+            mapBounds,
+            tileSize,
+            filePath
+        );
     }
     
     /**
@@ -1250,203 +1130,68 @@ class EditorState extends State {
      * @return Number of tiles imported, or -1 on error
      */
     public function importFromJSON(filePath:String):Int {
-        try {
-            // Read JSON file
-            var jsonString = sys.io.File.getContent(filePath);
-            var data:Dynamic = haxe.Json.parse(jsonString);
-            
-            // Clear existing layers
-            var layersToRemove:Array<Layer> = [];
-            for (entity in entities) {
-                if (Std.isOfType(entity, Layer)) {
-                    layersToRemove.push(cast entity);
-                }
+        // Create import context with all necessary callbacks
+        var context:utils.ImportContext = {
+            renderer: app.renderer,
+            tilesetManager: tilesetManager,
+            entityManager: entityManager,
+            clearLayers: clearLayers,
+            setTileset: setTileset,
+            setEntity: setEntity,
+            setEntityRegionPixels: setEntityRegionPixels,
+            setCurrentTileset: setCurrentTileset,
+            updateMapBounds: updateMapBounds,
+            createTilemapLayer: createTilemapLayer,
+            createEntityLayer: createEntityLayer
+        };
+        
+        return MapSerializer.importFromJSON(filePath, context);
+    }
+    
+    // Helper functions for import context
+    
+    private function clearLayers():Void {
+        var layersToRemove:Array<Layer> = [];
+        for (entity in entities) {
+            if (Std.isOfType(entity, Layer)) {
+                layersToRemove.push(cast entity);
             }
-            // Remove layers - don't call cleanup as it will try to remove from entities array
-            // Just clear their data and remove from array manually
-            for (layer in layersToRemove) {
-                // Clear layer data without calling full cleanup
-                if (Std.isOfType(layer, TilemapLayer)) {
-                    var tl:TilemapLayer = cast layer;
-                    if (tl.tileBatch != null) tl.tileBatch.clear();
-                    if (tl.tileGrid != null) tl.tileGrid.clear();
-                } else if (Std.isOfType(layer, EntityLayer)) {
-                    var el:EntityLayer = cast layer;
-                    if (el.entityBatch != null) el.entityBatch.clear();
-                    if (el.entities != null) el.entities.clear();
-                }
-                entities.remove(layer);
+        }
+        // Remove layers - don't call cleanup as it will try to remove from entities array
+        // Just clear their data and remove from array manually
+        for (layer in layersToRemove) {
+            // Clear layer data without calling full cleanup
+            if (Std.isOfType(layer, TilemapLayer)) {
+                var tl:TilemapLayer = cast layer;
+                if (tl.tileBatch != null) tl.tileBatch.clear();
+                if (tl.tileGrid != null) tl.tileGrid.clear();
+            } else if (Std.isOfType(layer, EntityLayer)) {
+                var el:EntityLayer = cast layer;
+                if (el.entityBatch != null) el.entityBatch.clear();
+                if (el.entities != null) el.entities.clear();
             }
-            activeLayer = null;
-            
-            // Load tilesets first
-            if (data.tilesets != null) {
-                var tilesetsArray:Array<Dynamic> = data.tilesets;
-                for (tilesetData in tilesetsArray) {
-                    var name:String = tilesetData.name;
-                    var path:String = tilesetData.texturePath;
-                    var size:Int = tilesetData.tileSize;
-                    
-                    // Only load if not already loaded
-                    if (!tilesetManager.exists(name)) {
-                        setTileset(path, name, size);
-                        trace("Loaded tileset from JSON: " + name);
-                    }
-                }
-            }
-            
-            // Load entity definitions
-            if (data.entityDefinitions != null) {
-                var entitiesArray:Array<Dynamic> = data.entityDefinitions;
-                for (entityData in entitiesArray) {
-                    var name:String = entityData.name;
-                    var width:Int = entityData.width;
-                    var height:Int = entityData.height;
-                    var tilesetName:String = entityData.tilesetName;
-                    var regionX:Int = entityData.regionX;
-                    var regionY:Int = entityData.regionY;
-                    var regionWidth:Int = entityData.regionWidth;
-                    var regionHeight:Int = entityData.regionHeight;
-                    
-                    setEntity(name, width, height, tilesetName);
-                    // Use setEntityRegionPixels since JSON contains pixel values, not tile indices
-                    setEntityRegionPixels(name, regionX, regionY, regionWidth, regionHeight);
-                    trace("Loaded entity definition from JSON: " + name);
-                }
-            }
-            
-            // Set current tileset
-            if (data.currentTileset != null) {
-                var currentName:String = data.currentTileset;
-                var tileset = tilesetManager.tilesets.get(currentName);
-                if (tileset != null) {
-                    tilesetManager.currentTilesetName = currentName;
-                    tileSize = tileset.tileSize;
-                }
-            }
-            
-            // Update map bounds
-            if (data.mapBounds != null) {
-                mapX = data.mapBounds.x;
-                mapY = data.mapBounds.y;
-                mapWidth = data.mapBounds.width;
-                mapHeight = data.mapBounds.height;
-                
-                // Update visuals
-                if (mapFrame != null) {
-                    mapFrame.setBounds(mapX, mapY, mapWidth, mapHeight);
-                }
-                if (grid != null) {
-                    grid.setBounds(mapX, mapY, mapX + mapWidth, mapY + mapHeight);
-                }
-            }
-            
-            // Create layers and place tiles/entities
-            var importedCount = 0;
-            var layersData:Array<Dynamic> = data.layers;
-            
-            if (layersData != null) {
-                for (layerData in layersData) {
-                    var layerType:String = layerData.type != null ? layerData.type : "tilemap"; // Default to tilemap for old format
-                    var layerName:String = layerData.name != null ? layerData.name : "Layer_" + layerData.tilesetName;
-                    var tilesetName:String = layerData.tilesetName;
-                    var tileset = tilesetManager.tilesets.get(tilesetName);
-                    
-                    if (tileset == null) {
-                        trace("Skipping layer with unknown tileset: " + tilesetName);
-                        continue;
-                    }
-                    
-                    if (layerType == "tilemap") {
-                        // Create a new tilemap layer
-                        var tilemapLayer = createTilemapLayer(layerName, tilesetName, -1);
-                        
-                        if (tilemapLayer != null) {
-                            // Set visibility
-                            if (layerData.visible != null) {
-                                tilemapLayer.visible = layerData.visible;
-                            }
-                            
-                            // Add tiles
-                            if (layerData.tiles != null) {
-                                var tiles:Array<Dynamic> = layerData.tiles;
-                                
-                                for (tileData in tiles) {
-                                    var x:Float = tileData.x;
-                                    var y:Float = tileData.y;
-                                    var region:Int = tileData.region;
-                                    var gridX:Int = tileData.gridX;
-                                    var gridY:Int = tileData.gridY;
-                                    var gridKey = gridX + "_" + gridY;
-                                    
-                                    // Add tile using the layer's batch
-                                    var tileId = tilemapLayer.tileBatch.addTile(x, y, tileset.tileSize, tileset.tileSize, region);
-                                    
-                                    if (tileId >= 0) {
-                                        tilemapLayer.tileGrid.set(gridKey, tileId);
-                                        importedCount++;
-                                    }
-                                }
-                                
-                                // Upload all tile data to GPU after adding all tiles
-                                if (tilemapLayer.tileBatch.needsBufferUpdate) {
-                                    tilemapLayer.tileBatch.updateBuffers(app.renderer);
-                                }
-                            }
-                        }
-                    } else if (layerType == "entity") {
-                        // Create a new entity layer
-                        var entityLayer = createEntityLayer(layerName, tilesetName);
-                        
-                        if (entityLayer != null) {
-                            // Set visibility
-                            if (layerData.visible != null) {
-                                entityLayer.visible = layerData.visible;
-                            }
-                            
-                            // Add entities
-                            if (layerData.entities != null) {
-                                var entities:Array<Dynamic> = layerData.entities;
-                                
-                                for (entityData in entities) {
-                                    var entityName:String = entityData.name;
-                                    var x:Float = entityData.x;
-                                    var y:Float = entityData.y;
-                                    
-                                    // Get entity definition
-                                    var entityDef = entityManager.getEntityDefinition(entityName);
-                                    if (entityDef != null) {
-                                        // Add entity to the layer
-                                        entityLayer.addEntity(
-                                            entityDef.name,
-                                            x,
-                                            y,
-                                            entityDef.width,
-                                            entityDef.height,
-                                            entityDef.regionX,
-                                            entityDef.regionY,
-                                            entityDef.regionWidth,
-                                            entityDef.regionHeight
-                                        );
-                                        importedCount++;
-                                    }
-                                }
-                                
-                                // Upload all entity data to GPU after adding all entities
-                                if (entityLayer.entityBatch.needsBufferUpdate) {
-                                    entityLayer.entityBatch.updateBuffers(app.renderer);
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-            
-            return importedCount;
-            
-        } catch (e:Dynamic) {
-            trace("Error importing JSON: " + e);
-            return -1;
+            entities.remove(layer);
+        }
+        activeLayer = null;
+    }
+    
+    private function setCurrentTileset(name:String, size:Int):Void {
+        tilesetManager.currentTilesetName = name;
+        tileSize = size;
+    }
+    
+    private function updateMapBounds(x:Float, y:Float, width:Float, height:Float):Void {
+        mapX = x;
+        mapY = y;
+        mapWidth = width;
+        mapHeight = height;
+        
+        // Update visuals
+        if (mapFrame != null) {
+            mapFrame.setBounds(mapX, mapY, mapWidth, mapHeight);
+        }
+        if (grid != null) {
+            grid.setBounds(mapX, mapY, mapX + mapWidth, mapY + mapHeight);
         }
     }
     
