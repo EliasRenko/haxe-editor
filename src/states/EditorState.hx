@@ -307,10 +307,10 @@ class EditorState extends State {
     /**
      * Set the atlas region for an entity definition
      * @param entityName Name of the entity
-     * @param x Atlas region X position
-     * @param y Atlas region Y position
-     * @param width Atlas region width
-     * @param height Atlas region height
+     * @param x Atlas region X position (in tile indices)
+     * @param y Atlas region Y position (in tile indices)
+     * @param width Atlas region width (in tile count)
+     * @param height Atlas region height (in tile count)
      */
     public function setEntityRegion(entityName:String, x:Int, y:Int, width:Int, height:Int):Void {
         var entity = entityDefinitions.get(entityName);
@@ -333,6 +333,28 @@ class EditorState extends State {
         entity.regionHeight = height * tileset.tileSize;
         
         trace("Set entity region for " + entityName + ": tile(" + x + "," + y + "," + width + "," + height + ") -> pixels(" + entity.regionX + "," + entity.regionY + "," + entity.regionWidth + "," + entity.regionHeight + ")");
+    }
+    
+    /**
+     * Set the atlas region for an entity definition in pixels (used for JSON import)
+     * @param entityName Name of the entity
+     * @param x Atlas region X position (in pixels)
+     * @param y Atlas region Y position (in pixels)
+     * @param width Atlas region width (in pixels)
+     * @param height Atlas region height (in pixels)
+     */
+    public function setEntityRegionPixels(entityName:String, x:Int, y:Int, width:Int, height:Int):Void {
+        var entity = entityDefinitions.get(entityName);
+        if (entity == null) {
+            trace("Cannot set region: entity not found: " + entityName);
+            return;
+        }
+        
+        // Set pixel coordinates directly (no conversion)
+        entity.regionX = x;
+        entity.regionY = y;
+        entity.regionWidth = width;
+        entity.regionHeight = height;
     }
     
     /**
@@ -1285,6 +1307,7 @@ class EditorState extends State {
         var entityBatch = new ManagedTileBatch(textureProgramInfo, tileset.textureId);
         entityBatch.debugName = "EntityLayer:" + name;
         entityBatch.depthTest = false; // Disable depth testing for 2D rendering
+        entityBatch.visible = true; // Ensure batch is visible
         entityBatch.init(app.renderer);
         
         var layer = new EntityLayer(name, tileset, entityBatch);
@@ -1312,10 +1335,11 @@ class EditorState extends State {
         var layersData:Array<Dynamic> = [];
         var totalTileCount = 0;
         
-        // Iterate through all layers and export tilemap layers
+        // Iterate through all layers and export both tilemap and entity layers
         for (entity in this.entities) {
             if (!Std.isOfType(entity, Layer)) continue;
             var layer:Layer = cast entity;
+            
             if (Std.isOfType(layer, TilemapLayer)) {
                 var tilemapLayer:TilemapLayer = cast layer;
                 var tileset = tilesets.get(tilemapLayer.tileset.name);
@@ -1349,11 +1373,39 @@ class EditorState extends State {
                 // Only add layer if it has tiles
                 if (layerTiles.length > 0) {
                     layersData.push({
+                        type: "tilemap",
+                        name: tilemapLayer.id,
                         tilesetName: tilemapLayer.tileset.name,
+                        visible: tilemapLayer.visible,
                         tiles: layerTiles,
                         tileCount: layerTiles.length
                     });
                     totalTileCount += layerTiles.length;
+                }
+            } else if (Std.isOfType(layer, EntityLayer)) {
+                var entityLayer:EntityLayer = cast layer;
+                var layerEntities:Array<Dynamic> = [];
+                
+                // Export all entities from this layer
+                for (entityId in entityLayer.entities.keys()) {
+                    var entityData = entityLayer.entities.get(entityId);
+                    layerEntities.push({
+                        name: entityData.name,
+                        x: entityData.x,
+                        y: entityData.y
+                    });
+                }
+                
+                // Only add layer if it has entities
+                if (layerEntities.length > 0) {
+                    layersData.push({
+                        type: "entity",
+                        name: entityLayer.id,
+                        tilesetName: entityLayer.tileset.name,
+                        visible: entityLayer.visible,
+                        entities: layerEntities,
+                        entityCount: layerEntities.length
+                    });
                 }
             }
         }
@@ -1444,6 +1496,10 @@ class EditorState extends State {
                     var tl:TilemapLayer = cast layer;
                     if (tl.tileBatch != null) tl.tileBatch.clear();
                     if (tl.tileGrid != null) tl.tileGrid.clear();
+                } else if (Std.isOfType(layer, EntityLayer)) {
+                    var el:EntityLayer = cast layer;
+                    if (el.entityBatch != null) el.entityBatch.clear();
+                    if (el.entities != null) el.entities.clear();
                 }
                 entities.remove(layer);
             }
@@ -1479,7 +1535,8 @@ class EditorState extends State {
                     var regionHeight:Int = entityData.regionHeight;
                     
                     setEntity(name, width, height, tilesetName);
-                    setEntityRegion(name, regionX, regionY, regionWidth, regionHeight);
+                    // Use setEntityRegionPixels since JSON contains pixel values, not tile indices
+                    setEntityRegionPixels(name, regionX, regionY, regionWidth, regionHeight);
                     trace("Loaded entity definition from JSON: " + name);
                 }
             }
@@ -1510,45 +1567,102 @@ class EditorState extends State {
                 }
             }
             
-            // Create layers and place tiles
+            // Create layers and place tiles/entities
             var importedCount = 0;
             var layersData:Array<Dynamic> = data.layers;
             
             if (layersData != null) {
                 for (layerData in layersData) {
-                    var tileset = tilesets.get(layerData.tilesetName);
+                    var layerType:String = layerData.type != null ? layerData.type : "tilemap"; // Default to tilemap for old format
+                    var layerName:String = layerData.name != null ? layerData.name : "Layer_" + layerData.tilesetName;
+                    var tilesetName:String = layerData.tilesetName;
+                    var tileset = tilesets.get(tilesetName);
                     
                     if (tileset == null) {
-                        trace("Skipping layer with unknown tileset: " + layerData.tilesetName);
+                        trace("Skipping layer with unknown tileset: " + tilesetName);
                         continue;
                     }
                     
-                    // Create a new tilemap layer for this tileset (append to end)
-                    var tilemapLayer = createTilemapLayer("Layer_" + layerData.tilesetName, layerData.tilesetName, -1);
-                    
-                    if (tilemapLayer != null && layerData.tiles != null) {
-                        var tiles:Array<Dynamic> = layerData.tiles;
+                    if (layerType == "tilemap") {
+                        // Create a new tilemap layer
+                        var tilemapLayer = createTilemapLayer(layerName, tilesetName, -1);
                         
-                        for (tileData in tiles) {
-                            var x:Float = tileData.x;
-                            var y:Float = tileData.y;
-                            var region:Int = tileData.region;
-                            var gridX:Int = tileData.gridX;
-                            var gridY:Int = tileData.gridY;
-                            var gridKey = gridX + "_" + gridY;
+                        if (tilemapLayer != null) {
+                            // Set visibility
+                            if (layerData.visible != null) {
+                                tilemapLayer.visible = layerData.visible;
+                            }
                             
-                            // Add tile using the layer's batch
-                            var tileId = tilemapLayer.tileBatch.addTile(x, y, tileset.tileSize, tileset.tileSize, region);
-                            
-                            if (tileId >= 0) {
-                                tilemapLayer.tileGrid.set(gridKey, tileId);
-                                importedCount++;
+                            // Add tiles
+                            if (layerData.tiles != null) {
+                                var tiles:Array<Dynamic> = layerData.tiles;
+                                
+                                for (tileData in tiles) {
+                                    var x:Float = tileData.x;
+                                    var y:Float = tileData.y;
+                                    var region:Int = tileData.region;
+                                    var gridX:Int = tileData.gridX;
+                                    var gridY:Int = tileData.gridY;
+                                    var gridKey = gridX + "_" + gridY;
+                                    
+                                    // Add tile using the layer's batch
+                                    var tileId = tilemapLayer.tileBatch.addTile(x, y, tileset.tileSize, tileset.tileSize, region);
+                                    
+                                    if (tileId >= 0) {
+                                        tilemapLayer.tileGrid.set(gridKey, tileId);
+                                        importedCount++;
+                                    }
+                                }
+                                
+                                // Upload all tile data to GPU after adding all tiles
+                                if (tilemapLayer.tileBatch.needsBufferUpdate) {
+                                    tilemapLayer.tileBatch.updateBuffers(app.renderer);
+                                }
                             }
                         }
+                    } else if (layerType == "entity") {
+                        // Create a new entity layer
+                        var entityLayer = createEntityLayer(layerName, tilesetName);
                         
-                        // Upload all tile data to GPU after adding all tiles
-                        if (tilemapLayer.tileBatch.needsBufferUpdate) {
-                            tilemapLayer.tileBatch.updateBuffers(app.renderer);
+                        if (entityLayer != null) {
+                            // Set visibility
+                            if (layerData.visible != null) {
+                                entityLayer.visible = layerData.visible;
+                            }
+                            
+                            // Add entities
+                            if (layerData.entities != null) {
+                                var entities:Array<Dynamic> = layerData.entities;
+                                
+                                for (entityData in entities) {
+                                    var entityName:String = entityData.name;
+                                    var x:Float = entityData.x;
+                                    var y:Float = entityData.y;
+                                    
+                                    // Get entity definition
+                                    var entityDef = entityDefinitions.get(entityName);
+                                    if (entityDef != null) {
+                                        // Add entity to the layer
+                                        entityLayer.addEntity(
+                                            entityDef.name,
+                                            x,
+                                            y,
+                                            entityDef.width,
+                                            entityDef.height,
+                                            entityDef.regionX,
+                                            entityDef.regionY,
+                                            entityDef.regionWidth,
+                                            entityDef.regionHeight
+                                        );
+                                        importedCount++;
+                                    }
+                                }
+                                
+                                // Upload all entity data to GPU after adding all entities
+                                if (entityLayer.entityBatch.needsBufferUpdate) {
+                                    entityLayer.entityBatch.updateBuffers(app.renderer);
+                                }
+                            }
                         }
                     }
                 }
