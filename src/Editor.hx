@@ -604,7 +604,7 @@ class Editor {
         }
         
         try {
-            var tilesetInfo = editorState.getTilesetInfo(tilesetName);
+            var tilesetInfo = editorState.tilesetManager.getTilesetInfo(tilesetName);
             
             if (tilesetInfo == null) {
                 log("Editor: Tileset not found: " + tilesetName);
@@ -651,7 +651,7 @@ class Editor {
         }
         
         try {
-            var tilesetInfo = editorState.getTilesetInfoAt(index);
+            var tilesetInfo = editorState.tilesetManager.getTilesetInfoAt(index);
             
             if (tilesetInfo == null) {
                 log("Editor: Tileset not found at index: " + index);
@@ -808,7 +808,7 @@ class Editor {
         }
         
         try {
-            return editorState.getTilesetCount();
+            return editorState.tilesetManager.getTilesetCount();
         } catch (e:Dynamic) {
             log("Editor: Error getting tileset count: " + e);
             return 0;
@@ -833,7 +833,7 @@ class Editor {
         }
         
         try {
-            var result = editorState.setActiveTileset(tilesetName);
+            var result = editorState.tilesetManager.setActiveTileset(tilesetName);
             if (result) {
                 log("Editor: Active tileset set to: " + tilesetName);
                 return 1;

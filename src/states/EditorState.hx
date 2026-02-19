@@ -14,6 +14,7 @@ import layers.EntityLayer;
 import layers.FolderLayer;
 import Tileset;
 import EntityDefinition;
+import manager.TilesetManager;
 
 class EditorState extends State {
     
@@ -26,8 +27,8 @@ class EditorState extends State {
     public var showWorldAxes:Bool = true; // Show X/Y axes at origin (0,0)
     
     // Tileset management
-    private var tilesets:Map<String, Tileset> = new Map<String, Tileset>();
-    private var currentTilesetName:String = "devTiles"; // Currently active tileset
+    //private var tilesets:Map<String, Tileset> = new Map<String, Tileset>();
+    public var tilesetManager:TilesetManager = new TilesetManager();
     
     // Entity definition management
     private var entityDefinitions:Map<String, EntityDefinition> = new Map<String, EntityDefinition>();
@@ -104,124 +105,7 @@ class EditorState extends State {
         // Setup world axes
         setupWorldAxes(renderer);
     }
-    
-    /**
-     * Set the currently selected tile region for drawing
-     * @param regionId The region ID to select (0-based from C#, converted to 1-based for Haxe)
-     */
-    public function setActiveTileRegion(regionId:Int):Void {
-        // C# sends 0-based indices, but Haxe region IDs start from 1
-        selectedTileRegion = regionId + 1;
-        trace("Selected tile region: " + selectedTileRegion + " (from C# index: " + regionId + ")");
-    }
-    
-    /**
-     * Get tileset information by name (for external access)
-     * @param tilesetName Name of the tileset
-     * @return Tileset data or null if not found
-     */
-    public function getTilesetInfo(tilesetName:String):Null<{name:String, texturePath:String, tileSize:Int, tilesPerRow:Int, tilesPerCol:Int, regionCount:Int}> {
-        var tileset = tilesets.get(tilesetName);
-        if (tileset == null) {
-            return null;
-        }
-        
-        return {
-            name: tileset.name,
-            texturePath: tileset.texturePath,
-            tileSize: tileset.tileSize,
-            tilesPerRow: tileset.tilesPerRow,
-            tilesPerCol: tileset.tilesPerCol,
-            regionCount: tileset.tilesPerRow * tileset.tilesPerCol
-        };
-    }
 
-    public function getTilesetInfoAt(index:Int):Null<{name:String, texturePath:String, tileSize:Int, tilesPerRow:Int, tilesPerCol:Int, regionCount:Int}> {
-        var tilesetName = getTilesetNameAt(index);
-        if (tilesetName == "") {
-            return null;
-        }
-        return getTilesetInfo(tilesetName);
-    }
-    
-    /**
-     * Get the count of loaded tilesets
-     * @return Number of tilesets
-     */
-    public function getTilesetCount():Int {
-        var count = 0;
-        for (_ in tilesets.keys()) {
-            count++;
-        }
-        return count;
-    }
-    
-    /**
-     * Get tileset name at specific index
-     * @param index Index of the tileset (0-based)
-     * @return Tileset name or empty string if index out of bounds
-     */
-    public function getTilesetNameAt(index:Int):String {
-        if (index < 0) return "";
-        
-        var i = 0;
-        for (name in tilesets.keys()) {
-            if (i == index) {
-                return name;
-            }
-            i++;
-        }
-        return ""; // Index out of bounds
-    }
-
-    /**
-     * Set the current active tileset for drawing context
-     * This updates the tile regions and tile size used for drawing operations
-     * Note: This is called automatically when setting an active TilemapLayer
-     * @param tilesetName Name of the tileset to make active
-     * @return True if tileset was found and set, false otherwise
-     */
-    public function setActiveTileset(tilesetName:String):Bool {
-        var tileset = tilesets.get(tilesetName);
-        if (tileset == null) {
-            trace("Tileset not found: " + tilesetName);
-            return false;
-        }
-        
-        // Update current tileset drawing context
-        currentTilesetName = tilesetName;
-        tileSize = tileset.tileSize;
-        
-        app.logDebug(LogCategory.APP,"Active tileset context set to: " + tilesetName);
-        return true;
-    }
-
-    /**
-     * Delete a tileset by name
-     * Cleans up the ManagedTileBatch and removes the entity from the rendering system
-     * @param tilesetName Name of the tileset to delete
-     * @return True if tileset was found and deleted, false otherwise
-     */
-    public function deleteTileset(tilesetName:String):Bool {
-        var tileset = tilesets.get(tilesetName);
-        if (tileset == null) {
-            app.logDebug(LogCategory.APP,"Tileset not found: " + tilesetName);
-            return false;
-        }
-        
-        // Remove from tilesets collection
-        tilesets.remove(tilesetName);
-        
-        // If this was the current tileset, clear the references
-        if (tilesetName == currentTilesetName) {
-            currentTilesetName = "";
-            trace("Warning: Deleted the current active tileset. You may need to set a new active tileset.");
-        }
-        
-        trace("Deleted tileset: " + tilesetName);
-        return true;
-    }
-    
     public function setTileset(texturePath:String, tilesetName:String, tileSize:Int):Void {
         var renderer = app.renderer;
         
@@ -246,31 +130,18 @@ class EditorState extends State {
             var textureFragShader = app.resources.getText("shaders/texture.frag");
             textureProgramInfo = renderer.createProgramInfo("texture", textureVertShader, textureFragShader);
         }
-        
-        // Calculate atlas dimensions
-        var tilesPerRow = Std.int(tileTextureData.width / tileSize);
-        var tilesPerCol = Std.int(tileTextureData.height / tileSize);
-        
-        // Create tileset metadata structure (no batch - layers create their own)
-        var tileset:Tileset = {
-            name: tilesetName,
-            texturePath: texturePath,
-            textureId: tileTexture,
-            tileSize: tileSize,
-            tilesPerRow: tilesPerRow,
-            tilesPerCol: tilesPerCol
-        };
-        
-        // Store in collection
-        tilesets.set(tilesetName, tileset);
-        
-        // Update current tileset references (for backward compatibility)
-        if (tilesetName == currentTilesetName) {
-            currentTilesetName = tilesetName;
-            this.tileSize = tileSize;
-        }
-        
-        trace("Loaded tileset: " + tilesetName + " (" + tilesPerRow + "x" + tilesPerCol + " tiles)");
+
+        tilesetManager.setTileset(tileTexture, tilesetName, texturePath, tileSize);
+    }
+    
+    /**
+     * Set the currently selected tile region for drawing
+     * @param regionId The region ID to select (0-based from C#, converted to 1-based for Haxe)
+     */
+    public function setActiveTileRegion(regionId:Int):Void {
+        // C# sends 0-based indices, but Haxe region IDs start from 1
+        selectedTileRegion = regionId + 1;
+        trace("Selected tile region: " + selectedTileRegion + " (from C# index: " + regionId + ")");
     }
     
     // ===== ENTITY DEFINITION MANAGEMENT =====
@@ -284,7 +155,7 @@ class EditorState extends State {
      */
     public function setEntity(entityName:String, width:Int, height:Int, tilesetName:String):Void {
         // Verify tileset exists
-        if (!tilesets.exists(tilesetName)) {
+        if (!tilesetManager.exists(tilesetName)) {
             trace("Cannot create entity: tileset not found: " + tilesetName);
             return;
         }
@@ -319,8 +190,8 @@ class EditorState extends State {
             return;
         }
         
-        // Get the tileset to determine tile size
-        var tileset = tilesets.get(entity.tilesetName);
+        // TODO: FIX THIS
+        var tileset = tilesetManager.tilesets.get(entity.tilesetName);
         if (tileset == null) {
             trace("Cannot set region: tileset not found: " + entity.tilesetName);
             return;
@@ -892,7 +763,7 @@ class EditorState extends State {
                 // Auto-switch tileset if it's a tilemap layer
                 if (Std.isOfType(layer, TilemapLayer)) {
                     var tilemapLayer:TilemapLayer = cast layer;
-                    setActiveTileset(tilemapLayer.tileset.name);
+                    tilesetManager.setActiveTileset(tilemapLayer.tileset.name);
                 }
             }
         }
@@ -937,7 +808,7 @@ class EditorState extends State {
             // Auto-switch tileset if it's a tilemap layer
             if (Std.isOfType(layer, TilemapLayer)) {
                 var tilemapLayer:TilemapLayer = cast layer;
-                setActiveTileset(tilemapLayer.tileset.name);
+                tilesetManager.setActiveTileset(tilemapLayer.tileset.name);
             }
         }
     }
@@ -964,7 +835,7 @@ class EditorState extends State {
             // Update tileset if new active layer is a tilemap
             if (activeLayer != null && Std.isOfType(activeLayer, TilemapLayer)) {
                 var tilemapLayer:TilemapLayer = cast activeLayer;
-                setActiveTileset(tilemapLayer.tileset.name);
+                tilesetManager.setActiveTileset(tilemapLayer.tileset.name);
             }
         }
         
@@ -993,7 +864,7 @@ class EditorState extends State {
             // Update tileset if new active layer is a tilemap
             if (activeLayer != null && Std.isOfType(activeLayer, TilemapLayer)) {
                 var tilemapLayer:TilemapLayer = cast activeLayer;
-                setActiveTileset(tilemapLayer.tileset.name);
+                tilesetManager.setActiveTileset(tilemapLayer.tileset.name);
             }
         }
         
@@ -1018,7 +889,7 @@ class EditorState extends State {
         // If it's a tilemap layer, automatically switch to its tileset
         if (Std.isOfType(layer, TilemapLayer)) {
             var tilemapLayer:TilemapLayer = cast layer;
-            return setActiveTileset(tilemapLayer.tileset.name);
+            return tilesetManager.setActiveTileset(tilemapLayer.tileset.name);
         }
         
         return true;
@@ -1041,7 +912,7 @@ class EditorState extends State {
         // If it's a tilemap layer, automatically switch to its tileset
         if (Std.isOfType(layer, TilemapLayer)) {
             var tilemapLayer:TilemapLayer = cast layer;
-            return setActiveTileset(tilemapLayer.tileset.name);
+            return tilesetManager.setActiveTileset(tilemapLayer.tileset.name);
         }
         
         return true;
@@ -1249,7 +1120,8 @@ class EditorState extends State {
      * @param index Position in the hierarchy (-1 to append at the end, 0 for first layer position)
      */
     public function createTilemapLayer(name:String, tilesetName:String, index:Int = -1):TilemapLayer {
-        var tileset = tilesets.get(tilesetName);
+        //TODO:FIX THIS
+        var tileset = tilesetManager.tilesets.get(tilesetName);
         if (tileset == null) {
             trace("Cannot create tilemap layer: tileset not found: " + tilesetName);
             return null;
@@ -1292,7 +1164,8 @@ class EditorState extends State {
      * Create a new entity layer
      */
     public function createEntityLayer(name:String, tilesetName:String):EntityLayer {
-        var tileset = tilesets.get(tilesetName);
+        //TODO:FIX THIS
+        var tileset = tilesetManager.tilesets.get(tilesetName);
         if (tileset == null) {
             trace("Cannot create entity layer: tileset '" + tilesetName + "' not found");
             return null;
@@ -1342,7 +1215,8 @@ class EditorState extends State {
             
             if (Std.isOfType(layer, TilemapLayer)) {
                 var tilemapLayer:TilemapLayer = cast layer;
-                var tileset = tilesets.get(tilemapLayer.tileset.name);
+                //TODO:FIX THIS - 
+                var tileset = tilesetManager.tilesets.get(tilemapLayer.tileset.name);
                 
                 if (tileset == null) continue;
                 
@@ -1412,8 +1286,8 @@ class EditorState extends State {
         
         // Collect tileset info
         var tilesetsArray:Array<Dynamic> = [];
-        for (tilesetName in tilesets.keys()) {
-            var tileset = tilesets.get(tilesetName);
+        for (tilesetName in tilesetManager.tilesets.keys()) {
+            var tileset = tilesetManager.tilesets.get(tilesetName);
             tilesetsArray.push({
                 name: tileset.name,
                 texturePath: tileset.texturePath,
@@ -1442,7 +1316,7 @@ class EditorState extends State {
             version: "1.3",
             tilesets: tilesetsArray,
             entityDefinitions: entitiesArray,
-            currentTileset: currentTilesetName,
+            currentTileset: tilesetManager.currentTilesetName,
             mapBounds: {
                 x: mapX,
                 y: mapY,
@@ -1514,7 +1388,7 @@ class EditorState extends State {
                     var size:Int = tilesetData.tileSize;
                     
                     // Only load if not already loaded
-                    if (!tilesets.exists(name)) {
+                    if (!tilesetManager.exists(name)) {
                         setTileset(path, name, size);
                         trace("Loaded tileset from JSON: " + name);
                     }
@@ -1544,9 +1418,9 @@ class EditorState extends State {
             // Set current tileset
             if (data.currentTileset != null) {
                 var currentName:String = data.currentTileset;
-                var tileset = tilesets.get(currentName);
+                var tileset = tilesetManager.tilesets.get(currentName);
                 if (tileset != null) {
-                    currentTilesetName = currentName;
+                    tilesetManager.currentTilesetName = currentName;
                     tileSize = tileset.tileSize;
                 }
             }
@@ -1576,7 +1450,7 @@ class EditorState extends State {
                     var layerType:String = layerData.type != null ? layerData.type : "tilemap"; // Default to tilemap for old format
                     var layerName:String = layerData.name != null ? layerData.name : "Layer_" + layerData.tilesetName;
                     var tilesetName:String = layerData.tilesetName;
-                    var tileset = tilesets.get(tilesetName);
+                    var tileset = tilesetManager.tilesets.get(tilesetName);
                     
                     if (tileset == null) {
                         trace("Skipping layer with unknown tileset: " + tilesetName);
