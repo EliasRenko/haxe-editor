@@ -15,6 +15,7 @@ import layers.FolderLayer;
 import Tileset;
 import EntityDefinition;
 import manager.TilesetManager;
+import manager.EntityManager;
 
 class EditorState extends State {
     
@@ -29,10 +30,10 @@ class EditorState extends State {
     // Tileset management
     //private var tilesets:Map<String, Tileset> = new Map<String, Tileset>();
     public var tilesetManager:TilesetManager = new TilesetManager();
-    
+    public var entityManager:EntityManager = new EntityManager();
     // Entity definition management
-    private var entityDefinitions:Map<String, EntityDefinition> = new Map<String, EntityDefinition>();
-    private var selectedEntityName:String = ""; // Currently selected entity for placement
+    //private var entityDefinitions:Map<String, EntityDefinition> = new Map<String, EntityDefinition>();
+    //private var selectedEntityName:String = ""; // Currently selected entity for placement
     
     // Tile editor settings
     private var tileSize:Int = 32; // Size of each tile in pixels
@@ -146,45 +147,17 @@ class EditorState extends State {
     
     // ===== ENTITY DEFINITION MANAGEMENT =====
     
-    /**
-     * Create or update an entity definition
-     * @param entityName Name of the entity
-     * @param width Entity width in pixels
-     * @param height Entity height in pixels
-     * @param tilesetName Tileset to use for this entity
-     */
     public function setEntity(entityName:String, width:Int, height:Int, tilesetName:String):Void {
-        // Verify tileset exists
         if (!tilesetManager.exists(tilesetName)) {
             trace("Cannot create entity: tileset not found: " + tilesetName);
             return;
         }
-        
-        var entity:EntityDefinition = {
-            name: entityName,
-            width: width,
-            height: height,
-            tilesetName: tilesetName,
-            regionX: 0,
-            regionY: 0,
-            regionWidth: width,
-            regionHeight: height
-        };
-        
-        entityDefinitions.set(entityName, entity);
-        trace("Created/updated entity definition: " + entityName + " (" + width + "x" + height + ") using tileset: " + tilesetName);
+
+        entityManager.setEntity(entityName, width, height, tilesetName);
     }
     
-    /**
-     * Set the atlas region for an entity definition
-     * @param entityName Name of the entity
-     * @param x Atlas region X position (in tile indices)
-     * @param y Atlas region Y position (in tile indices)
-     * @param width Atlas region width (in tile count)
-     * @param height Atlas region height (in tile count)
-     */
     public function setEntityRegion(entityName:String, x:Int, y:Int, width:Int, height:Int):Void {
-        var entity = entityDefinitions.get(entityName);
+        var entity = entityManager.getEntityDefinition(entityName);
         if (entity == null) {
             trace("Cannot set region: entity not found: " + entityName);
             return;
@@ -215,7 +188,7 @@ class EditorState extends State {
      * @param height Atlas region height (in pixels)
      */
     public function setEntityRegionPixels(entityName:String, x:Int, y:Int, width:Int, height:Int):Void {
-        var entity = entityDefinitions.get(entityName);
+        var entity = entityManager.getEntityDefinition(entityName);
         if (entity == null) {
             trace("Cannot set region: entity not found: " + entityName);
             return;
@@ -229,90 +202,17 @@ class EditorState extends State {
     }
     
     /**
-     * Get entity definition by name
-     * @param entityName Name of the entity
-     * @return Entity definition or null if not found
-     */
-    public function getEntityDefinition(entityName:String):Null<EntityDefinition> {
-        return entityDefinitions.get(entityName);
-    }
-    
-    /**
-     * Get entity definition at specific index
-     * @param index Index of the entity (0-based)
-     * @return Entity definition or null if index out of bounds
-     */
-    public function getEntityDefinitionAt(index:Int):Null<EntityDefinition> {
-        if (index < 0) return null;
-        
-        var i = 0;
-        for (name in entityDefinitions.keys()) {
-            if (i == index) {
-                return entityDefinitions.get(name);
-            }
-            i++;
-        }
-        return null;
-    }
-    
-    /**
-     * Get the count of entity definitions
-     * @return Number of entity definitions
-     */
-    public function getEntityDefinitionCount():Int {
-        var count = 0;
-        for (_ in entityDefinitions.keys()) {
-            count++;
-        }
-        return count;
-    }
-    
-    /**
-     * Get entity definition name at specific index
-     * @param index Index of the entity (0-based)
-     * @return Entity name or empty string if index out of bounds
-     */
-    public function getEntityDefinitionNameAt(index:Int):String {
-        if (index < 0) return "";
-        
-        var i = 0;
-        for (name in entityDefinitions.keys()) {
-            if (i == index) {
-                return name;
-            }
-            i++;
-        }
-        return "";
-    }
-    
-    /**
-     * Delete an entity definition by name
-     * @param entityName Name of the entity to delete
-     * @return True if entity was found and deleted, false otherwise
-     */
-    public function deleteEntityDefinition(entityName:String):Bool {
-        if (!entityDefinitions.exists(entityName)) {
-            trace("Entity definition not found: " + entityName);
-            return false;
-        }
-        
-        entityDefinitions.remove(entityName);
-        trace("Deleted entity definition: " + entityName);
-        return true;
-    }
-    
-    /**
      * Set the currently active entity for placement
      * @param entityName Name of the entity to make active
      * @return True if entity exists, false otherwise
      */
     public function setActiveEntity(entityName:String):Bool {
-        if (!entityDefinitions.exists(entityName)) {
+        if (!entityManager.exists(entityName)) {
             trace("Cannot set active entity: entity not found: " + entityName);
             return false;
         }
         
-        selectedEntityName = entityName;
+        entityManager.selectedEntityName = entityName;
         trace("Active entity set to: " + entityName);
         return true;
     }
@@ -573,12 +473,12 @@ class EditorState extends State {
         }
         
         // Check if we have a selected entity
-        if (selectedEntityName == "" || !entityDefinitions.exists(selectedEntityName)) {
+        if (entityManager.selectedEntityName == "" || !entityManager.exists(entityManager.selectedEntityName)) {
             return;
         }
         
         var entityLayer:EntityLayer = cast activeLayer;
-        var entityDef = entityDefinitions.get(selectedEntityName);
+        var entityDef = entityManager.getEntityDefinition(entityManager.selectedEntityName);
         
         // Check if position is within map bounds
         if (worldX < mapX || worldX >= mapX + mapWidth || 
@@ -1297,8 +1197,8 @@ class EditorState extends State {
         
         // Collect entity definitions
         var entitiesArray:Array<Dynamic> = [];
-        for (entityName in entityDefinitions.keys()) {
-            var entity = entityDefinitions.get(entityName);
+        for (entityName in entityManager.entityDefinitions.keys()) {
+            var entity = entityManager.getEntityDefinition(entityName);
             entitiesArray.push({
                 name: entity.name,
                 width: entity.width,
@@ -1514,7 +1414,7 @@ class EditorState extends State {
                                     var y:Float = entityData.y;
                                     
                                     // Get entity definition
-                                    var entityDef = entityDefinitions.get(entityName);
+                                    var entityDef = entityManager.getEntityDefinition(entityName);
                                     if (entityDef != null) {
                                         // Add entity to the layer
                                         entityLayer.addEntity(

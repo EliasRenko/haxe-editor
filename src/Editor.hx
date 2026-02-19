@@ -905,7 +905,7 @@ class Editor {
         }
         
         try {
-            var entity = editorState.getEntityDefinition(entityName);
+            var entity = editorState.entityManager.getEntityDefinition(entityName);
             
             if (entity == null) {
                 log("Editor: Entity not found: " + entityName);
@@ -953,7 +953,7 @@ class Editor {
         }
         
         try {
-            var entity = editorState.getEntityDefinitionAt(index);
+            var entity = editorState.entityManager.getEntityDefinitionAt(index);
             
             if (entity == null) {
                 log("Editor: Entity not found at index: " + index);
@@ -1000,7 +1000,7 @@ class Editor {
         }
         
         try {
-            return editorState.getEntityDefinitionCount();
+            return editorState.entityManager.getEntityDefinitionCount();
         } catch (e:Dynamic) {
             log("Editor: Error getting entity count: " + e);
             return 0;
