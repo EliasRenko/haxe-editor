@@ -6,12 +6,17 @@ class TilesetManager {
 
     public var tilesets:Map<String, Tileset>;
     public var currentTilesetName:String = "devTiles"; // Currently active tileset
-
     private var tileSize:Int = 32; // Size of each tile in pixels
     
     public function new() {
         this.tilesets = new Map<String, Tileset>();
     }
+
+    // public function setActiveTileRegion(regionId:Int):Void {
+    //     // C# sends 0-based indices, but Haxe region IDs start from 1
+    //     selectedTileRegion = regionId + 1;
+    //     trace("Selected tile region: " + selectedTileRegion + " (from C# index: " + regionId + ")");
+    // }
 
     public function exists(tilesetName:String):Bool {
         return tilesets.exists(tilesetName);

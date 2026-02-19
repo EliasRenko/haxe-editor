@@ -7,6 +7,7 @@ class TilemapLayer extends Layer {
 
     public var tileset:Tileset;
     public var tileBatch:ManagedTileBatch;
+    public var selectedTileRegion:Int = 0;
     
     // Grid-based tile storage index (faster lookups than iterating ManagedTileBatch)
     // Key format: "gridX_gridY" -> tileId in ManagedTileBatch

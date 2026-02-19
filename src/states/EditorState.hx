@@ -33,11 +33,11 @@ class EditorState extends State {
     
     // Tile editor settings
     private var tileSize:Int = 32; // Size of each tile in pixels
-    private var selectedTileRegion:Int = 0; // Currently selected tile region ID (matches C# tile selection)
     private var tileRegions:Array<Int> = []; // Available tile regions (for backward compatibility)
     
     // Layer management (layers are stored in entities array)
     private var activeLayer:Layer = null;
+    //public var selectedTileRegion:Int = 0;
     
     // Map bounds (defines the editable area)
     private var mapX:Float = 0;
@@ -67,13 +67,10 @@ class EditorState extends State {
         camera.x = windowWidth * 0.5;
         camera.y = windowHeight * 0.5;
         
-        // Get renderer
-        var renderer = app.renderer;
-        
         // Create infinite grid for visual reference
         var gridVertShader = app.resources.getText("shaders/grid.vert");
         var gridFragShader = app.resources.getText("shaders/grid.frag");
-        var gridProgramInfo = renderer.createProgramInfo("grid", gridVertShader, gridFragShader);
+        var gridProgramInfo = app.renderer.createProgramInfo("grid", gridVertShader, gridFragShader);
         
         grid = new Grid(gridProgramInfo, 5000.0); // 5000 unit quad
         grid.gridSize = 128.0; // 128 pixel large grid
@@ -83,16 +80,16 @@ class EditorState extends State {
         grid.fadeDistance = 3000.0;
         grid.z = 0.0;
         grid.depthTest = false;
-        grid.init(renderer);
+        grid.init(app.renderer);
         
         // Clip grid to map bounds
         grid.setBounds(mapX, mapY, mapX + mapWidth, mapY + mapHeight);
         
         // Setup map frame
-        setupMapFrame(renderer);
+        setupMapFrame(app.renderer);
         
         // Setup world axes
-        setupWorldAxes(renderer);
+        setupWorldAxes(app.renderer);
 
         // Create default programInfo
         var textureVertShader = app.resources.getText("shaders/texture.vert");
@@ -101,30 +98,43 @@ class EditorState extends State {
     }
 
     // CHECKED!
-    public function setTileset(texturePath:String, tilesetName:String, tileSize:Int):Void {
+    public function createTileset(texturePath:String, tilesetName:String, tileSize:Int):String {
         if (!app.resources.cached(texturePath)) {
+            app.log.info(LogCategory.APP, "Loading texture: " + texturePath);
             app.resources.loadTexture(texturePath, false);
+        }
+
+        if (tilesetManager.exists(tilesetName)) {
+            var error:String = "Tileset with the name " + tilesetName + " already exists";
+            app.log.info(LogCategory.APP, error);
+            return error;
         }
         
         var tileTexture:Texture = app.renderer.uploadTexture(app.resources.getTexture(texturePath, false));
         tilesetManager.setTileset(tileTexture, tilesetName, texturePath, tileSize);
-    }
-    
-    public function setActiveTileRegion(regionId:Int):Void {
-        // C# sends 0-based indices, but Haxe region IDs start from 1
-        selectedTileRegion = regionId + 1;
-        trace("Selected tile region: " + selectedTileRegion + " (from C# index: " + regionId + ")");
+
+        return null;
     }
     
     // ===== ENTITY DEFINITION MANAGEMENT =====
     
-    public function setEntity(entityName:String, width:Int, height:Int, tilesetName:String):Void {
+    // CHECKED!
+    public function createEntity(entityName:String, width:Int, height:Int, tilesetName:String):String {
         if (!tilesetManager.exists(tilesetName)) {
-            trace("Cannot create entity: tileset not found: " + tilesetName);
-            return;
+            var error:String = "Cannot create entity. Tileset with the name " + tilesetName + " does not exist";
+            app.log.info(LogCategory.APP, error);
+            return error;
+        }
+
+        if (entityManager.exists(entityName)) {
+            var error:String = "Entity with the name " + entityName + " already exists";
+            app.log.info(LogCategory.APP, error);
+            return error;
         }
 
         entityManager.setEntity(entityName, width, height, tilesetName);
+
+        return null;
     }
     
     public function setEntityRegion(entityName:String, x:Int, y:Int, width:Int, height:Int):Void {
@@ -150,14 +160,7 @@ class EditorState extends State {
         trace("Set entity region for " + entityName + ": tile(" + x + "," + y + "," + width + "," + height + ") -> pixels(" + entity.regionX + "," + entity.regionY + "," + entity.regionWidth + "," + entity.regionHeight + ")");
     }
     
-    /**
-     * Set the atlas region for an entity definition in pixels (used for JSON import)
-     * @param entityName Name of the entity
-     * @param x Atlas region X position (in pixels)
-     * @param y Atlas region Y position (in pixels)
-     * @param width Atlas region width (in pixels)
-     * @param height Atlas region height (in pixels)
-     */
+
     public function setEntityRegionPixels(entityName:String, x:Int, y:Int, width:Int, height:Int):Void {
         var entity = entityManager.getEntityDefinition(entityName);
         if (entity == null) {
@@ -488,6 +491,29 @@ class EditorState extends State {
             trace("Removed entity ID: " + entityId + " at (" + worldX + ", " + worldY + ")");
         }
     }
+
+    public function getActiveTile():Int {
+        if (activeLayer == null || !Std.isOfType(activeLayer, TilemapLayer)) {
+            trace("Cannot set active tile region: no active tilemap layer");
+            return 0;
+        }
+
+        var tilemapLayer:TilemapLayer = cast activeLayer;
+        return tilemapLayer.selectedTileRegion - 1;
+    }
+
+    public function setActiveTile(regionId:Int):Void {
+        // C# sends 0-based indices, but Haxe region IDs start from 1
+
+        if (activeLayer == null || !Std.isOfType(activeLayer, TilemapLayer)) {
+            trace("Cannot set active tile region: no active tilemap layer");
+            return;
+        }
+
+        var tilemapLayer:TilemapLayer = cast activeLayer;
+        tilemapLayer.selectedTileRegion = regionId + 1;
+        //trace("Selected tile region: " + tilemapLayer.selectedTileRegion + " (from C# index: " + regionId + ")");
+    }
     
     /**
      * Place a tile at world position (snaps to grid)
@@ -525,7 +551,7 @@ class EditorState extends State {
         }
         
         // Add tile to batch using selected region ID
-        var tileId = tilemapLayer.tileBatch.addTile(tileX, tileY, layerTileset.tileSize, layerTileset.tileSize, selectedTileRegion);
+        var tileId = tilemapLayer.tileBatch.addTile(tileX, tileY, layerTileset.tileSize, layerTileset.tileSize, tilemapLayer.selectedTileRegion);
         
         if (tileId >= 0) {
             // Store in grid index for fast lookups
@@ -1104,8 +1130,8 @@ class EditorState extends State {
             tilesetManager: tilesetManager,
             entityManager: entityManager,
             clearLayers: clearLayers,
-            setTileset: setTileset,
-            setEntity: setEntity,
+            createTileset: createTileset,
+            createEntity: createEntity,
             setEntityRegionPixels: setEntityRegionPixels,
             setCurrentTileset: setCurrentTileset,
             updateMapBounds: updateMapBounds,

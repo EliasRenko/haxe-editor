@@ -15,8 +15,8 @@ typedef ImportContext = {
     var tilesetManager:TilesetManager;
     var entityManager:EntityManager;
     var clearLayers:Void->Void;
-    var setTileset:(String, String, Int)->Void;
-    var setEntity:(String, Int, Int, String)->Void;
+    var createTileset:(String, String, Int)->Void;
+    var createEntity:(String, Int, Int, String)->String;
     var setEntityRegionPixels:(String, Int, Int, Int, Int)->Void;
     var setCurrentTileset:(String, Int)->Void;
     var updateMapBounds:(Float, Float, Float, Float)->Void;

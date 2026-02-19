@@ -131,9 +131,13 @@ extern "C" {
     __declspec(dllexport) void getTextureData(const char* path, TextureDataStruct* outData) {
         ::Editor_obj::getTextureData(path, outData);
     }
-    
+
     __declspec(dllexport) void setActiveTile(int tileRegionId) {
-        ::Editor_obj::setActiveTile(tileRegionId);
+    ::Editor_obj::setActiveTile(tileRegionId);
+    }
+    
+    __declspec(dllexport) int getActiveTile() {
+        return ::Editor_obj::getActiveTile();
     }
     
     __declspec(dllexport) int exportMap(const char* filePath) {
@@ -152,8 +156,8 @@ extern "C" {
         return ::Editor_obj::getTilesetAt(index, outInfo);
     }
     
-    __declspec(dllexport) void setTileset(const char* texturePath, const char* tilesetName, int tileSize) {
-        ::Editor_obj::setTileset(::String(texturePath), ::String(tilesetName), tileSize);
+    __declspec(dllexport) const char* createTileset(const char* texturePath, const char* tilesetName, int tileSize) {
+        return ::Editor_obj::createTileset(::String(texturePath), ::String(tilesetName), tileSize).__s;
     }
     
     __declspec(dllexport) int getTilesetCount() {
@@ -227,8 +231,8 @@ extern "C" {
     }
     
     // Entity definition management
-    __declspec(dllexport) void setEntity(const char* entityName, int width, int height, const char* tilesetName) {
-        ::Editor_obj::setEntity(::String(entityName), width, height, ::String(tilesetName));
+    __declspec(dllexport) const char* createEntity(const char* entityName, int width, int height, const char* tilesetName) {
+        return ::Editor_obj::createEntity(::String(entityName), width, height, ::String(tilesetName)).__s;
     }
     
     __declspec(dllexport) void setEntityRegion(const char* entityName, int x, int y, int width, int height) {
@@ -684,29 +688,15 @@ class Editor {
             return 0;
         }
     }
+
+    @:keep
+    public static function getActiveTile():Int {
+        return editorState.getActiveTile();
+    }
     
-    /**
-     * Set the selected tile region for drawing
-     * @param tileRegionId The region ID to select (0-based index into tile regions array)
-     */
     @:keep
     public static function setActiveTile(tileRegionId:Int):Void {
-        if (app == null || !initialized) {
-            log("Editor: Cannot set selected tile - engine not initialized");
-            return;
-        }
-        
-        if (editorState == null) {
-            log("Editor: EditorState not loaded");
-            return;
-        }
-        
-        try {
-            editorState.setActiveTileRegion(tileRegionId);
-            log("Editor: Selected tile region: " + tileRegionId);
-        } catch (e:Dynamic) {
-            log("Editor: Error setting selected tile: " + e);
-        }
+        editorState.setActiveTile(tileRegionId);
     }
     
     /**
@@ -771,24 +761,8 @@ class Editor {
         }
     }
     
-    /**
-     * Setup/load a tileset
-     * @param texturePath Resource path to the texture
-     * @param tilesetName Unique name for this tileset
-     * @param tileSize Size of each tile in pixels
-     */
-    @:keep public static function setTileset(texturePath:String, tilesetName:String, tileSize:Int):Void { if (app == null || !initialized) { log("Editor: Cannot setup tileset - engine not initialized"); return; }
-        if (editorState == null) {
-            log("Editor: EditorState not loaded");
-            return;
-        }
-        
-        try {
-            editorState.setTileset(texturePath, tilesetName, tileSize);
-            log("Editor: Setup tilemap: " + tilesetName);
-        } catch (e:Dynamic) {
-            log("Editor: Error setting up tilemap: " + e);
-        }
+    @:keep public static function createTileset(texturePath:String, tilesetName:String, tileSize:Int):String { 
+        return editorState.createTileset(texturePath, tilesetName, tileSize);
     }
     
     /**
@@ -857,17 +831,8 @@ class Editor {
      * @param tilesetName Tileset to use for this entity
      */
     @:keep
-    public static function setEntity(entityName:String, width:Int, height:Int, tilesetName:String):Void {
-        if (app == null || !initialized || editorState == null) {
-            log("Editor: Cannot set entity - engine not initialized");
-            return;
-        }
-        
-        try {
-            editorState.setEntity(entityName, width, height, tilesetName);
-        } catch (e:Dynamic) {
-            log("Editor: Error setting entity: " + e);
-        }
+    public static function createEntity(entityName:String, width:Int, height:Int, tilesetName:String):String {
+        return editorState.createEntity(entityName, width, height, tilesetName);
     }
     
     /**

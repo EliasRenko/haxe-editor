@@ -90,9 +90,10 @@ extern "C" {
     // Tileset management
     __declspec(dllexport) int getTileset(const char* tilesetName, TilesetInfoStruct* outInfo);
     __declspec(dllexport) int getTilesetAt(int index, TilesetInfoStruct* outInfo);
+    __declspec(dllexport) int getActiveTile();
     __declspec(dllexport) int getTilesetCount();
 
-    __declspec(dllexport) void setTileset(const char* texturePath, const char* tilesetName, int tileSize);
+    __declspec(dllexport) const char* createTileset(const char* texturePath, const char* tilesetName, int tileSize);
     __declspec(dllexport) int setActiveTileset(const char* tilesetName);
     __declspec(dllexport) void setActiveTile(int tileRegionId);
     
@@ -101,7 +102,7 @@ extern "C" {
     __declspec(dllexport) void getEntityAt(int index, EntityDataStruct* outData);
     __declspec(dllexport) int getEntityCount();
 
-    __declspec(dllexport) void setEntity(const char* entityName, int width, int height, const char* tilesetName);
+    __declspec(dllexport) const char* createEntity(const char* entityName, int width, int height, const char* tilesetName);
     __declspec(dllexport) int setActiveEntity(const char* entityName);
     __declspec(dllexport) void setEntityRegion(const char* entityName, int x, int y, int width, int height);
 

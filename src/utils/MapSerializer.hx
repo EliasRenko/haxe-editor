@@ -193,7 +193,7 @@ class MapSerializer {
                     
                     // Only load if not already loaded
                     if (!context.tilesetManager.exists(name)) {
-                        context.setTileset(path, name, size);
+                        context.createTileset(path, name, size);
                         trace("Loaded tileset from JSON: " + name);
                     }
                 }
@@ -212,7 +212,7 @@ class MapSerializer {
                     var regionWidth:Int = entityData.regionWidth;
                     var regionHeight:Int = entityData.regionHeight;
                     
-                    context.setEntity(name, width, height, tilesetName);
+                    context.createEntity(name, width, height, tilesetName);
                     context.setEntityRegionPixels(name, regionX, regionY, regionWidth, regionHeight);
                     trace("Loaded entity definition from JSON: " + name);
                 }
