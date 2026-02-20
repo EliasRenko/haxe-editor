@@ -1117,20 +1117,24 @@ class EditorState extends State {
         );
     }
 
-    public function setLayerProperties(layerName:String, name:String, type:Int, tilesetName:String, visible:Bool):Void {
+    public function setLayerProperties(layerName:String, name:String, type:Int, tilesetName:String, visible:Bool, silhouette:Bool, silhouetteColor:Int):Void {
         var layer = getLayerByName(layerName);
         if (layer != null) {
             layer.id = name;
             layer.visible = visible;
+            layer.silhouette = silhouette;
+            layer.silhouetteColor.hexValue = silhouetteColor;
         }
     }
 
-    public function setLayerPropertiesAt(index:Int, name:String, type:Int, tilesetName:String, visible:Bool):Void {
+    public function setLayerPropertiesAt(index:Int, name:String, type:Int, tilesetName:String, visible:Bool, silhouette:Bool, silhouetteColor:Int):Void {
         var layer = getLayerAt(index);
         if (layer != null) {
             
             layer.id = name;
             layer.visible = visible;
+            layer.silhouette = silhouette;
+            layer.silhouetteColor.hexValue = silhouetteColor;
         }
     }
     
@@ -1215,15 +1219,6 @@ class EditorState extends State {
 
         renderDisplayObject(renderer, viewProjectionMatrix, grid);
         renderDisplayObject(renderer, viewProjectionMatrix, mapFrame.getLineBatch());
-
-        // Update map frame (sets uniforms)
-        // if (mapFrame != null && mapFrame.visible) {
-        //     var lineBatch = mapFrame.getLineBatch();
-        //     if (lineBatch.needsBufferUpdate) {
-        //         lineBatch.updateBuffers(renderer);
-        //     }
-        //     lineBatch.render(viewProjectionMatrix);
-        // }
         
         // Update world axes visibility
         if (worldAxes != null) {

@@ -42,6 +42,9 @@ class EntityLayer extends Layer {
             return;
         }
         
+        entityBatch.uniforms.set("silhouette", false);
+        entityBatch.uniforms.set("silhouetteColor", [1.0, 0.8, 0.0, 0.4]); // Orange silhouette for debugging (can be toggled on/off with uniform)
+
         // renderer.renderDisplayObject() automatically calls updateBuffers() and render()
         renderer.renderDisplayObject(entityBatch, viewProjectionMatrix);
     }

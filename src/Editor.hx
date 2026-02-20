@@ -1340,58 +1340,48 @@ class Editor {
         }
     }
 
-	@:keep
+    @:keep
 	public static function setLayerProperties(layerName:String, properties:cpp.RawPointer<cpp.Void>):Void {
-		if (app == null || !initialized || editorState == null) {
-			log("Editor: Cannot set layer properties - engine not initialized");
-			return;
-		}
-		try {
-			
 			var name:String = null;
 			var type:Int = 0;
 			var tilesetName:String = null;
 			var visible:Int = 1;
+			var silhouette:Int = 0;
+			var silhouetteColor:Int = 0xFFFFFFFF;
+            
 			untyped __cpp__("
             LayerInfoStruct* inStruct = (LayerInfoStruct*)({0});
             {1} = ::String(inStruct->name);
             {2} = inStruct->type;
             {3} = ::String(inStruct->tilesetName);
             {4} = inStruct->visible;
-        ", properties, name, type, tilesetName, visible);
+            {5} = inStruct->silhouette;
+            {6} = inStruct->silhouetteColor;
+        ", properties, name, type, tilesetName, visible, silhouette, silhouetteColor);
 
-			editorState.setLayerProperties(layerName, name, type, tilesetName, visible != 0);
-			// Add more property assignments as needed
-		} catch (e:Dynamic) {
-			log("Editor: Error setting layer properties: " + e);
-		}
+		editorState.setLayerProperties(layerName, name, type, tilesetName, visible != 0, silhouette != 0, silhouetteColor);
 	}
 
 	@:keep
 	public static function setLayerPropertiesAt(index:Int, properties:cpp.RawPointer<cpp.Void>):Void {
-		if (app == null || !initialized || editorState == null) {
-			log("Editor: Cannot set layer properties - engine not initialized");
-			return;
-		}
-		try {
-			
-			// Read LayerInfoStruct fields from the pointer
-			var name:String = null;
-			var type:Int = 0;
-			var tilesetName:String = null;
-			var visible:Int = 1;
-			untyped __cpp__("
-            LayerInfoStruct* inStruct = (LayerInfoStruct*)({0});
-            {1} = ::String(inStruct->name);
-            {2} = inStruct->type;
-            {3} = ::String(inStruct->tilesetName);
-            {4} = inStruct->visible;
-        ", properties, name, type, tilesetName, visible);
+        var name:String = null;
+        var type:Int = 0;
+        var tilesetName:String = null;
+        var visible:Int = 1;
+        var silhouette:Int = 0;
+        var silhouetteColor:Int = 0xFFFFFFFF;
 
-            editorState.setLayerPropertiesAt(index, name, type, tilesetName, visible != 0);
-			
-		} catch (e:Dynamic) {
-			log("Editor: Error setting layer properties at index: " + e);
-		}
+        untyped __cpp__("
+        LayerInfoStruct* inStruct = (LayerInfoStruct*)({0});
+        {1} = ::String(inStruct->name);
+        {2} = inStruct->type;
+        {3} = ::String(inStruct->tilesetName);
+        {4} = inStruct->visible;
+        {5} = inStruct->silhouette;
+        {6} = inStruct->silhouetteColor;
+        ", properties, name, type, tilesetName, visible, silhouette, silhouetteColor);
+
+		editorState.setLayerPropertiesAt(index, name, type, tilesetName, visible != 0, silhouette != 0, silhouetteColor);
+
 	}
 }

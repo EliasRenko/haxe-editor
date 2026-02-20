@@ -27,8 +27,16 @@ class TilemapLayer extends Layer {
     
     override public function render(renderer:Dynamic, viewProjectionMatrix:Dynamic):Void {
         if (visible && tileBatch != null && tileBatch.visible) {
-            // renderer.renderDisplayObject() automatically calls updateBuffers() and render()
-            renderer.renderDisplayObject(tileBatch, viewProjectionMatrix);
+            
+            tileBatch.uniforms.set("silhouette", false);
+            renderer.renderDisplayObject(tileBatch, viewProjectionMatrix); // automatically calls updateBuffers() and render()
+
+            if (silhouette) {
+                tileBatch.uniforms.set("silhouette", silhouette);
+                tileBatch.uniforms.set("silhouetteColor", [silhouetteColor.r, silhouetteColor.g, silhouetteColor.b, 0.4]); 
+
+                renderer.renderDisplayObject(tileBatch, viewProjectionMatrix); // automatically calls updateBuffers() and render()
+            }
         }
     }
     

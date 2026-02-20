@@ -43,6 +43,8 @@ typedef struct {
     int type;                // 0 = TilemapLayer, 1 = EntityLayer, 2 = FolderLayer
     const char* tilesetName; // For TilemapLayer only (null for others)
     int visible;             // 0 = hidden, 1 = visible
+    bool silhouette;          // 0 = no silhouette, 1 = silhouette enabled
+    int silhouetteColor;  // RGBA color for silhouette 
 } LayerInfoStruct;
 
 extern "C" {
@@ -126,6 +128,8 @@ extern "C" {
 
     __declspec(dllexport) void setLayerProperties(const char* layerName, LayerInfoStruct* properties);
     __declspec(dllexport) void setLayerPropertiesAt(int index, LayerInfoStruct* properties);
+
+
 }
 
 #endif // EDITOR_NATIVE_H
