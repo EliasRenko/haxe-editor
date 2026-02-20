@@ -1116,6 +1116,23 @@ class EditorState extends State {
             filePath
         );
     }
+
+    public function setLayerProperties(layerName:String, name:String, type:Int, tilesetName:String, visible:Bool):Void {
+        var layer = getLayerByName(layerName);
+        if (layer != null) {
+            layer.id = name;
+            layer.visible = visible;
+        }
+    }
+
+    public function setLayerPropertiesAt(index:Int, name:String, type:Int, tilesetName:String, visible:Bool):Void {
+        var layer = getLayerAt(index);
+        if (layer != null) {
+            
+            layer.id = name;
+            layer.visible = visible;
+        }
+    }
     
     /**
      * Import tilemap data from JSON format

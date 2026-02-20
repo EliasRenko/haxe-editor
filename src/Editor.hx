@@ -3,8 +3,6 @@ package;
 import states.EditorState;
 import math.Vec2;
 import layers.TilemapLayer;
-import layers.EntityLayer;
-import layers.FolderLayer;
 
 @:headerCode('#include "editor_native.h"')
 @:headerInclude("haxe/io/Bytes.h")
@@ -14,7 +12,6 @@ import layers.FolderLayer;
 bool hxcpp_initialized = false;
 CustomCallback g_callback = nullptr;
 
-// SDL log output function that forwards to C# callback
 void SDLCALL CustomLogOutput(void* userdata, int category, SDL_LogPriority priority, const char* message) {
     if (g_callback != nullptr) {
         char buffer[1024];
@@ -66,10 +63,6 @@ extern "C" {
     
     __declspec(dllexport) void swapBuffers() {
         ::Editor_obj::swapBuffers();
-    }
-    
-    __declspec(dllexport) void shutdownEngine() {
-        ::Editor_obj::engineShutdown();
     }
     
     __declspec(dllexport) void release() {
@@ -254,6 +247,14 @@ extern "C" {
     __declspec(dllexport) int setActiveEntity(const char* entityName) {
         return ::Editor_obj::setActiveEntity(::String(entityName));
     }
+
+    __declspec(dllexport) void setLayerProperties(const char* layerName, LayerInfoStruct* properties) {
+        ::Editor_obj::setLayerProperties(::String(layerName), properties);
+    }
+
+    __declspec(dllexport) void setLayerPropertiesAt(int index, LayerInfoStruct* properties) {
+        ::Editor_obj::setLayerPropertiesAt(index, properties);
+    }
 }
 ')
 
@@ -358,19 +359,6 @@ class Editor {
     public static function swapBuffers():Void {
         if (app != null && initialized) {
             app.swapBuffers();
-        }
-    }
-    
-    /**
-     * Shutdown the engine
-     */
-    @:keep
-    public static function engineShutdown():Void {
-        log("Editor: Shutting down engine...");
-        if (app != null) {
-            app.release();
-            app = null;
-            initialized = false;
         }
     }
     
@@ -1351,4 +1339,59 @@ class Editor {
             return 0;
         }
     }
+
+	@:keep
+	public static function setLayerProperties(layerName:String, properties:cpp.RawPointer<cpp.Void>):Void {
+		if (app == null || !initialized || editorState == null) {
+			log("Editor: Cannot set layer properties - engine not initialized");
+			return;
+		}
+		try {
+			
+			var name:String = null;
+			var type:Int = 0;
+			var tilesetName:String = null;
+			var visible:Int = 1;
+			untyped __cpp__("
+            LayerInfoStruct* inStruct = (LayerInfoStruct*)({0});
+            {1} = ::String(inStruct->name);
+            {2} = inStruct->type;
+            {3} = ::String(inStruct->tilesetName);
+            {4} = inStruct->visible;
+        ", properties, name, type, tilesetName, visible);
+
+			editorState.setLayerProperties(layerName, name, type, tilesetName, visible != 0);
+			// Add more property assignments as needed
+		} catch (e:Dynamic) {
+			log("Editor: Error setting layer properties: " + e);
+		}
+	}
+
+	@:keep
+	public static function setLayerPropertiesAt(index:Int, properties:cpp.RawPointer<cpp.Void>):Void {
+		if (app == null || !initialized || editorState == null) {
+			log("Editor: Cannot set layer properties - engine not initialized");
+			return;
+		}
+		try {
+			
+			// Read LayerInfoStruct fields from the pointer
+			var name:String = null;
+			var type:Int = 0;
+			var tilesetName:String = null;
+			var visible:Int = 1;
+			untyped __cpp__("
+            LayerInfoStruct* inStruct = (LayerInfoStruct*)({0});
+            {1} = ::String(inStruct->name);
+            {2} = inStruct->type;
+            {3} = ::String(inStruct->tilesetName);
+            {4} = inStruct->visible;
+        ", properties, name, type, tilesetName, visible);
+
+            editorState.setLayerPropertiesAt(index, name, type, tilesetName, visible != 0);
+			
+		} catch (e:Dynamic) {
+			log("Editor: Error setting layer properties at index: " + e);
+		}
+	}
 }
