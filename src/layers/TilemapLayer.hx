@@ -25,7 +25,7 @@ class TilemapLayer extends Layer {
         return "tilemap";
     }
     
-    override public function render(renderer:Dynamic, viewProjectionMatrix:Dynamic):Void {
+    override public function render(renderer:Renderer, viewProjectionMatrix:Dynamic):Void {
         if (visible && tileBatch != null && tileBatch.visible) {
             
             tileBatch.uniforms.set("silhouette", false);
@@ -34,6 +34,14 @@ class TilemapLayer extends Layer {
             if (silhouette) {
                 tileBatch.uniforms.set("silhouette", silhouette);
                 tileBatch.uniforms.set("silhouetteColor", [silhouetteColor.r, silhouetteColor.g, silhouetteColor.b, 0.4]); 
+
+                renderer.renderDisplayObject(tileBatch, viewProjectionMatrix); // automatically calls updateBuffers() and render()
+            }
+            
+            if (missingTileset) {
+                // Render a red overlay to indicate missing tileset
+                tileBatch.uniforms.set("silhouette", true);
+                tileBatch.uniforms.set("silhouetteColor", [1, 0, 0, 0.5]); // Red with 50% opacity
 
                 renderer.renderDisplayObject(tileBatch, viewProjectionMatrix); // automatically calls updateBuffers() and render()
             }

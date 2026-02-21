@@ -10,13 +10,13 @@
 --macro Sys.command("cmd", ["/c", "copy build\\custom-build.xml bin\\dll\\custom-build.xml"])
 
 #Copy DLL files to C# project (after build completes via --cmd)
---cmd copy bin\\dll\\Editor-debug.dll C:\\Users\\efedorenko\\Documents\\projects\\csharp\\csharp-editor\\bin\\x64\\Debug\\Editor-debug.dll
---cmd copy bin\\dll\\SDL3.dll C:\\Users\\efedorenko\\Documents\\projects\\csharp\\csharp-editor\\bin\\x64\\Debug\\SDL3.dll
---cmd .\\bat\\copy-files.bat bin\\dll\\res C:\\Users\\efedorenko\\Documents\\projects\\csharp\\csharp-editor\\bin\\x64\\Debug\\res
+# --cmd copy bin\\dll\\Editor-debug.dll C:\\Users\\efedorenko\\Documents\\projects\\csharp\\csharp-editor\\bin\\x64\\Debug\\Editor-debug.dll
+# --cmd copy bin\\dll\\SDL3.dll C:\\Users\\efedorenko\\Documents\\projects\\csharp\\csharp-editor\\bin\\x64\\Debug\\SDL3.dll
+# --cmd .\\bat\\copy-files.bat bin\\dll\\res C:\\Users\\efedorenko\\Documents\\projects\\csharp\\csharp-editor\\bin\\x64\\Debug\\res
 
-#--cmd copy bin\\dll\\Editor-debug.dll C:\\Users\\Renko\\Documents\\Libraries\\csharp-editor\\bin\\x64\\Debug\\Editor-debug.dll
-#--cmd copy bin\\dll\\SDL3.dll C:\\Users\\Renko\\Documents\\Libraries\\csharp-editor\\bin\\x64\\Debug\\SDL3.dll
-#--cmd .\\bat\\copy-files.bat bin\\dll\\res C:\\Users\\Renko\\Documents\\Libraries\\csharp-editor\\bin\\x64\\Debug\\res
+--cmd copy bin\\dll\\Editor-debug.dll C:\\Users\\Renko\\Documents\\Libraries\\csharp-editor\\bin\\x64\\Debug\\Editor-debug.dll
+--cmd copy bin\\dll\\SDL3.dll C:\\Users\\Renko\\Documents\\Libraries\\csharp-editor\\bin\\x64\\Debug\\SDL3.dll
+--cmd .\\bat\\copy-files.bat bin\\dll\\res C:\\Users\\Renko\\Documents\\Libraries\\csharp-editor\\bin\\x64\\Debug\\res
 
 # Link libraries FIRST (but src will override conflicting classes)
 -lib haxe-native

@@ -255,6 +255,10 @@ extern "C" {
     __declspec(dllexport) void setLayerPropertiesAt(int index, LayerInfoStruct* properties) {
         ::Editor_obj::setLayerPropertiesAt(index, properties);
     }
+
+    __declspec(dllexport) void replaceLayerTileset(const char* layerName, const char* newTilesetName) {
+        ::Editor_obj::replaceLayerTileset(::String(layerName), ::String(newTilesetName));
+    }
 }
 ')
 
@@ -1268,6 +1272,8 @@ class Editor {
                 tilesetName = tilemapLayer.tileset.name;
             } else if (Std.isOfType(layer, layers.EntityLayer)) {
                 type = 1;
+                var entityLayer:layers.EntityLayer = cast layer;
+                tilesetName = entityLayer.tileset.name;
             } else if (Std.isOfType(layer, layers.FolderLayer)) {
                 type = 2;
             }
@@ -1320,6 +1326,8 @@ class Editor {
                 tilesetName = tilemapLayer.tileset.name;
             } else if (Std.isOfType(layer, layers.EntityLayer)) {
                 type = 1;
+                var entityLayer:layers.EntityLayer = cast layer;
+                tilesetName = entityLayer.tileset.name;
             } else if (Std.isOfType(layer, layers.FolderLayer)) {
                 type = 2;
             }
@@ -1384,4 +1392,9 @@ class Editor {
 		editorState.setLayerPropertiesAt(index, name, type, tilesetName, visible != 0, silhouette != 0, silhouetteColor);
 
 	}
+
+    @:keep
+    public static function replaceLayerTileset(layerName:String, newTilesetName:String):Void {
+        editorState.replaceLayerTileset(layerName, newTilesetName);
+    }
 }

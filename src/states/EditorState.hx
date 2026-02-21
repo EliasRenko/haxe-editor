@@ -1024,10 +1024,6 @@ class EditorState extends State {
         
         // Get texture program
         var textureProgramInfo = app.renderer.getProgramInfo("texture");
-        if (textureProgramInfo == null) {
-            trace("Cannot create tilemap layer: texture program not found");
-            return null;
-        }
         
         // Create a new tile batch for this layer
         var batch = new ManagedTileBatch(textureProgramInfo, tileset.textureId);
@@ -1093,6 +1089,52 @@ class EditorState extends State {
         trace("Created folder layer: " + name);
         return layer;
     }
+
+    public function replaceLayerTileset(layerName:String, newTilesetName:String):Void {
+        var layer = getLayerByName(layerName);
+        if (layer == null) {
+            trace("Layer not found: " + layerName);
+            return;
+        }
+        
+        if (!Std.isOfType(layer, TilemapLayer)) {
+            trace("Layer is not a tilemap layer: " + layerName);
+            return;
+        }
+        
+        var tilemapLayer:TilemapLayer = cast layer;
+        var newTileset = tilesetManager.tilesets.get(newTilesetName);
+        
+        if (newTileset == null) {
+            trace("New tileset not found: " + newTilesetName);
+            return;
+        }
+        
+        // Update the layer's tileset reference
+        tilemapLayer.tileset = newTileset;
+        
+        // Update the tile batch's texture ID to match the new tileset
+        tilemapLayer.tileBatch.setTexture(newTileset.textureId);
+        
+        // Redefine tile regions in the batch based on the new tileset
+        tilemapLayer.tileBatch.clearRegions();
+        for (row in 0...newTileset.tilesPerCol) {
+            for (col in 0...newTileset.tilesPerRow) {
+                tilemapLayer.tileBatch.defineRegion(
+                    col * newTileset.tileSize,  // atlasX
+                    row * newTileset.tileSize,  // atlasY
+                    newTileset.tileSize,        // width
+                    newTileset.tileSize         // height
+                );
+            }
+        }
+        
+        // Mark buffers as needing update to reflect changes
+        tilemapLayer.tileBatch.needsBufferUpdate = true;
+        
+        trace("Replaced tileset for layer: " + layerName + " with new tileset: " + newTilesetName);
+    }
+
     
     /**
      * Export tilemap data to JSON format

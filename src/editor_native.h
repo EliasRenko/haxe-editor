@@ -129,6 +129,7 @@ extern "C" {
     __declspec(dllexport) void setLayerProperties(const char* layerName, LayerInfoStruct* properties);
     __declspec(dllexport) void setLayerPropertiesAt(int index, LayerInfoStruct* properties);
 
+    __declspec(dllexport) void replaceLayerTileset(const char* layerName, const char* newTilesetName);
 
 }
 
