@@ -1,5 +1,6 @@
 ﻿package states;
 
+import layers.ITilesLayer;
 import Log.LogCategory;
 import State;
 import App;
@@ -138,26 +139,26 @@ class EditorState extends State {
     }
     
     public function setEntityRegion(entityName:String, x:Int, y:Int, width:Int, height:Int):Void {
-        var entity = entityManager.getEntityDefinition(entityName);
-        if (entity == null) {
+        var entityDef = entityManager.getEntityDefinition(entityName);
+        if (entityDef == null) {
             trace("Cannot set region: entity not found: " + entityName);
             return;
         }
         
         // TODO: FIX THIS
-        var tileset = tilesetManager.tilesets.get(entity.tilesetName);
+        var tileset = tilesetManager.tilesets.get(entityDef.tilesetName);
         if (tileset == null) {
-            trace("Cannot set region: tileset not found: " + entity.tilesetName);
+            trace("Cannot set region: tileset not found: " + entityDef.tilesetName);
             return;
         }
         
         // Convert tile indices to pixel coordinates
-        entity.regionX = x * tileset.tileSize;
-        entity.regionY = y * tileset.tileSize;
-        entity.regionWidth = width * tileset.tileSize;
-        entity.regionHeight = height * tileset.tileSize;
+        entityDef.regionX = x * tileset.tileSize;
+        entityDef.regionY = y * tileset.tileSize;
+        entityDef.regionWidth = width * tileset.tileSize;
+        entityDef.regionHeight = height * tileset.tileSize;
         
-        trace("Set entity region for " + entityName + ": tile(" + x + "," + y + "," + width + "," + height + ") -> pixels(" + entity.regionX + "," + entity.regionY + "," + entity.regionWidth + "," + entity.regionHeight + ")");
+        trace("Set entity region for " + entityName + ": tile(" + x + "," + y + "," + width + "," + height + ") -> pixels(" + entityDef.regionX + "," + entityDef.regionY + "," + entityDef.regionWidth + "," + entityDef.regionHeight + ")");
     }
     
 
@@ -551,14 +552,14 @@ class EditorState extends State {
         }
         
         // Add tile to batch using selected region ID
-        var tileId = tilemapLayer.tileBatch.addTile(tileX, tileY, layerTileset.tileSize, layerTileset.tileSize, tilemapLayer.selectedTileRegion);
+        var tileId = tilemapLayer.managedTileBatch.addTile(tileX, tileY, layerTileset.tileSize, layerTileset.tileSize, tilemapLayer.selectedTileRegion);
         
         if (tileId >= 0) {
             // Store in grid index for fast lookups
             tilemapLayer.tileGrid.set(gridKey, tileId);
             
             // Mark buffers as needing update
-            tilemapLayer.tileBatch.needsBufferUpdate = true;
+            tilemapLayer.managedTileBatch.needsBufferUpdate = true;
         }
     }
     
@@ -593,9 +594,9 @@ class EditorState extends State {
         // Fast lookup in grid index (O(1) instead of O(n)!)
         if (tilemapLayer.tileGrid.exists(gridKey)) {
             var tileId = tilemapLayer.tileGrid.get(gridKey);
-            tilemapLayer.tileBatch.removeTile(tileId);
+            tilemapLayer.managedTileBatch.removeTile(tileId);
             tilemapLayer.tileGrid.remove(gridKey); // Remove from grid index
-            tilemapLayer.tileBatch.needsBufferUpdate = true;
+            tilemapLayer.managedTileBatch.needsBufferUpdate = true;
         }
     }
     
@@ -617,11 +618,11 @@ class EditorState extends State {
                 // Iterate through grid index to find out-of-bounds tiles
                 for (gridKey in tilemapLayer.tileGrid.keys()) {
                     var tileId = tilemapLayer.tileGrid.get(gridKey);
-                    var tile = tilemapLayer.tileBatch.getTile(tileId);
+                    var tile = tilemapLayer.managedTileBatch.getTile(tileId);
                     if (tile != null) {
                         if (tile.x < mapX || tile.x >= mapX + mapWidth || 
                             tile.y < mapY || tile.y >= mapY + mapHeight) {
-                            tilemapLayer.tileBatch.removeTile(tileId);
+                            tilemapLayer.managedTileBatch.removeTile(tileId);
                             keysToRemove.push(gridKey);
                             removed++;
                         }
@@ -634,7 +635,7 @@ class EditorState extends State {
                 }
                 
                 if (keysToRemove.length > 0) {
-                    tilemapLayer.tileBatch.needsBufferUpdate = true;
+                    tilemapLayer.managedTileBatch.needsBufferUpdate = true;
                 }
             }
         }
@@ -1097,12 +1098,12 @@ class EditorState extends State {
             return;
         }
         
-        if (!Std.isOfType(layer, TilemapLayer)) {
-            trace("Layer is not a tilemap layer: " + layerName);
-            return;
-        }
+        // if (!Std.isOfType(layer, TilemapLayer)) {
+        //     trace("Layer is not a tilemap layer: " + layerName);
+        //     return;
+        // }
         
-        var tilemapLayer:TilemapLayer = cast layer;
+        var tilemapLayer:ITilesLayer = cast layer;
         var newTileset = tilesetManager.tilesets.get(newTilesetName);
         
         if (newTileset == null) {
@@ -1114,23 +1115,13 @@ class EditorState extends State {
         tilemapLayer.tileset = newTileset;
         
         // Update the tile batch's texture ID to match the new tileset
-        tilemapLayer.tileBatch.setTexture(newTileset.textureId);
+        tilemapLayer.managedTileBatch.setTexture(newTileset.textureId);
         
         // Redefine tile regions in the batch based on the new tileset
-        tilemapLayer.tileBatch.clearRegions();
-        for (row in 0...newTileset.tilesPerCol) {
-            for (col in 0...newTileset.tilesPerRow) {
-                tilemapLayer.tileBatch.defineRegion(
-                    col * newTileset.tileSize,  // atlasX
-                    row * newTileset.tileSize,  // atlasY
-                    newTileset.tileSize,        // width
-                    newTileset.tileSize         // height
-                );
-            }
-        }
+        tilemapLayer.redefineRegions(newTileset);
         
         // Mark buffers as needing update to reflect changes
-        tilemapLayer.tileBatch.needsBufferUpdate = true;
+        tilemapLayer.managedTileBatch.needsBufferUpdate = true;
         
         trace("Replaced tileset for layer: " + layerName + " with new tileset: " + newTilesetName);
     }
@@ -1220,11 +1211,11 @@ class EditorState extends State {
             // Clear layer data without calling full cleanup
             if (Std.isOfType(layer, TilemapLayer)) {
                 var tl:TilemapLayer = cast layer;
-                if (tl.tileBatch != null) tl.tileBatch.clear();
+                if (tl.managedTileBatch != null) tl.managedTileBatch.clear();
                 if (tl.tileGrid != null) tl.tileGrid.clear();
             } else if (Std.isOfType(layer, EntityLayer)) {
                 var el:EntityLayer = cast layer;
-                if (el.entityBatch != null) el.entityBatch.clear();
+                if (el.managedTileBatch != null) el.managedTileBatch.clear();
                 if (el.entities != null) el.entities.clear();
             }
             entities.remove(layer);

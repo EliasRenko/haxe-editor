@@ -49,7 +49,7 @@ class MapSerializer {
                 
                 // Get all tiles from this layer's batch
                 for (tileId in 0...1000) { // MAX_TILES
-                    var tile = tilemapLayer.tileBatch.getTile(tileId);
+                    var tile = tilemapLayer.managedTileBatch.getTile(tileId);
                     
                     if (tile != null) {
                         // Convert world position back to grid coordinates
@@ -276,7 +276,7 @@ class MapSerializer {
                                     var gridKey = gridX + "_" + gridY;
                                     
                                     // Add tile using the layer's batch
-                                    var tileId = tilemapLayer.tileBatch.addTile(x, y, tileset.tileSize, tileset.tileSize, region);
+                                    var tileId = tilemapLayer.managedTileBatch.addTile(x, y, tileset.tileSize, tileset.tileSize, region);
                                     
                                     if (tileId >= 0) {
                                         tilemapLayer.tileGrid.set(gridKey, tileId);
@@ -285,8 +285,8 @@ class MapSerializer {
                                 }
                                 
                                 // Upload all tile data to GPU after adding all tiles
-                                if (tilemapLayer.tileBatch.needsBufferUpdate) {
-                                    tilemapLayer.tileBatch.updateBuffers(context.renderer);
+                                if (tilemapLayer.managedTileBatch.needsBufferUpdate) {
+                                    tilemapLayer.managedTileBatch.updateBuffers(context.renderer);
                                 }
                             }
                         }
@@ -329,8 +329,8 @@ class MapSerializer {
                                 }
                                 
                                 // Upload all entity data to GPU after adding all entities
-                                if (entityLayer.entityBatch.needsBufferUpdate) {
-                                    entityLayer.entityBatch.updateBuffers(context.renderer);
+                                if (entityLayer.managedTileBatch.needsBufferUpdate) {
+                                    entityLayer.managedTileBatch.updateBuffers(context.renderer);
                                 }
                             }
                         }

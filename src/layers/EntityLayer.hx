@@ -7,19 +7,18 @@ import Tileset;
  * Entity layer that holds entities as tiles in a batch
  * Similar to TilemapLayer but for entity placement
  */
-class EntityLayer extends Layer {
+class EntityLayer extends Layer implements ITilesLayer {
     public var tileset:Tileset; // The tileset used for entity graphics
-    public var entityBatch:ManagedTileBatch; // Batch containing all entity tiles
-    
-    // Entity storage: entityId -> {name: String, tileId: Int, x: Float, y: Float}
+    public var managedTileBatch:ManagedTileBatch; // Alias for entityBatch to implement ITilesLayer
     public var entities:Map<Int, {name:String, tileId:Int, x:Float, y:Float}>;
+    
     private var nextEntityId:Int = 0;
     private var nextRegionId:Int = 0; // Auto-incrementing region ID for entity atlas regions
     
-    public function new(name:String, tileset:Tileset, entityBatch:ManagedTileBatch) {
+    public function new(name:String, tileset:Tileset, managedTileBatch:ManagedTileBatch) {
         super(name);
         this.tileset = tileset;
-        this.entityBatch = entityBatch;
+        this.managedTileBatch = managedTileBatch;
         this.entities = new Map<Int, {name:String, tileId:Int, x:Float, y:Float}>();
     }
     
@@ -33,25 +32,25 @@ class EntityLayer extends Layer {
             return;
         }
         
-        if (entityBatch == null) {
-            trace("EntityLayer '" + id + "': entityBatch is null");
+        if (managedTileBatch == null) {
+            trace("EntityLayer '" + id + "': managedTileBatch is null");
             return;
         }
         
-        if (!entityBatch.visible) {
+        if (!managedTileBatch.visible) {
             return;
         }
         
-        entityBatch.uniforms.set("silhouette", false);
-        entityBatch.uniforms.set("silhouetteColor", [1.0, 0.8, 0.0, 0.4]); // Orange silhouette for debugging (can be toggled on/off with uniform)
+        managedTileBatch.uniforms.set("silhouette", false);
+        managedTileBatch.uniforms.set("silhouetteColor", [1.0, 0.8, 0.0, 0.4]); // Orange silhouette for debugging (can be toggled on/off with uniform)
 
         // renderer.renderDisplayObject() automatically calls updateBuffers() and render()
-        renderer.renderDisplayObject(entityBatch, viewProjectionMatrix);
+        renderer.renderDisplayObject(managedTileBatch, viewProjectionMatrix);
     }
     
     override public function cleanup(renderer:Dynamic):Void {
-        if (entityBatch != null) {
-            entityBatch.clear();
+        if (managedTileBatch != null) {
+            managedTileBatch.clear();
         }
         
         if (entities != null) {
@@ -67,27 +66,27 @@ class EntityLayer extends Layer {
      * Returns the entity ID
      */
     public function addEntity(name:String, x:Float, y:Float, width:Float, height:Float, atlasX:Int, atlasY:Int, atlasWidth:Int, atlasHeight:Int):Int {
-        if (entityBatch == null) {
-            trace("EntityLayer.addEntity: entityBatch is null!");
+        if (managedTileBatch == null) {
+            trace("EntityLayer.addEntity: managedTileBatch is null!");
             return -1;
         }
         
         // Define a new region for this entity
-        var regionId = entityBatch.defineRegion(atlasX, atlasY, atlasWidth, atlasHeight);
+        var regionId = managedTileBatch.defineRegion(atlasX, atlasY, atlasWidth, atlasHeight);
         if (regionId < 0) {
             trace("EntityLayer.addEntity: ERROR - defineRegion failed!");
             return -1;
         }
         
         // Add tile to batch
-        var tileId = entityBatch.addTile(x, y, width, height, regionId);
+        var tileId = managedTileBatch.addTile(x, y, width, height, regionId);
         if (tileId < 0) {
             trace("EntityLayer.addEntity: ERROR - addTile failed!");
             return -1;
         }
         
         // Mark batch as needing buffer update
-        entityBatch.needsBufferUpdate = true;
+        managedTileBatch.needsBufferUpdate = true;
         
         // Store entity info
         var entityId = nextEntityId++;
@@ -105,8 +104,8 @@ class EntityLayer extends Layer {
         var entity = entities.get(entityId);
         
         // Remove tile from batch
-        if (entityBatch != null) {
-            entityBatch.removeTile(entity.tileId);
+        if (managedTileBatch != null) {
+            managedTileBatch.removeTile(entity.tileId);
         }
         
         // Remove entity info
@@ -140,12 +139,16 @@ class EntityLayer extends Layer {
      * Clear all entities from this layer
      */
     public function clear():Void {
-        if (entityBatch != null) {
-            entityBatch.clear();
+        if (managedTileBatch != null) {
+            managedTileBatch.clear();
         }
         if (entities != null) {
             entities.clear();
         }
         nextEntityId = 0;
+    }
+
+    public function redefineRegions(tileset:Tileset):Void {
+        managedTileBatch.clearRegions();
     }
 }
