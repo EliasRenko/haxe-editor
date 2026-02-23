@@ -5,7 +5,9 @@ import EntityDefinition;
 class EntityManager {
 
     public var entityDefinitions:Map<String, EntityDefinition>;
+
     public var selectedEntityName:String = "";
+    private var __nextRegionId:Int = 0;
 
     public function new() {
         this.entityDefinitions = new Map<String, EntityDefinition>();
@@ -33,7 +35,8 @@ class EntityManager {
             regionX: 0,
             regionY: 0,
             regionWidth: width,
-            regionHeight: height
+            regionHeight: height,
+            definedRegionId: -1
         };
         
         entityDefinitions.set(entityName, entity);
@@ -85,5 +88,24 @@ class EntityManager {
         entityDefinitions.remove(entityName);
         trace("Deleted entity definition: " + entityName);
         return true;
+    }
+
+    public function setEntityRegion(tilesetManager:TilesetManager, entityName:String, x:Int, y:Int, width:Int, height:Int):Void {
+        var entityDef = getEntityDefinition(entityName);
+        if (entityDef == null) {
+            trace("Cannot set region: entity not found: " + entityName);
+            return;
+        }
+        
+        var tileset = tilesetManager.tilesets.get(entityDef.tilesetName);
+        if (tileset == null) {
+            trace("Cannot set region: tileset not found: " + entityDef.tilesetName);
+            return;
+        }
+
+        entityDef.regionX = x * tileset.tileSize;
+        entityDef.regionY = y * tileset.tileSize;
+        entityDef.regionWidth = width * tileset.tileSize;
+        entityDef.regionHeight = height * tileset.tileSize;
     }
 }

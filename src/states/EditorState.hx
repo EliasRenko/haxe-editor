@@ -139,28 +139,10 @@ class EditorState extends State {
     }
     
     public function setEntityRegion(entityName:String, x:Int, y:Int, width:Int, height:Int):Void {
-        var entityDef = entityManager.getEntityDefinition(entityName);
-        if (entityDef == null) {
-            trace("Cannot set region: entity not found: " + entityName);
-            return;
-        }
+        entityManager.setEntityRegion(tilesetManager, entityName, x, y, width, height);
+
         
-        // TODO: FIX THIS
-        var tileset = tilesetManager.tilesets.get(entityDef.tilesetName);
-        if (tileset == null) {
-            trace("Cannot set region: tileset not found: " + entityDef.tilesetName);
-            return;
-        }
-        
-        // Convert tile indices to pixel coordinates
-        entityDef.regionX = x * tileset.tileSize;
-        entityDef.regionY = y * tileset.tileSize;
-        entityDef.regionWidth = width * tileset.tileSize;
-        entityDef.regionHeight = height * tileset.tileSize;
-        
-        trace("Set entity region for " + entityName + ": tile(" + x + "," + y + "," + width + "," + height + ") -> pixels(" + entityDef.regionX + "," + entityDef.regionY + "," + entityDef.regionWidth + "," + entityDef.regionHeight + ")");
     }
-    
 
     public function setEntityRegionPixels(entityName:String, x:Int, y:Int, width:Int, height:Int):Void {
         var entity = entityManager.getEntityDefinition(entityName);
@@ -1098,10 +1080,10 @@ class EditorState extends State {
             return;
         }
         
-        // if (!Std.isOfType(layer, TilemapLayer)) {
-        //     trace("Layer is not a tilemap layer: " + layerName);
-        //     return;
-        // }
+        if (!Std.isOfType(layer, TilemapLayer)) {
+            trace("Layer is not a tilemap layer: " + layerName);
+            return;
+        }
         
         var tilemapLayer:ITilesLayer = cast layer;
         var newTileset = tilesetManager.tilesets.get(newTilesetName);

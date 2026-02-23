@@ -11,15 +11,17 @@ class EntityLayer extends Layer implements ITilesLayer {
     public var tileset:Tileset; // The tileset used for entity graphics
     public var managedTileBatch:ManagedTileBatch; // Alias for entityBatch to implement ITilesLayer
     public var entities:Map<Int, {name:String, tileId:Int, x:Float, y:Float}>;
-    
+
+    public var definedRegions:Map<String,Int>;
+
     private var nextEntityId:Int = 0;
-    private var nextRegionId:Int = 0; // Auto-incrementing region ID for entity atlas regions
     
     public function new(name:String, tileset:Tileset, managedTileBatch:ManagedTileBatch) {
         super(name);
         this.tileset = tileset;
         this.managedTileBatch = managedTileBatch;
         this.entities = new Map<Int, {name:String, tileId:Int, x:Float, y:Float}>();
+        this.definedRegions = new Map<String,Int>();
     }
     
     override public function getType():String {
@@ -71,11 +73,18 @@ class EntityLayer extends Layer implements ITilesLayer {
             return -1;
         }
         
-        // Define a new region for this entity
-        var regionId = managedTileBatch.defineRegion(atlasX, atlasY, atlasWidth, atlasHeight);
-        if (regionId < 0) {
-            trace("EntityLayer.addEntity: ERROR - defineRegion failed!");
-            return -1;
+        var regionId:Int = -1;
+
+        // Check if region for this entity name already exists, otherwise define a new one
+        if (definedRegions.exists(name)) {
+            regionId = definedRegions.get(name);
+        } else {
+            regionId = managedTileBatch.defineRegion(atlasX, atlasY, atlasWidth, atlasHeight);
+            if (regionId < 0) {
+                trace("EntityLayer.addEntity: ERROR - defineRegion failed!");
+                return -1;
+            }
+            definedRegions.set(name, regionId);
         }
         
         // Add tile to batch
@@ -149,6 +158,6 @@ class EntityLayer extends Layer implements ITilesLayer {
     }
 
     public function redefineRegions(tileset:Tileset):Void {
-        managedTileBatch.clearRegions();
+        // We should not be able to change the tileset for an EntityLayer since each entity has its own tileset.
     }
 }

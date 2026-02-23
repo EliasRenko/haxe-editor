@@ -131,6 +131,7 @@ extern "C" {
 
     __declspec(dllexport) void replaceLayerTileset(const char* layerName, const char* newTilesetName);
 
+    
 }
 
 #endif // EDITOR_NATIVE_H

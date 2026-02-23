@@ -1264,6 +1264,8 @@ class Editor {
             var type = 0; // 0 = TilemapLayer, 1 = EntityLayer, 2 = FolderLayer
             var tilesetName = "";
             var visible = layer.visible ? 1 : 0;
+            var silhouette = layer.silhouette ? 1 : 0;
+            var silhouetteColor = layer.silhouetteColor.hexValue;
             
             // Determine layer type
             if (Std.isOfType(layer, layers.TilemapLayer)) {
@@ -1283,8 +1285,10 @@ class Editor {
                 outStruct->name = {1}.utf8_str();
                 outStruct->type = {2};
                 outStruct->tilesetName = {3}.utf8_str();
+                outStruct->silhouette = {5};
+                outStruct->silhouetteColor = {6};
                 outStruct->visible = {4};
-            ", outInfo, name, type, tilesetName, visible);
+            ", outInfo, name, type, tilesetName, visible, silhouette, silhouetteColor);
             
             return 1;
             
@@ -1318,6 +1322,8 @@ class Editor {
             var type = 0; // 0 = TilemapLayer, 1 = EntityLayer, 2 = FolderLayer
             var tilesetName = "";
             var visible = layer.visible ? 1 : 0;
+            var silhouette = layer.silhouette;
+            var silhouetteColor = layer.silhouetteColor.hexValue;
             
             // Determine layer type
             if (Std.isOfType(layer, layers.TilemapLayer)) {
@@ -1338,7 +1344,9 @@ class Editor {
                 outStruct->type = {2};
                 outStruct->tilesetName = {3}.utf8_str();
                 outStruct->visible = {4};
-            ", outInfo, name, type, tilesetName, visible);
+                outStruct->silhouette = {5};
+                outStruct->silhouetteColor = {6};
+            ", outInfo, name, type, tilesetName, visible, silhouette, silhouetteColor);
             
             return 1;
             

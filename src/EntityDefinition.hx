@@ -11,4 +11,5 @@ typedef EntityDefinition = {
     var regionY:Int;              // Atlas region Y position
     var regionWidth:Int;          // Atlas region width
     var regionHeight:Int;         // Atlas region height
+    var definedRegionId: Int; // Atlas region ID for placeholder graphic (used when actual region is not yet created)
 }
