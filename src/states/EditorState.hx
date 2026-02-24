@@ -138,10 +138,9 @@ class EditorState extends State {
         return null;
     }
     
+    // CHECKED!
     public function setEntityRegion(entityName:String, x:Int, y:Int, width:Int, height:Int):Void {
         entityManager.setEntityRegion(tilesetManager, entityName, x, y, width, height);
-
-        
     }
 
     public function setEntityRegionPixels(entityName:String, x:Int, y:Int, width:Int, height:Int):Void {
@@ -1106,6 +1105,11 @@ class EditorState extends State {
         tilemapLayer.managedTileBatch.needsBufferUpdate = true;
         
         trace("Replaced tileset for layer: " + layerName + " with new tileset: " + newTilesetName);
+        trace("New tilemap layer has regions: " + tilemapLayer.managedTileBatch.getRegionCount());
+        // for (i in 0...tilemapLayer.managedTileBatch.getRegionCount() - 1) {
+        //     var region = tilemapLayer.managedTileBatch.getRegion(i);
+        //     //trace("Region " + i + ": atlasX=" + region.u1 + ", atlasY=" + region.v1 + ", width=" + (region.u2 - region.u1) + ", height=" + (region.v2 - region.v1));
+        // }
     }
 
     
@@ -1257,7 +1261,6 @@ class EditorState extends State {
     override public function release():Void {
         // Layers are entities and will be cleaned up by super.release()
         activeLayer = null;
-        
         super.release();
     }
 }

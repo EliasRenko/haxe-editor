@@ -88,23 +88,25 @@ extern "C" {
     __declspec(dllexport) int importMap(const char* filePath);
     
     // Tileset management
+    __declspec(dllexport) const char* createTileset(const char* texturePath, const char* tilesetName, int tileSize);
+
     __declspec(dllexport) int getTileset(const char* tilesetName, TilesetInfoStruct* outInfo);
     __declspec(dllexport) int getTilesetAt(int index, TilesetInfoStruct* outInfo);
     __declspec(dllexport) int getActiveTile();
     __declspec(dllexport) int getTilesetCount();
 
-    __declspec(dllexport) const char* createTileset(const char* texturePath, const char* tilesetName, int tileSize);
     __declspec(dllexport) int setActiveTileset(const char* tilesetName);
     __declspec(dllexport) void setActiveTile(int tileRegionId);
     
-    // Entity management
-    __declspec(dllexport) void getEntity(const char* entityName, EntityDataStruct* outData);
-    __declspec(dllexport) void getEntityAt(int index, EntityDataStruct* outData);
-    __declspec(dllexport) int getEntityCount();
+    // Entity definition management
+    __declspec(dllexport) const char* createEntityDef(const char* entityName, int width, int height, const char* tilesetName);
 
-    __declspec(dllexport) const char* createEntity(const char* entityName, int width, int height, const char* tilesetName);
-    __declspec(dllexport) int setActiveEntity(const char* entityName);
-    __declspec(dllexport) void setEntityRegion(const char* entityName, int x, int y, int width, int height);
+    __declspec(dllexport) const char* getEntityDef(const char* entityName, EntityDataStruct* outData);
+    __declspec(dllexport) const char* getEntityDefAt(int index, EntityDataStruct* outData);
+    __declspec(dllexport) int getEntityDefCount();
+
+    __declspec(dllexport) int setActiveEntityDef(const char* entityName);
+    __declspec(dllexport) void setEntityDefRegion(const char* entityName, int x, int y, int width, int height);
 
     // Layer management
     __declspec(dllexport) void createTilemapLayer(const char* layerName, const char* tilesetName, int index);
@@ -119,7 +121,6 @@ extern "C" {
     __declspec(dllexport) int setActiveLayerAt(int index);
     __declspec(dllexport) int removeLayer(const char* layerName);
     __declspec(dllexport) int removeLayerByIndex(int index);
-    __declspec(dllexport) const char* getLayerNameAt(int index);
     
     __declspec(dllexport) int moveLayerUp(const char* layerName);
     __declspec(dllexport) int moveLayerDown(const char* layerName);

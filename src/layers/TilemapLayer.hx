@@ -1,6 +1,5 @@
 package layers;
 
-import manager.EntityManager;
 import display.ManagedTileBatch;
 import Tileset;
 

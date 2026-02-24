@@ -1,5 +1,6 @@
 package;
 
+import Log.LogCategory;
 import states.EditorState;
 import math.Vec2;
 import layers.TilemapLayer;
@@ -194,10 +195,6 @@ extern "C" {
         return ::Editor_obj::getLayerCount();
     }
     
-    __declspec(dllexport) const char* getLayerNameAt(int index) {
-        return ::Editor_obj::getLayerNameAt(index).__s;
-    }
-    
     __declspec(dllexport) int getLayerInfoAt(int index, LayerInfoStruct* outInfo) {
         return ::Editor_obj::getLayerInfoAt(index, outInfo);
     }
@@ -224,28 +221,28 @@ extern "C" {
     }
     
     // Entity definition management
-    __declspec(dllexport) const char* createEntity(const char* entityName, int width, int height, const char* tilesetName) {
-        return ::Editor_obj::createEntity(::String(entityName), width, height, ::String(tilesetName)).__s;
+    __declspec(dllexport) const char* createEntityDef(const char* entityName, int width, int height, const char* tilesetName) {
+        return ::Editor_obj::createEntityDef(::String(entityName), width, height, ::String(tilesetName)).__s;
     }
     
-    __declspec(dllexport) void setEntityRegion(const char* entityName, int x, int y, int width, int height) {
-        ::Editor_obj::setEntityRegion(::String(entityName), x, y, width, height);
+    __declspec(dllexport) void setEntityDefRegion(const char* entityName, int x, int y, int width, int height) {
+        ::Editor_obj::setEntityDefRegion(::String(entityName), x, y, width, height);
     }
     
-    __declspec(dllexport) void getEntity(const char* entityName, EntityDataStruct* outData) {
-        ::Editor_obj::getEntity(::String(entityName), outData);
+    __declspec(dllexport) const char* getEntityDef(const char* entityName, EntityDataStruct* outData) {
+        return ::Editor_obj::getEntityDef(::String(entityName), outData).__s;
     }
     
-    __declspec(dllexport) void getEntityAt(int index, EntityDataStruct* outData) {
-        ::Editor_obj::getEntityAt(index, outData);
+    __declspec(dllexport) const char* getEntityDefAt(int index, EntityDataStruct* outData) {
+        return ::Editor_obj::getEntityDefAt(index, outData).__s;
     }
     
-    __declspec(dllexport) int getEntityCount() {
-        return ::Editor_obj::getEntityCount();
+    __declspec(dllexport) int getEntityDefCount() {
+        return ::Editor_obj::getEntityDefCount();
     }
     
-    __declspec(dllexport) int setActiveEntity(const char* entityName) {
-        return ::Editor_obj::setActiveEntity(::String(entityName));
+    __declspec(dllexport) int setActiveEntityDef(const char* entityName) {
+        return ::Editor_obj::setActiveEntityDef(::String(entityName));
     }
 
     __declspec(dllexport) void setLayerProperties(const char* layerName, LayerInfoStruct* properties) {
@@ -815,472 +812,173 @@ class Editor {
     
     // ===== ENTITY DEFINITION MANAGEMENT =====
     
-    /**
-     * Create or update an entity definition
-     * @param entityName Name of the entity
-     * @param width Entity width in pixels
-     * @param height Entity height in pixels
-     * @param tilesetName Tileset to use for this entity
-     */
     @:keep
-    public static function createEntity(entityName:String, width:Int, height:Int, tilesetName:String):String {
+    public static function createEntityDef(entityName:String, width:Int, height:Int, tilesetName:String):String {
         return editorState.createEntity(entityName, width, height, tilesetName);
     }
     
-    /**
-     * Set the atlas region for an entity definition
-     * @param entityName Name of the entity
-     * @param x Atlas region X position
-     * @param y Atlas region Y position
-     * @param width Atlas region width
-     * @param height Atlas region height
-     */
     @:keep
-    public static function setEntityRegion(entityName:String, x:Int, y:Int, width:Int, height:Int):Void {
-        if (app == null || !initialized || editorState == null) {
-            log("Editor: Cannot set entity region - engine not initialized");
-            return;
+    public static function getEntityDef(entityName:String, outData:cpp.RawPointer<cpp.Void>):String {
+        var error:String = null;
+        var entityDef = editorState.entityManager.getEntityDefinition(entityName);
+        if (entityDef == null) {
+            error = "Editor: No entity definition found: " + entityName;
+            app.log.warn(LogCategory.APP, error);
+            return error;
         }
-        
+
         try {
-            editorState.setEntityRegion(entityName, x, y, width, height);
+            populateEntityDataStruct(entityDef, outData);
         } catch (e:Dynamic) {
-            log("Editor: Error setting entity region: " + e);
+            error = "Editor: Failed to retrieve data for entity '" + entityName + "': " + e;
+            app.log.error(LogCategory.APP, error);
         }
+
+        return error;
     }
     
-    /**
-     * Get entity definition by name
-     * @param entityName Name of the entity
-     * @param outData Pointer to EntityDataStruct to fill
-     */
     @:keep
-    public static function getEntity(entityName:String, outData:cpp.RawPointer<cpp.Void>):Void {
-        if (app == null || !initialized || editorState == null) {
-            log("Editor: Cannot get entity - engine not initialized");
-            return;
+    public static function getEntityDefAt(index:Int, outData:cpp.RawPointer<cpp.Void>):String {
+        var error:String = null;
+        var entityDef:EntityDefinition = editorState.entityManager.getEntityDefinitionAt(index);
+        if (entityDef == null) {
+            error = "Editor: No entity definition found at index: " + index;
+            app.log.warn(LogCategory.APP, error);
+            return error;
         }
-        
-        try {
-            var entity = editorState.entityManager.getEntityDefinition(entityName);
-            
-            if (entity == null) {
-                log("Editor: Entity not found: " + entityName);
-                return;
-            }
-            
-            // Fill the struct using untyped C++ code
-            var name = entity.name;
-            var width = entity.width;
-            var height = entity.height;
-            var tilesetName = entity.tilesetName;
-            var regionX = entity.regionX;
-            var regionY = entity.regionY;
-            var regionWidth = entity.regionWidth;
-            var regionHeight = entity.regionHeight;
-            
-            untyped __cpp__("EntityDataStruct* outStruct = (EntityDataStruct*){0};
-                outStruct->name = {1}.utf8_str();
-                outStruct->width = {2};
-                outStruct->height = {3};
-                outStruct->tilesetName = {4}.utf8_str();
-                outStruct->regionX = {5};
-                outStruct->regionY = {6};
-                outStruct->regionWidth = {7};
-                outStruct->regionHeight = {8};
-            ", outData, name, width, height, tilesetName, regionX, regionY, regionWidth, regionHeight);
-            
-            log("Editor: Retrieved entity: " + entityName);
-            
+
+       try {
+            populateEntityDataStruct(entityDef, outData);
         } catch (e:Dynamic) {
-            log("Editor: Error getting entity: " + e);
+            error = "Editor: Failed to retrieve data for entity at index '" + index + "': " + e;
+            app.log.error(LogCategory.APP, error);
         }
+
+        return error;
     }
     
-    /**
-     * Get entity definition at specific index
-     * @param index Index of the entity (0-based)
-     * @param outData Pointer to EntityDataStruct to fill
-     */
     @:keep
-    public static function getEntityAt(index:Int, outData:cpp.RawPointer<cpp.Void>):Void {
-        if (app == null || !initialized || editorState == null) {
-            log("Editor: Cannot get entity - engine not initialized");
-            return;
-        }
-        
-        try {
-            var entity = editorState.entityManager.getEntityDefinitionAt(index);
-            
-            if (entity == null) {
-                log("Editor: Entity not found at index: " + index);
-                return;
-            }
-            
-            // Fill the struct using untyped C++ code
-            var name = entity.name;
-            var width = entity.width;
-            var height = entity.height;
-            var tilesetName = entity.tilesetName;
-            var regionX = entity.regionX;
-            var regionY = entity.regionY;
-            var regionWidth = entity.regionWidth;
-            var regionHeight = entity.regionHeight;
-            
-            untyped __cpp__("EntityDataStruct* outStruct = (EntityDataStruct*){0};
-                outStruct->name = {1}.utf8_str();
-                outStruct->width = {2};
-                outStruct->height = {3};
-                outStruct->tilesetName = {4}.utf8_str();
-                outStruct->regionX = {5};
-                outStruct->regionY = {6};
-                outStruct->regionWidth = {7};
-                outStruct->regionHeight = {8};
-            ", outData, name, width, height, tilesetName, regionX, regionY, regionWidth, regionHeight);
-            
-            log("Editor: Retrieved entity at index " + index + ": " + name);
-            
-        } catch (e:Dynamic) {
-            log("Editor: Error getting entity at index: " + e);
-        }
+    public static function getEntityDefCount():Int {
+        return editorState.entityManager.getEntityDefinitionCount();
+    }
+
+    @:keep
+    public static function setEntityDefRegion(entityName:String, x:Int, y:Int, width:Int, height:Int):Void {
+        editorState.setEntityRegion(entityName, x, y, width, height);
     }
     
-    /**
-     * Get the count of entity definitions
-     * @return Number of entity definitions
-     */
     @:keep
-    public static function getEntityCount():Int {
-        if (app == null || !initialized || editorState == null) {
-            log("Editor: Cannot get entity count - engine not initialized");
-            return 0;
-        }
-        
-        try {
-            return editorState.entityManager.getEntityDefinitionCount();
-        } catch (e:Dynamic) {
-            log("Editor: Error getting entity count: " + e);
-            return 0;
-        }
+    public static function setActiveEntityDef(entityName:String):Int {
+        return editorState.setActiveEntity(entityName) ? 1 : 0;
     }
-    
-    /**
-     * Set the currently active entity for placement
-     * @param entityName Name of the entity to make active
-     * @return 1 if entity exists, 0 otherwise
-     */
+
     @:keep
-    public static function setActiveEntity(entityName:String):Int {
-        if (app == null || !initialized || editorState == null) {
-            log("Editor: Cannot set active entity - engine not initialized");
-            return 0;
-        }
-        
-        try {
-            return editorState.setActiveEntity(entityName) ? 1 : 0;
-        } catch (e:Dynamic) {
-            log("Editor: Error setting active entity: " + e);
-            return 0;
-        }
-    }
+	public static function populateEntityDataStruct(entityDef:EntityDefinition, outData:cpp.RawPointer<cpp.Void>):Void {
+		untyped __cpp__("
+        EntityDataStruct* outStruct = (EntityDataStruct*){0};
+        outStruct->name        = ::String({1}).utf8_str();
+        outStruct->width       = {2};
+        outStruct->height      = {3};
+        outStruct->tilesetName = ::String({4}).utf8_str();
+        outStruct->regionX     = {5};
+        outStruct->regionY     = {6};
+        outStruct->regionWidth = {7};
+        outStruct->regionHeight= {8};
+        ",
+        outData, entityDef.name, entityDef.width, entityDef.height, entityDef.tilesetName, entityDef.regionX, entityDef.regionY, entityDef.regionWidth, entityDef.regionHeight);
+	}
     
     // ===== LAYER MANAGEMENT =====
     
-    /**
-     * Create a new tilemap layer
-     * @param layerName Name for the new layer
-     * @param tilesetName Name of the tileset to use
-     * @param index Position in the hierarchy (-1 to append at the end, 0 for first layer position)
-     */
     @:keep
     public static function createTilemapLayer(layerName:String, tilesetName:String, index:Int = -1):Void {
-        if (app == null || !initialized || editorState == null) {
-            log("Editor: Cannot create tilemap layer - engine not initialized");
-            return;
-        }
-        
-        try {
-            editorState.createTilemapLayer(layerName, tilesetName, index);
-        } catch (e:Dynamic) {
-            log("Editor: Error creating tilemap layer: " + e);
-        }
+        editorState.createTilemapLayer(layerName, tilesetName, index);
     }
     
-    /**
-     * Create a new entity layer
-     * @param layerName Name for the new layer
-     */
     @:keep
     public static function createEntityLayer(layerName:String, tilesetName:String):Void {
-        if (app == null || !initialized || editorState == null) {
-            log("Editor: Cannot create entity layer - engine not initialized");
-            return;
-        }
-        
-        try {
-            editorState.createEntityLayer(layerName, tilesetName);
-        } catch (e:Dynamic) {
-            log("Editor: Error creating entity layer: " + e);
-        }
+        editorState.createEntityLayer(layerName, tilesetName);
     }
     
-    /**
-     * Create a new folder layer
-     * @param layerName Name for the new folder
-     */
     @:keep
     public static function createFolderLayer(layerName:String):Void {
-        if (app == null || !initialized || editorState == null) {
-            log("Editor: Cannot create folder layer - engine not initialized");
-            return;
-        }
-        
-        try {
-            editorState.createFolderLayer(layerName);
-        } catch (e:Dynamic) {
-            log("Editor: Error creating folder layer: " + e);
-        }
+        editorState.createFolderLayer(layerName);
     }
     
-    /**
-     * Set the active layer by name
-     * @param layerName Name of the layer to make active
-     * @return 1 if layer was found and set, 0 otherwise
-     */
     @:keep
     public static function setActiveLayer(layerName:String):Int {
-        if (app == null || !initialized || editorState == null) {
-            log("Editor: Cannot set active layer - engine not initialized");
-            return 0;
-        }
-        
-        try {
-            return editorState.setActiveLayer(layerName) ? 1 : 0;
-        } catch (e:Dynamic) {
-            log("Editor: Error setting active layer: " + e);
-            return 0;
-        }
+        return editorState.setActiveLayer(layerName) ? 1 : 0;
     }
-    
-    /**
-     * Set the active layer by index
-     * @param index Index of the layer to make active
-     * @return 1 if layer was found and set, 0 otherwise
-     */
+
     @:keep
     public static function setActiveLayerAt(index:Int):Int {
-        if (app == null || !initialized || editorState == null) {
-            log("Editor: Cannot set active layer - engine not initialized");
-            return 0;
-        }
-        
-        try {
-            return editorState.setActiveLayerAt(index) ? 1 : 0;
-        } catch (e:Dynamic) {
-            log("Editor: Error setting active layer by index: " + e);
-            return 0;
-        }
+        return editorState.setActiveLayerAt(index) ? 1 : 0;
     }
     
-    /**
-     * Remove a layer by name
-     * @param layerName Name of the layer to remove
-     * @return 1 if layer was found and removed, 0 otherwise
-     */
     @:keep
     public static function removeLayer(layerName:String):Int {
-        if (app == null || !initialized || editorState == null) {
-            log("Editor: Cannot remove layer - engine not initialized");
-            return 0;
-        }
-        
-        try {
-            return editorState.removeLayer(layerName) ? 1 : 0;
-        } catch (e:Dynamic) {
-            log("Editor: Error removing layer: " + e);
-            return 0;
-        }
+        return editorState.removeLayer(layerName) ? 1 : 0;
     }
     
-    /**
-     * Remove a layer by index
-     * @param index Index of the layer to remove
-     * @return 1 if layer was found and removed, 0 otherwise
-     */
     @:keep
     public static function removeLayerByIndex(index:Int):Int {
-        if (app == null || !initialized || editorState == null) {
-            log("Editor: Cannot remove layer - engine not initialized");
-            return 0;
-        }
-        
-        try {
-            return editorState.removeLayerByIndex(index) ? 1 : 0;
-        } catch (e:Dynamic) {
-            log("Editor: Error removing layer by index: " + e);
-            return 0;
-        }
+        return editorState.removeLayerByIndex(index) ? 1 : 0;
     }
     
-    /**
-     * Move layer up in rendering order (earlier = behind)
-     * @param layerName Name of the layer to move
-     * @return 1 if layer was moved, 0 otherwise
-     */
     @:keep
     public static function moveLayerUp(layerName:String):Int {
-        if (app == null || !initialized || editorState == null) {
-            log("Editor: Cannot move layer - engine not initialized");
-            return 0;
-        }
-        
-        try {
-            return editorState.moveLayerUp(layerName) ? 1 : 0;
-        } catch (e:Dynamic) {
-            log("Editor: Error moving layer up: " + e);
-            return 0;
-        }
+        return editorState.moveLayerUp(layerName) ? 1 : 0;
     }
     
-    /**
-     * Move layer down in rendering order (later = on top)
-     * @param layerName Name of the layer to move
-     * @return 1 if layer was moved, 0 otherwise
-     */
     @:keep
     public static function moveLayerDown(layerName:String):Int {
-        if (app == null || !initialized || editorState == null) {
-            log("Editor: Cannot move layer - engine not initialized");
-            return 0;
-        }
-        
-        try {
-            return editorState.moveLayerDown(layerName) ? 1 : 0;
-        } catch (e:Dynamic) {
-            log("Editor: Error moving layer down: " + e);
-            return 0;
-        }
+        return editorState.moveLayerDown(layerName) ? 1 : 0;
     }
     
-    /**
-     * Move layer up by index
-     * @param index Index of the layer to move
-     * @return 1 if layer was moved, 0 otherwise
-     */
     @:keep
     public static function moveLayerUpByIndex(index:Int):Int {
-        if (app == null || !initialized || editorState == null) {
-            log("Editor: Cannot move layer - engine not initialized");
-            return 0;
-        }
-        
-        try {
-            return editorState.moveLayerUpByIndex(index) ? 1 : 0;
-        } catch (e:Dynamic) {
-            log("Editor: Error moving layer up by index: " + e);
-            return 0;
-        }
+       return editorState.moveLayerUpByIndex(index) ? 1 : 0;
     }
     
-    /**
-     * Move layer down by index
-     * @param index Index of the layer to move
-     * @return 1 if layer was moved, 0 otherwise
-     */
     @:keep
     public static function moveLayerDownByIndex(index:Int):Int {
-        if (app == null || !initialized || editorState == null) {
-            log("Editor: Cannot move layer - engine not initialized");
-            return 0;
-        }
-        
-        try {
-            return editorState.moveLayerDownByIndex(index) ? 1 : 0;
-        } catch (e:Dynamic) {
-            log("Editor: Error moving layer down by index: " + e);
-            return 0;
-        }
+        return editorState.moveLayerDownByIndex(index) ? 1 : 0;
     }
     
-    /**
-     * Get the total number of layers
-     * @return Number of layers
-     */
     @:keep
     public static function getLayerCount():Int {
-        if (app == null || !initialized || editorState == null) {
-            return 0;
-        }
-        
-        try {
-            return editorState.getLayerCount();
-        } catch (e:Dynamic) {
-            log("Editor: Error getting layer count: " + e);
-            return 0;
-        }
+        return editorState.getLayerCount();
     }
     
-    /**
-     * Get layer name at specific index
-     * @param index Index of the layer (0-based)
-     * @return Layer name or empty string if index out of bounds
-     */
-    @:keep
-    public static function getLayerNameAt(index:Int):String {
-        if (app == null || !initialized || editorState == null) {
-            return "";
-        }
-        
-        try {
-            var layer = editorState.getLayerAt(index);
-            return layer != null ? layer.id : "";
-        } catch (e:Dynamic) {
-            log("Editor: Error getting layer name at index: " + e);
-            return "";
-        }
-    }
-    
-    /**
-     * Get layer info at specific index
-     * @param index Index of the layer (0-based)
-     * @param outInfo Pointer to LayerInfoStruct to fill
-     * @return 1 on success, 0 on failure
-     */
-    @:keep
-    public static function getLayerInfoAt(index:Int, outInfo:cpp.RawPointer<cpp.Void>):Int {
-        if (app == null || !initialized || editorState == null) {
-            log("Editor: Cannot get layer info - engine not initialized or editor state not loaded");
-            return 0;
-        }
-        
-        try {
-            var layer = editorState.getLayerAt(index);
-            if (layer == null) {
-                log("Editor: Layer not found at index: " + index);
-                return 0;
-            }
-            
-            var name = layer.id;
-            var type = 0; // 0 = TilemapLayer, 1 = EntityLayer, 2 = FolderLayer
-            var tilesetName = "";
-            var visible = layer.visible ? 1 : 0;
-            var silhouette = layer.silhouette ? 1 : 0;
-            var silhouetteColor = layer.silhouetteColor.hexValue;
-            
-            // Determine layer type
-            if (Std.isOfType(layer, layers.TilemapLayer)) {
-                type = 0;
-                var tilemapLayer:layers.TilemapLayer = cast layer;
-                tilesetName = tilemapLayer.tileset.name;
-            } else if (Std.isOfType(layer, layers.EntityLayer)) {
-                type = 1;
-                var entityLayer:layers.EntityLayer = cast layer;
-                tilesetName = entityLayer.tileset.name;
-            } else if (Std.isOfType(layer, layers.FolderLayer)) {
-                type = 2;
-            }
-            
-            untyped __cpp__("
+	@:keep
+	public static function getLayerInfoAt(index:Int, outInfo:cpp.RawPointer<cpp.Void>):Int {
+		var layer = editorState.getLayerAt(index);
+		if (layer == null) {
+			log("Editor: Layer not found at index: " + index);
+			return 0;
+		}
+
+		var name = layer.id;
+		var type = 0; // 0 = TilemapLayer, 1 = EntityLayer, 2 = FolderLayer
+		var tilesetName = "";
+		var visible = layer.visible ? 1 : 0;
+		var silhouette = layer.silhouette ? 1 : 0;
+		var silhouetteColor = layer.silhouetteColor.hexValue;
+
+		// Determine layer type
+		if (Std.isOfType(layer, layers.TilemapLayer)) {
+			type = 0;
+			var tilemapLayer:layers.TilemapLayer = cast layer;
+			tilesetName = tilemapLayer.tileset.name;
+		} else if (Std.isOfType(layer, layers.EntityLayer)) {
+			type = 1;
+			var entityLayer:layers.EntityLayer = cast layer;
+			tilesetName = entityLayer.tileset.name;
+		} else if (Std.isOfType(layer, layers.FolderLayer)) {
+			type = 2;
+		}
+
+		untyped __cpp__("
                 LayerInfoStruct* outStruct = (LayerInfoStruct*)({0});
                 outStruct->name = {1}.utf8_str();
                 outStruct->type = {2};
@@ -1289,56 +987,39 @@ class Editor {
                 outStruct->silhouetteColor = {6};
                 outStruct->visible = {4};
             ", outInfo, name, type, tilesetName, visible, silhouette, silhouetteColor);
-            
-            return 1;
-            
-        } catch (e:Dynamic) {
-            log("Editor: Error getting layer info at index: " + e);
-            return 0;
-        }
-    }
+
+		return 1;
+	}
     
-    /**
-     * Get layer info by name
-     * @param layerName Name of the layer
-     * @param outInfo Pointer to LayerInfoStruct to fill
-     * @return 1 on success, 0 on failure
-     */
     @:keep
     public static function getLayerInfo(layerName:String, outInfo:cpp.RawPointer<cpp.Void>):Int {
-        if (app == null || !initialized || editorState == null) {
-            log("Editor: Cannot get layer info - engine not initialized or editor state not loaded");
-            return 0;
-        }
-        
-        try {
-            var layer = editorState.getLayerByName(layerName);
-            if (layer == null) {
-                log("Editor: Layer not found: " + layerName);
-                return 0;
-            }
-            
-            var name = layer.id;
-            var type = 0; // 0 = TilemapLayer, 1 = EntityLayer, 2 = FolderLayer
-            var tilesetName = "";
-            var visible = layer.visible ? 1 : 0;
-            var silhouette = layer.silhouette;
-            var silhouetteColor = layer.silhouetteColor.hexValue;
-            
-            // Determine layer type
-            if (Std.isOfType(layer, layers.TilemapLayer)) {
-                type = 0;
-                var tilemapLayer:layers.TilemapLayer = cast layer;
-                tilesetName = tilemapLayer.tileset.name;
-            } else if (Std.isOfType(layer, layers.EntityLayer)) {
-                type = 1;
-                var entityLayer:layers.EntityLayer = cast layer;
-                tilesetName = entityLayer.tileset.name;
-            } else if (Std.isOfType(layer, layers.FolderLayer)) {
-                type = 2;
-            }
-            
-            untyped __cpp__("
+		var layer = editorState.getLayerByName(layerName);
+		if (layer == null) {
+			log("Editor: Layer not found: " + layerName);
+			return 0;
+		}
+
+		var name = layer.id;
+		var type = 0; // 0 = TilemapLayer, 1 = EntityLayer, 2 = FolderLayer
+		var tilesetName = "";
+		var visible = layer.visible ? 1 : 0;
+		var silhouette = layer.silhouette;
+		var silhouetteColor = layer.silhouetteColor.hexValue;
+
+		// Determine layer type
+		if (Std.isOfType(layer, layers.TilemapLayer)) {
+			type = 0;
+			var tilemapLayer:layers.TilemapLayer = cast layer;
+			tilesetName = tilemapLayer.tileset.name;
+		} else if (Std.isOfType(layer, layers.EntityLayer)) {
+			type = 1;
+			var entityLayer:layers.EntityLayer = cast layer;
+			tilesetName = entityLayer.tileset.name;
+		} else if (Std.isOfType(layer, layers.FolderLayer)) {
+			type = 2;
+		}
+
+		untyped __cpp__("
                 LayerInfoStruct* outStruct = (LayerInfoStruct*)({0});
                 outStruct->name = {1}.utf8_str();
                 outStruct->type = {2};
@@ -1347,13 +1028,8 @@ class Editor {
                 outStruct->silhouette = {5};
                 outStruct->silhouetteColor = {6};
             ", outInfo, name, type, tilesetName, visible, silhouette, silhouetteColor);
-            
-            return 1;
-            
-        } catch (e:Dynamic) {
-            log("Editor: Error getting layer info: " + e);
-            return 0;
-        }
+
+		return 1;
     }
 
     @:keep
