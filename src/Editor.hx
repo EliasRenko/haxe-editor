@@ -167,8 +167,8 @@ extern "C" {
         ::Editor_obj::createTilemapLayer(::String(layerName), ::String(tilesetName), index);
     }
     
-    __declspec(dllexport) void createEntityLayer(const char* layerName, const char* tilesetName) {
-        ::Editor_obj::createEntityLayer(::String(layerName), ::String(tilesetName));
+    __declspec(dllexport) void createEntityLayer(const char* layerName) {
+        ::Editor_obj::createEntityLayer(::String(layerName));
     }
     
     __declspec(dllexport) void createFolderLayer(const char* layerName) {
@@ -202,6 +202,44 @@ extern "C" {
     __declspec(dllexport) int getLayerInfo(const char* layerName, LayerInfoStruct* outInfo) {
         ::String hxLayerName = ::String(layerName);
         return ::Editor_obj::getLayerInfo(hxLayerName, outInfo);
+    }
+
+    // entity layer batch accessors
+    __declspec(dllexport) int getEntityLayerBatchCount(const char* layerName) {
+        return ::Editor_obj::getEntityLayerBatchCount(::String(layerName));
+    }
+
+    __declspec(dllexport) int getEntityLayerBatchCountAt(int index) {
+        return ::Editor_obj::getEntityLayerBatchCountAt(index);
+    }
+
+    __declspec(dllexport) const char* getEntityLayerBatchTilesetName(const char* layerName, int batchIndex) {
+        return ::Editor_obj::getEntityLayerBatchTilesetName(::String(layerName), batchIndex).__s;
+    }
+
+    // batch movement wrappers
+    __declspec(dllexport) int moveEntityLayerBatchUp(const char* layerName, int batchIndex) {
+        return ::Editor_obj::moveEntityLayerBatchUp(::String(layerName), batchIndex);
+    }
+
+    __declspec(dllexport) int moveEntityLayerBatchDown(const char* layerName, int batchIndex) {
+        return ::Editor_obj::moveEntityLayerBatchDown(::String(layerName), batchIndex);
+    }
+
+    __declspec(dllexport) int moveEntityLayerBatchTo(const char* layerName, int batchIndex, int newIndex) {
+        return ::Editor_obj::moveEntityLayerBatchTo(::String(layerName), batchIndex, newIndex);
+    }
+
+    __declspec(dllexport) int moveEntityLayerBatchUpByIndex(int layerIndex, int batchIndex) {
+        return ::Editor_obj::moveEntityLayerBatchUpByIndex(layerIndex, batchIndex);
+    }
+
+    __declspec(dllexport) int moveEntityLayerBatchDownByIndex(int layerIndex, int batchIndex) {
+        return ::Editor_obj::moveEntityLayerBatchDownByIndex(layerIndex, batchIndex);
+    }
+
+    __declspec(dllexport) int moveEntityLayerBatchToByIndex(int layerIndex, int batchIndex, int newIndex) {
+        return ::Editor_obj::moveEntityLayerBatchToByIndex(layerIndex, batchIndex, newIndex);
     }
     
     __declspec(dllexport) int moveLayerUp(const char* layerName) {
@@ -896,8 +934,8 @@ class Editor {
     }
     
     @:keep
-    public static function createEntityLayer(layerName:String, tilesetName:String):Void {
-        editorState.createEntityLayer(layerName, tilesetName);
+    public static function createEntityLayer(layerName:String):Void {
+        editorState.createEntityLayer(layerName);
     }
     
     @:keep
@@ -949,6 +987,61 @@ class Editor {
     public static function getLayerCount():Int {
         return editorState.getLayerCount();
     }
+
+    // ----- entity layer batch accessors -----
+    @:keep
+    public static function getEntityLayerBatchCount(layerName:String):Int {
+        var layer = editorState.getLayerByName(layerName);
+        if (layer == null || !Std.isOfType(layer, layers.EntityLayer)) return 0;
+        return (cast layer:layers.EntityLayer).getBatchCount();
+    }
+
+    @:keep
+    public static function getEntityLayerBatchCountAt(index:Int):Int {
+        var layer = editorState.getLayerAt(index);
+        if (layer == null || !Std.isOfType(layer, layers.EntityLayer)) return 0;
+        return (cast layer:layers.EntityLayer).getBatchCount();
+    }
+
+    @:keep
+    public static function getEntityLayerBatchTilesetName(layerName:String, batchIndex:Int):String {
+        var layer = editorState.getLayerByName(layerName);
+        if (layer == null || !Std.isOfType(layer, layers.EntityLayer)) return "";
+        var entry = (cast layer:layers.EntityLayer).getBatchEntryAt(batchIndex);
+        if (entry == null) return "";
+        return entry.tileset != null ? entry.tileset.name : "";
+    }
+
+    // movement helpers
+    @:keep
+    public static function moveEntityLayerBatchUp(layerName:String, batchIndex:Int):Int {
+        return editorState.moveEntityLayerBatchUp(layerName, batchIndex) ? 1 : 0;
+    }
+
+    @:keep
+    public static function moveEntityLayerBatchDown(layerName:String, batchIndex:Int):Int {
+        return editorState.moveEntityLayerBatchDown(layerName, batchIndex) ? 1 : 0;
+    }
+
+    @:keep
+    public static function moveEntityLayerBatchTo(layerName:String, batchIndex:Int, newIndex:Int):Int {
+        return editorState.moveEntityLayerBatchTo(layerName, batchIndex, newIndex) ? 1 : 0;
+    }
+
+    @:keep
+    public static function moveEntityLayerBatchUpByIndex(layerIndex:Int, batchIndex:Int):Int {
+        return editorState.moveEntityLayerBatchUpByLayerIndex(layerIndex, batchIndex) ? 1 : 0;
+    }
+
+    @:keep
+    public static function moveEntityLayerBatchDownByIndex(layerIndex:Int, batchIndex:Int):Int {
+        return editorState.moveEntityLayerBatchDownByLayerIndex(layerIndex, batchIndex) ? 1 : 0;
+    }
+
+    @:keep
+    public static function moveEntityLayerBatchToByIndex(layerIndex:Int, batchIndex:Int, newIndex:Int):Int {
+        return editorState.moveEntityLayerBatchToByLayerIndex(layerIndex, batchIndex, newIndex) ? 1 : 0;
+    }
     
 	@:keep
 	public static function getLayerInfoAt(index:Int, outInfo:cpp.RawPointer<cpp.Void>):Int {
@@ -973,24 +1066,24 @@ class Editor {
 		} else if (Std.isOfType(layer, layers.EntityLayer)) {
 			type = 1;
 			var entityLayer:layers.EntityLayer = cast layer;
-			tilesetName = entityLayer.tileset.name;
-		} else if (Std.isOfType(layer, layers.FolderLayer)) {
-			type = 2;
-		}
+            if (entityLayer.batches != null && entityLayer.batches.length > 0) {
+                tilesetName = entityLayer.batches[0].tileset.name;
+            }
+        }
 
-		untyped __cpp__("
+        // write result into the C struct
+        untyped __cpp__("
                 LayerInfoStruct* outStruct = (LayerInfoStruct*)({0});
                 outStruct->name = {1}.utf8_str();
                 outStruct->type = {2};
                 outStruct->tilesetName = {3}.utf8_str();
+                outStruct->visible = {4};
                 outStruct->silhouette = {5};
                 outStruct->silhouetteColor = {6};
-                outStruct->visible = {4};
             ", outInfo, name, type, tilesetName, visible, silhouette, silhouetteColor);
+        return 1;
+    }
 
-		return 1;
-	}
-    
     @:keep
     public static function getLayerInfo(layerName:String, outInfo:cpp.RawPointer<cpp.Void>):Int {
 		var layer = editorState.getLayerByName(layerName);
@@ -1003,7 +1096,7 @@ class Editor {
 		var type = 0; // 0 = TilemapLayer, 1 = EntityLayer, 2 = FolderLayer
 		var tilesetName = "";
 		var visible = layer.visible ? 1 : 0;
-		var silhouette = layer.silhouette;
+		var silhouette = layer.silhouette ? 1 : 0;
 		var silhouetteColor = layer.silhouetteColor.hexValue;
 
 		// Determine layer type
@@ -1014,44 +1107,37 @@ class Editor {
 		} else if (Std.isOfType(layer, layers.EntityLayer)) {
 			type = 1;
 			var entityLayer:layers.EntityLayer = cast layer;
-			tilesetName = entityLayer.tileset.name;
-		} else if (Std.isOfType(layer, layers.FolderLayer)) {
-			type = 2;
-		}
-
-		untyped __cpp__("
-                LayerInfoStruct* outStruct = (LayerInfoStruct*)({0});
-                outStruct->name = {1}.utf8_str();
-                outStruct->type = {2};
-                outStruct->tilesetName = {3}.utf8_str();
-                outStruct->visible = {4};
-                outStruct->silhouette = {5};
-                outStruct->silhouetteColor = {6};
-            ", outInfo, name, type, tilesetName, visible, silhouette, silhouetteColor);
-
-		return 1;
+            if (entityLayer.batches != null && entityLayer.batches.length > 0) {
+                tilesetName = entityLayer.batches[0].tileset.name;
+            }
+        }
+        // write result into the C struct
+        untyped __cpp__(
+            "\n                LayerInfoStruct* outStruct = (LayerInfoStruct*)({0});\n                outStruct->name = {1}.utf8_str();\n                outStruct->type = {2};\n                outStruct->tilesetName = {3}.utf8_str();\n                outStruct->visible = {4};\n                outStruct->silhouette = {5};\n                outStruct->silhouetteColor = {6};\n            ",
+            outInfo, name, type, tilesetName, visible, silhouette, silhouetteColor);
+        return 1;
     }
-
+    
     @:keep
-	public static function setLayerProperties(layerName:String, properties:cpp.RawPointer<cpp.Void>):Void {
-			var name:String = null;
-			var type:Int = 0;
-			var tilesetName:String = null;
-			var visible:Int = 1;
-			var silhouette:Int = 0;
-			var silhouetteColor:Int = 0xFFFFFFFF;
-            
-			untyped __cpp__("
-            LayerInfoStruct* inStruct = (LayerInfoStruct*)({0});
-            {1} = ::String(inStruct->name);
-            {2} = inStruct->type;
-            {3} = ::String(inStruct->tilesetName);
-            {4} = inStruct->visible;
-            {5} = inStruct->silhouette;
-            {6} = inStruct->silhouetteColor;
+    public static function setLayerProperties(layerName:String, properties:cpp.RawPointer<cpp.Void>):Void {
+        var name:String = null;
+        var type:Int = 0;
+        var tilesetName:String = null;
+        var visible:Int = 1;
+        var silhouette:Int = 0;
+        var silhouetteColor:Int = 0xFFFFFFFF;
+
+        untyped __cpp__("
+        LayerInfoStruct* inStruct = (LayerInfoStruct*)({0});
+        {1} = ::String(inStruct->name);
+        {2} = inStruct->type;
+        {3} = ::String(inStruct->tilesetName);
+        {4} = inStruct->visible;
+        {5} = inStruct->silhouette;
+        {6} = inStruct->silhouetteColor;
         ", properties, name, type, tilesetName, visible, silhouette, silhouetteColor);
 
-		editorState.setLayerProperties(layerName, name, type, tilesetName, visible != 0, silhouette != 0, silhouetteColor);
+	    editorState.setLayerProperties(layerName, name, type, tilesetName, visible != 0, silhouette != 0, silhouetteColor);
 	}
 
 	@:keep

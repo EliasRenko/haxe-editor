@@ -110,10 +110,23 @@ extern "C" {
 
     // Layer management
     __declspec(dllexport) void createTilemapLayer(const char* layerName, const char* tilesetName, int index);
-    __declspec(dllexport) void createEntityLayer(const char* layerName, const char* tilesetName);
+    __declspec(dllexport) void createEntityLayer(const char* layerName);
     __declspec(dllexport) void createFolderLayer(const char* layerName);
 
     __declspec(dllexport) int getLayerInfo(const char* layerName, LayerInfoStruct* outInfo);
+
+    // batch accessors for entity layers
+    __declspec(dllexport) int getEntityLayerBatchCount(const char* layerName);
+    __declspec(dllexport) int getEntityLayerBatchCountAt(int index);
+    __declspec(dllexport) const char* getEntityLayerBatchTilesetName(const char* layerName, int batchIndex);
+
+    // batch movement
+    __declspec(dllexport) int moveEntityLayerBatchUp(const char* layerName, int batchIndex);
+    __declspec(dllexport) int moveEntityLayerBatchDown(const char* layerName, int batchIndex);
+    __declspec(dllexport) int moveEntityLayerBatchTo(const char* layerName, int batchIndex, int newIndex);
+    __declspec(dllexport) int moveEntityLayerBatchUpByIndex(int layerIndex, int batchIndex);
+    __declspec(dllexport) int moveEntityLayerBatchDownByIndex(int layerIndex, int batchIndex);
+    __declspec(dllexport) int moveEntityLayerBatchToByIndex(int layerIndex, int batchIndex, int newIndex);
     __declspec(dllexport) int getLayerInfoAt(int index, LayerInfoStruct* outInfo);
     __declspec(dllexport) int getLayerCount();
 
