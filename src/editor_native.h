@@ -39,6 +39,18 @@ typedef struct {
 } EntityDataStruct;
 
 typedef struct {
+    const char* idd;
+    const char* name;
+    int worldx;
+    int worldy;
+    int width;
+    int height;
+    int tileSize;
+    int bgColor;
+    int gridColor;
+} MapInfoStruct;
+
+typedef struct {
     const char* name;
     int type;                // 0 = TilemapLayer, 1 = EntityLayer, 2 = FolderLayer
     const char* tilesetName; // For TilemapLayer only (null for others)
@@ -146,7 +158,9 @@ extern "C" {
 
     __declspec(dllexport) void replaceLayerTileset(const char* layerName, const char* newTilesetName);
 
-    
+    // map
+    __declspec(dllexport) int getMapInfo(MapInfoStruct* outInfo);
+    __declspec(dllexport) int setMapInfo(MapInfoStruct* info);
 }
 
 #endif // EDITOR_NATIVE_H

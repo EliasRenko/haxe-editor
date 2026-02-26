@@ -1,5 +1,6 @@
 package display;
 
+import utils.Color;
 import data.Indices;
 import data.Vertices;
 import GL;
@@ -18,9 +19,11 @@ class Grid extends Transform {
     // Grid properties
     public var gridSize:Float = 100.0;
     public var subGridSize:Float = 25.0;
-    public var gridColor:Array<Float> = [0.3, 0.3, 0.3]; // RGB
-    public var backgroundColor:Array<Float> = [0.0, 0.0, 0.0]; // RGB
+    //public var gridColor:Array<Float> = [0.3, 0.3, 0.3]; // RGB
+    //public var backgroundColor:Array<Float> = [0.0, 0.0, 0.0]; // RGB
     public var fadeDistance:Float = 2000.0;
+    public var gridColor:Color = new Color(0xFF1F7EDD);
+    public var backgroundColor:Color = new Color(0x0D0D1AFF);
     
     // Bounds clipping (optional)
     public var enableBounds:Bool = false;
@@ -73,8 +76,9 @@ class Grid extends Transform {
         // Set uniforms for the grid shader
         uniforms.set("uGridSize", gridSize);
         uniforms.set("uSubGridSize", subGridSize);
-        uniforms.set("uGridColor", gridColor);
-        uniforms.set("uBackgroundColor", backgroundColor);
+        uniforms.set("uGridColor", [gridColor.r, gridColor.g, gridColor.b, 1.0]); // Convert Color to RGBA array
+        uniforms.set("uBackgroundColor", [backgroundColor.r, backgroundColor.g, backgroundColor.b, 1.0]); // Convert Color to RGBA array
+        //uniforms.set("uBackgroundColor", [0, 0, 0, 1.0]); // Convert Color to RGBA array
         uniforms.set("uFadeDistance", fadeDistance);
         
         // Set bounds uniforms
@@ -84,26 +88,6 @@ class Grid extends Transform {
 
         // Call parent render - it will handle updateTransform and uMatrix
         super.render(cameraMatrix);
-    }
-
-    /**
-     * Set the grid color
-     * @param r Red component (0-1)
-     * @param g Green component (0-1)
-     * @param b Blue component (0-1)
-     */
-    public function setGridColor(r:Float, g:Float, b:Float):Void {
-        gridColor = [r, g, b];
-    }
-
-    /**
-     * Set the background color
-     * @param r Red component (0-1)
-     * @param g Green component (0-1)
-     * @param b Blue component (0-1)
-     */
-    public function setBackgroundColor(r:Float, g:Float, b:Float):Void {
-        backgroundColor = [r, g, b];
     }
     
     /**

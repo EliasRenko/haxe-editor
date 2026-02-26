@@ -1,5 +1,6 @@
 ﻿package states;
 
+import utils.Color;
 import layers.ITilesLayer;
 import Log.LogCategory;
 import State;
@@ -41,11 +42,14 @@ class EditorState extends State {
     private var activeLayer:Layer = null;
     //public var selectedTileRegion:Int = 0;
     
+    // Map properties
+    public var iid:String = "test_id";
+
     // Map bounds (defines the editable area)
-    private var mapX:Float = 0;
-    private var mapY:Float = 0;
-    private var mapWidth:Float = 1024; // 32x32 tiles
-    private var mapHeight:Float = 1024;
+    public var mapX:Float = 0;
+    public var mapY:Float = 0;
+    public var mapWidth:Float = 1024; // 32x32 tiles
+    public var mapHeight:Float = 1024;
     
     // Resize state
     private var resizeMode:String = null; // "top", "bottom", "left", "right", or null
@@ -77,8 +81,10 @@ class EditorState extends State {
         grid = new Grid(gridProgramInfo, 5000.0); // 5000 unit quad
         grid.gridSize = 128.0; // 128 pixel large grid
         grid.subGridSize = 32.0; // 32 pixel small grid
-        grid.setGridColor(0.2, 0.4, 0.6); // Blue-ish grid lines
-        grid.setBackgroundColor(0.05, 0.05, 0.1); // Dark blue background
+        //grid.setGridColor(0.2, 0.4, 0.6); // Blue-ish grid lines
+        //grid.setBackgroundColor(0.05, 0.05, 0.1); // Dark blue background
+        //grid.gridColor = new Color(0xFF336699); // Blue-ish grid lines
+        //grid.backgroundColor = new Color(0xFF0D0D1A); // Dark blue background
         grid.fadeDistance = 3000.0;
         grid.z = 0.0;
         grid.depthTest = false;
@@ -1314,6 +1320,31 @@ class EditorState extends State {
         if (grid != null) {
             grid.setBounds(mapX, mapY, mapX + mapWidth, mapY + mapHeight);
         }
+    }
+
+    // /**
+    //  * Retrieve map info into the provided struct-like object
+    //  */
+    // public function getMapInfo(outInfo:Dynamic):Int {
+    //     outInfo.idd = this.name;
+    //     outInfo.name = this.name;
+    //     outInfo.worldx = Std.int(mapX);
+    //     outInfo.worldy = Std.int(mapY);
+    //     outInfo.width = Std.int(mapWidth);
+    //     outInfo.height = Std.int(mapHeight);
+    //     outInfo.bgColor = 0;
+    //     outInfo.gridColor = 0;
+    //     return 1;
+    // }
+
+    /**
+     * Apply map info from struct-like object (currently only bounds)
+     */
+    public function setMapInfo(gridColor:Int, bgColor:Int):Int {
+        grid.gridColor.hexValue = gridColor; 
+        grid.backgroundColor.hexValue = bgColor; 
+
+        return 1;
     }
     
     override public function render(renderer:Renderer):Void {

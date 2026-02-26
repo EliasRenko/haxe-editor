@@ -10,7 +10,7 @@ import utils.ImportContext;
 
 /**
  * Handles importing and exporting map data to JSON format
- * Version 1.3 format supports both tilemap and entity layers
+ * Version 1.4 format supports both tilemap and entity layers
  */
 class MapSerializer {
     

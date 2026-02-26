@@ -298,7 +298,16 @@ extern "C" {
     __declspec(dllexport) void replaceLayerTileset(const char* layerName, const char* newTilesetName) {
         ::Editor_obj::replaceLayerTileset(::String(layerName), ::String(newTilesetName));
     }
+
+     __declspec(dllexport) int getMapInfo(MapInfoStruct* outInfo) {
+            return ::Editor_obj::getMapInfo(outInfo);
+        }
+
+        __declspec(dllexport) int setMapInfo(MapInfoStruct* info) {
+            return ::Editor_obj::setMapInfo(info);
+        }
 }
+
 ')
 
 class Editor {
@@ -1172,8 +1181,60 @@ class Editor {
 
 	}
 
+	@:keep
+	public static function replaceLayerTileset(layerName:String, newTilesetName:String):Void {
+		editorState.replaceLayerTileset(layerName, newTilesetName);
+	}
+
     @:keep
-    public static function replaceLayerTileset(layerName:String, newTilesetName:String):Void {
-        editorState.replaceLayerTileset(layerName, newTilesetName);
+	public static function getMapInfo(outInfo:cpp.RawPointer<cpp.Void>):Int {
+
+        untyped __cpp__("
+        MapInfoStruct* outStruct = (MapInfoStruct*)({0});
+        outStruct->idd = {1}.utf8_str();
+        outStruct->name = {2}.utf8_str();
+        outStruct->worldx = {3};
+        outStruct->worldy = {4};
+        outStruct->width = {5};
+        outStruct->height = {6};
+        outStruct->tileSize = {7};
+        outStruct->bgColor = {8};
+        outStruct->gridColor = {9};
+        ", outInfo, editorState.iid, editorState.name, editorState.mapX, editorState.mapY, editorState.mapWidth, editorState.mapHeight, editorState.tileSize, editorState.grid.backgroundColor.hexValue, editorState.grid.gridColor.hexValue);
+        
+
+        return 1;
     }
+
+    @:keep
+	public static function setMapInfo(info:cpp.RawPointer<cpp.Void>):Int {
+       
+        //TODO: Set the rest of the properties 
+
+        var idd:String = "";
+        var name:String = null;
+        var worldx:Int = 0;
+        var worldy:Int = 0;
+        var width:Int = 0;
+        var height:Int = 0;
+        var tileSize:Int = 0;
+        var bgColor:Int = 0xFF000000;
+        var gridColor:Int = 0xFFFFFFFF;
+
+        untyped __cpp__("
+        MapInfoStruct* outStruct = (MapInfoStruct*)({0});
+        {1} = ::String(outStruct->idd);
+        {2} = ::String(outStruct->name);
+        {3} = outStruct->worldx;
+        {4} = outStruct->worldy;
+        {5} = outStruct->width;
+        {6} = outStruct->height;
+        {7} = outStruct->tileSize;
+        {8} = outStruct->bgColor;
+        {9} = outStruct->gridColor;
+        ", info, idd, name, worldx, worldy, width, height, tileSize, bgColor, gridColor);
+        
+
+        return editorState.setMapInfo(gridColor, bgColor);
+	}
 }
