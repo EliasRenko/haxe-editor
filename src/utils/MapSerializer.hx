@@ -150,7 +150,7 @@ class MapSerializer {
         
         // Create JSON structure
         var data = {
-            version: "1.3",
+            version: "1.4",
             tilesets: tilesetsArray,
             entityDefinitions: entitiesArray,
             currentTileset: tilesetManager.currentTilesetName,
