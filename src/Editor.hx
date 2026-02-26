@@ -249,6 +249,10 @@ extern "C" {
     __declspec(dllexport) int moveLayerDown(const char* layerName) {
         return ::Editor_obj::moveLayerDown(::String(layerName));
     }
+
+    __declspec(dllexport) int moveLayerTo(const char* layerName, int newIndex) {
+        return ::Editor_obj::moveLayerTo(::String(layerName), newIndex);
+    }
     
     __declspec(dllexport) int moveLayerUpByIndex(int index) {
         return ::Editor_obj::moveLayerUpByIndex(index);
@@ -971,6 +975,11 @@ class Editor {
     @:keep
     public static function moveLayerDown(layerName:String):Int {
         return editorState.moveLayerDown(layerName) ? 1 : 0;
+    }
+
+    @:keep
+    public static function moveLayerTo(layerName:String, newIndex:Int):Int {
+        return editorState.moveLayerTo(layerName, newIndex) ? 1 : 0;
     }
     
     @:keep

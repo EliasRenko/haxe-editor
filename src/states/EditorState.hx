@@ -19,7 +19,7 @@ import manager.EntityManager;
 import utils.MapSerializer;
 
 class EditorState extends State {
-    
+
     private var grid:Grid;
     private var tileBatch:ManagedTileBatch;
     private var mapFrame:MapFrame;
@@ -960,20 +960,62 @@ class EditorState extends State {
         
         return true;
     }
-    
-    /**
-     * Move layer up by index
-     * @param index Index of the layer to move (layer index, not entity index)
-     * @return True if layer was moved, false otherwise
-     */
-    public function moveLayerUpByIndex(index:Int):Bool {
-        var layer = getLayerAt(index);
-        if (layer == null) {
-            return false;
-        }
-        return moveLayerUp(layer.id);
-    }
 
+	public function moveLayerTo(layerName:String, newIndex:Int):Bool {
+		var layer = getLayerByName(layerName);
+		if (layer == null) {
+			trace("Layer not found: " + layerName);
+			return false;
+		}
+		// Find the layer's position in entities array
+		var currentIndex = -1;
+		for (i in 0...entities.length) {
+			if (entities[i] == layer) {
+				currentIndex = i;
+				break;
+			}
+		}
+		if (currentIndex == -1) {
+			trace("Layer not found in entities array");
+			return false;
+		}
+		// Count only Layer entities for bounds
+		var layerCount = getLayerCount();
+		if (newIndex < 0)
+			newIndex = 0;
+		if (newIndex >= layerCount)
+			newIndex = layerCount - 1;
+		// If already at position, nothing to do
+		var currentLayerIndex = 0;
+		for (i in 0...entities.length) {
+			if (Std.isOfType(entities[i], Layer)) {
+				if (entities[i] == layer)
+					break;
+				currentLayerIndex++;
+			}
+		}
+		if (currentLayerIndex == newIndex)
+			return true;
+		// Remove from entities
+		entities.remove(layer);
+		// Find the actual entity index for the Nth layer
+		var insertIndex = 0;
+		var count = 0;
+		for (i in 0...entities.length) {
+			if (Std.isOfType(entities[i], Layer)) {
+				if (count == newIndex) {
+					insertIndex = i;
+					break;
+				}
+				count++;
+			}
+			insertIndex = i + 1;
+		}
+		entities.insert(insertIndex, layer);
+		return true;
+	}
+    
+    
     /** move batch up within an entity layer identified by name */
     public function moveEntityLayerBatchUp(layerName:String, batchIndex:Int):Bool {
         var layer = getLayerByName(layerName);
@@ -1031,12 +1073,15 @@ class EditorState extends State {
         if (entry == null) return false;
         return el.moveBatchTo(entry, newIndex);
     }
-    
-    /**
-     * Move layer down by index
-     * @param index Index of the layer to move (layer index, not entity index)
-     * @return True if layer was moved, false otherwise
-     */
+
+    public function moveLayerUpByIndex(index:Int):Bool {
+        var layer = getLayerAt(index);
+        if (layer == null) {
+            return false;
+        }
+        return moveLayerUp(layer.id);
+    }
+
     public function moveLayerDownByIndex(index:Int):Bool {
         var layer = getLayerAt(index);
         if (layer == null) {
