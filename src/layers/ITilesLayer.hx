@@ -3,8 +3,6 @@ package layers;
 import display.ManagedTileBatch;
 
 interface ITilesLayer {
-    public var tileset:Tileset;
-    public var managedTileBatch:ManagedTileBatch;
-
+    // Only requirement now is the ability to update regions when tileset changes
     public function redefineRegions(newTileset:Tileset):Void;
 }

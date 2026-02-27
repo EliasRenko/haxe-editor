@@ -3,13 +3,14 @@ package utils;
 import layers.Layer;
 import layers.TilemapLayer;
 import layers.EntityLayer;
+import Tileset;
 import manager.TilesetManager;
 import manager.EntityManager;
 import utils.ImportContext;
 
 /**
  * Handles importing and exporting map data to JSON format
- * Version 1.3 format supports both tilemap and entity layers
+ * Version 1.4 format supports both tilemap and entity layers
  */
 class MapSerializer {
     
@@ -83,27 +84,38 @@ class MapSerializer {
                 }
             } else if (Std.isOfType(layer, EntityLayer)) {
                 var entityLayer:EntityLayer = cast layer;
-                var layerEntities:Array<Dynamic> = [];
-                
-                // Export all entities from this layer
-                for (entityId in entityLayer.entities.keys()) {
-                    var entityData = entityLayer.entities.get(entityId);
-                    layerEntities.push({
-                        name: entityData.name,
-                        x: entityData.x,
-                        y: entityData.y
-                    });
+                var batchesData:Array<Dynamic> = [];
+                var totalEntities = 0;
+
+                // Export each batch separately with its own list of entities
+                for (entry in entityLayer.batches) {
+                    var batchEntities:Array<Dynamic> = [];
+                    for (entityId in entry.entities.keys()) {
+                        var entityData = entry.entities.get(entityId);
+                        batchEntities.push({
+                            name: entityData.name,
+                            x: entityData.x,
+                            y: entityData.y
+                        });
+                    }
+                    if (batchEntities.length > 0) {
+                        batchesData.push({
+                            tilesetName: entry.tileset.name,
+                            entities: batchEntities,
+                            count: batchEntities.length
+                        });
+                        totalEntities += batchEntities.length;
+                    }
                 }
-                
-                // Only add layer if it has entities
-                if (layerEntities.length > 0) {
+
+                // Only add layer if it has any batches with entities
+                if (batchesData.length > 0) {
                     layersData.push({
                         type: "entity",
                         name: entityLayer.id,
-                        tilesetName: entityLayer.tileset.name,
                         visible: entityLayer.visible,
-                        entities: layerEntities,
-                        entityCount: layerEntities.length
+                        batches: batchesData,
+                        entityCount: totalEntities
                     });
                 }
             }
@@ -138,7 +150,7 @@ class MapSerializer {
         
         // Create JSON structure
         var data = {
-            version: "1.3",
+            version: "1.4",
             tilesets: tilesetsArray,
             entityDefinitions: entitiesArray,
             currentTileset: tilesetManager.currentTilesetName,
@@ -245,15 +257,16 @@ class MapSerializer {
                 for (layerData in layersData) {
                     var layerType:String = layerData.type != null ? layerData.type : "tilemap";
                     var layerName:String = layerData.name != null ? layerData.name : "Layer_" + layerData.tilesetName;
-                    var tilesetName:String = layerData.tilesetName;
-                    var tileset = context.tilesetManager.tilesets.get(tilesetName);
-                    
-                    if (tileset == null) {
-                        trace("Skipping layer with unknown tileset: " + tilesetName);
-                        continue;
-                    }
                     
                     if (layerType == "tilemap") {
+                        var tilesetName:String = layerData.tilesetName;
+                        var tileset:Tileset = context.tilesetManager.tilesets.get(tilesetName);
+                        
+                        if (tileset == null) {
+                            trace("Skipping layer with unknown tileset: " + tilesetName);
+                            continue;
+                        }
+                        
                         // Create a new tilemap layer via callback
                         var tilemapLayer = context.createTilemapLayer(layerName, tilesetName, -1);
                         
@@ -291,8 +304,8 @@ class MapSerializer {
                             }
                         }
                     } else if (layerType == "entity") {
-                        // Create a new entity layer via callback
-                        var entityLayer = context.createEntityLayer(layerName, tilesetName);
+                        // Create a new entity layer via callback (now takes only name)
+                        var entityLayer = context.createEntityLayer(layerName);
                         
                         if (entityLayer != null) {
                             // Set visibility
@@ -301,36 +314,51 @@ class MapSerializer {
                             }
                             
                             // Add entities
-                            if (layerData.entities != null) {
-                                var entities:Array<Dynamic> = layerData.entities;
+                            if (layerData.batches != null) {
+                                var batches:Array<Dynamic> = layerData.batches;
                                 
+                                for (batchData in batches) {
+                                    var tsName:String = batchData.tilesetName;
+                                    var tileset:Tileset = context.tilesetManager.tilesets.get(tsName);
+                                    if (tileset == null) continue;
+
+                                    var programInfo = context.renderer.getProgramInfo("texture");
+                                    
+                                    // iterate entities within this batch
+                                    var batchEntities:Array<Dynamic> = batchData.entities;
+                                    for (entityData in batchEntities) {
+                                        var entityName:String = entityData.name;
+                                        var x:Float = entityData.x;
+                                        var y:Float = entityData.y;
+                                        var entityDef = context.entityManager.getEntityDefinition(entityName);
+                                        if (entityDef == null) continue;
+                                        entityLayer.placeEntity(entityDef, tileset, x, y, context.renderer, programInfo);
+                                        importedCount++;
+                                    }
+                                }
+                            } else if (layerData.entities != null) {
+                                // legacy flat list support
+                                var entities:Array<Dynamic> = layerData.entities;
+                                var programInfo = context.renderer.getProgramInfo("texture");
                                 for (entityData in entities) {
                                     var entityName:String = entityData.name;
                                     var x:Float = entityData.x;
                                     var y:Float = entityData.y;
-                                    
-                                    // Get entity definition
+                                    var tsName:String = Std.is(entityData.tilesetName,String) ? entityData.tilesetName : null;
                                     var entityDef = context.entityManager.getEntityDefinition(entityName);
-                                    if (entityDef != null) {
-                                        // Add entity to the layer
-                                        entityLayer.addEntity(
-                                            entityDef.name,
-                                            x,
-                                            y,
-                                            entityDef.width,
-                                            entityDef.height,
-                                            entityDef.regionX,
-                                            entityDef.regionY,
-                                            entityDef.regionWidth,
-                                            entityDef.regionHeight
-                                        );
-                                        importedCount++;
-                                    }
+                                    if (entityDef == null) continue;
+                                    var lookupName = tsName != null ? tsName : entityDef.tilesetName;
+                                    var tileset:Tileset = context.tilesetManager.tilesets.get(lookupName);
+                                    if (tileset == null) continue;
+                                    entityLayer.placeEntity(entityDef, tileset, x, y, context.renderer, programInfo);
+                                    importedCount++;
                                 }
-                                
-                                // Upload all entity data to GPU after adding all entities
-                                if (entityLayer.managedTileBatch.needsBufferUpdate) {
-                                    entityLayer.managedTileBatch.updateBuffers(context.renderer);
+                            }
+                            
+                            // Upload all entity data batches to GPU after adding all entities
+                            for (eentry in entityLayer.batches) {
+                                if (eentry.batch.needsBufferUpdate) {
+                                    eentry.batch.updateBuffers(context.renderer);
                                 }
                             }
                         }

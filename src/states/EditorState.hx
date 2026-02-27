@@ -1,5 +1,6 @@
 ﻿package states;
 
+import utils.Color;
 import layers.ITilesLayer;
 import Log.LogCategory;
 import State;
@@ -12,14 +13,15 @@ import display.LineBatch;
 import layers.Layer;
 import layers.TilemapLayer;
 import layers.EntityLayer;
+import Tileset;
 import layers.FolderLayer;
 import manager.TilesetManager;
 import manager.EntityManager;
 import utils.MapSerializer;
 
 class EditorState extends State {
-    
-    private var grid:Grid;
+
+    public var grid:Grid;
     private var tileBatch:ManagedTileBatch;
     private var mapFrame:MapFrame;
     private var worldAxes:LineBatch;
@@ -33,18 +35,21 @@ class EditorState extends State {
     public var entityManager:EntityManager = new EntityManager();
     
     // Tile editor settings
-    private var tileSize:Int = 32; // Size of each tile in pixels
+    public var tileSize:Int = 32; // Size of each tile in pixels
     private var tileRegions:Array<Int> = []; // Available tile regions (for backward compatibility)
     
     // Layer management (layers are stored in entities array)
     private var activeLayer:Layer = null;
     //public var selectedTileRegion:Int = 0;
     
+    // Map properties
+    public var iid:String = "test_id";
+
     // Map bounds (defines the editable area)
-    private var mapX:Float = 0;
-    private var mapY:Float = 0;
-    private var mapWidth:Float = 1024; // 32x32 tiles
-    private var mapHeight:Float = 1024;
+    public var mapX:Float = 0;
+    public var mapY:Float = 0;
+    public var mapWidth:Float = 1024; // 32x32 tiles
+    public var mapHeight:Float = 1024;
     
     // Resize state
     private var resizeMode:String = null; // "top", "bottom", "left", "right", or null
@@ -76,8 +81,10 @@ class EditorState extends State {
         grid = new Grid(gridProgramInfo, 5000.0); // 5000 unit quad
         grid.gridSize = 128.0; // 128 pixel large grid
         grid.subGridSize = 32.0; // 32 pixel small grid
-        grid.setGridColor(0.2, 0.4, 0.6); // Blue-ish grid lines
-        grid.setBackgroundColor(0.05, 0.05, 0.1); // Dark blue background
+        //grid.setGridColor(0.2, 0.4, 0.6); // Blue-ish grid lines
+        //grid.setBackgroundColor(0.05, 0.05, 0.1); // Dark blue background
+        //grid.gridColor = new Color(0xFF336699); // Blue-ish grid lines
+        //grid.backgroundColor = new Color(0xFF0D0D1A); // Dark blue background
         grid.fadeDistance = 3000.0;
         grid.z = 0.0;
         grid.depthTest = false;
@@ -100,13 +107,15 @@ class EditorState extends State {
 
     // CHECKED!
     public function createTileset(texturePath:String, tilesetName:String, tileSize:Int):String {
+        var error:String = null;
+
         if (!app.resources.cached(texturePath)) {
             app.log.info(LogCategory.APP, "Loading texture: " + texturePath);
             app.resources.loadTexture(texturePath, false);
         }
 
         if (tilesetManager.exists(tilesetName)) {
-            var error:String = "Tileset with the name " + tilesetName + " already exists";
+            error = "Tileset with the name " + tilesetName + " already exists";
             app.log.info(LogCategory.APP, error);
             return error;
         }
@@ -121,14 +130,16 @@ class EditorState extends State {
     
     // CHECKED!
     public function createEntity(entityName:String, width:Int, height:Int, tilesetName:String):String {
+        var error:String = null;
+        
         if (!tilesetManager.exists(tilesetName)) {
-            var error:String = "Cannot create entity. Tileset with the name " + tilesetName + " does not exist";
+            error = "Cannot create entity. Tileset with the name " + tilesetName + " does not exist";
             app.log.info(LogCategory.APP, error);
             return error;
         }
 
         if (entityManager.exists(entityName)) {
-            var error:String = "Entity with the name " + entityName + " already exists";
+            error = "Entity with the name " + entityName + " already exists";
             app.log.info(LogCategory.APP, error);
             return error;
         }
@@ -440,18 +451,14 @@ class EditorState extends State {
             return;
         }
         
-        // Add entity as a tile in the batch
-        var entityId = entityLayer.addEntity(
-            entityDef.name,
-            worldX,
-            worldY,
-            entityDef.width,
-            entityDef.height,
-            entityDef.regionX,
-            entityDef.regionY,
-            entityDef.regionWidth,
-            entityDef.regionHeight
-        );
+        // Add entity as a tile in the appropriate batch
+        var textureProgramInfo = app.renderer.getProgramInfo("texture");
+        if (textureProgramInfo == null) return;
+        // lookup tileset instance for this entity
+        var tileset:Tileset = tilesetManager.tilesets.get(entityDef.tilesetName);
+        if (tileset == null) return;
+        var entityId = entityLayer.placeEntity(entityDef, tileset, worldX, worldY, app.renderer, textureProgramInfo);
+
     }
     
     /**
@@ -963,12 +970,120 @@ class EditorState extends State {
         
         return true;
     }
+
+	public function moveLayerTo(layerName:String, newIndex:Int):Bool {
+		var layer = getLayerByName(layerName);
+		if (layer == null) {
+			trace("Layer not found: " + layerName);
+			return false;
+		}
+		// Find the layer's position in entities array
+		var currentIndex = -1;
+		for (i in 0...entities.length) {
+			if (entities[i] == layer) {
+				currentIndex = i;
+				break;
+			}
+		}
+		if (currentIndex == -1) {
+			trace("Layer not found in entities array");
+			return false;
+		}
+		// Count only Layer entities for bounds
+		var layerCount = getLayerCount();
+		if (newIndex < 0)
+			newIndex = 0;
+		if (newIndex >= layerCount)
+			newIndex = layerCount - 1;
+		// If already at position, nothing to do
+		var currentLayerIndex = 0;
+		for (i in 0...entities.length) {
+			if (Std.isOfType(entities[i], Layer)) {
+				if (entities[i] == layer)
+					break;
+				currentLayerIndex++;
+			}
+		}
+		if (currentLayerIndex == newIndex)
+			return true;
+		// Remove from entities
+		entities.remove(layer);
+		// Find the actual entity index for the Nth layer
+		var insertIndex = 0;
+		var count = 0;
+		for (i in 0...entities.length) {
+			if (Std.isOfType(entities[i], Layer)) {
+				if (count == newIndex) {
+					insertIndex = i;
+					break;
+				}
+				count++;
+			}
+			insertIndex = i + 1;
+		}
+		entities.insert(insertIndex, layer);
+		return true;
+	}
     
-    /**
-     * Move layer up by index
-     * @param index Index of the layer to move (layer index, not entity index)
-     * @return True if layer was moved, false otherwise
-     */
+    
+    /** move batch up within an entity layer identified by name */
+    public function moveEntityLayerBatchUp(layerName:String, batchIndex:Int):Bool {
+        var layer = getLayerByName(layerName);
+        if (layer == null || !Std.isOfType(layer, layers.EntityLayer)) return false;
+        var el = cast(layer, layers.EntityLayer);
+        var entry = el.getBatchEntryAt(batchIndex);
+        if (entry == null) return false;
+        return el.moveBatchUp(entry);
+    }
+
+    /** move batch down within an entity layer identified by name */
+    public function moveEntityLayerBatchDown(layerName:String, batchIndex:Int):Bool {
+        var layer = getLayerByName(layerName);
+        if (layer == null || !Std.isOfType(layer, layers.EntityLayer)) return false;
+        var el = cast(layer, layers.EntityLayer);
+        var entry = el.getBatchEntryAt(batchIndex);
+        if (entry == null) return false;
+        return el.moveBatchDown(entry);
+    }
+
+    /** relocate batch to new position in entity layer identified by name */
+    public function moveEntityLayerBatchTo(layerName:String, batchIndex:Int, newIndex:Int):Bool {
+        var layer = getLayerByName(layerName);
+        if (layer == null || !Std.isOfType(layer, layers.EntityLayer)) return false;
+        var el = cast(layer, layers.EntityLayer);
+        var entry = el.getBatchEntryAt(batchIndex);
+        if (entry == null) return false;
+        return el.moveBatchTo(entry, newIndex);
+    }
+
+    // index-based wrappers (look up layer by index)
+    public function moveEntityLayerBatchUpByLayerIndex(layerIndex:Int, batchIndex:Int):Bool {
+        var layer = getLayerAt(layerIndex);
+        if (layer == null || !Std.isOfType(layer, layers.EntityLayer)) return false;
+        var el = cast(layer, layers.EntityLayer);
+        var entry = el.getBatchEntryAt(batchIndex);
+        if (entry == null) return false;
+        return el.moveBatchUp(entry);
+    }
+
+    public function moveEntityLayerBatchDownByLayerIndex(layerIndex:Int, batchIndex:Int):Bool {
+        var layer = getLayerAt(layerIndex);
+        if (layer == null || !Std.isOfType(layer, layers.EntityLayer)) return false;
+        var el = cast(layer, layers.EntityLayer);
+        var entry = el.getBatchEntryAt(batchIndex);
+        if (entry == null) return false;
+        return el.moveBatchDown(entry);
+    }
+
+    public function moveEntityLayerBatchToByLayerIndex(layerIndex:Int, batchIndex:Int, newIndex:Int):Bool {
+        var layer = getLayerAt(layerIndex);
+        if (layer == null || !Std.isOfType(layer, layers.EntityLayer)) return false;
+        var el = cast(layer, layers.EntityLayer);
+        var entry = el.getBatchEntryAt(batchIndex);
+        if (entry == null) return false;
+        return el.moveBatchTo(entry, newIndex);
+    }
+
     public function moveLayerUpByIndex(index:Int):Bool {
         var layer = getLayerAt(index);
         if (layer == null) {
@@ -976,12 +1091,7 @@ class EditorState extends State {
         }
         return moveLayerUp(layer.id);
     }
-    
-    /**
-     * Move layer down by index
-     * @param index Index of the layer to move (layer index, not entity index)
-     * @return True if layer was moved, false otherwise
-     */
+
     public function moveLayerDownByIndex(index:Int):Bool {
         var layer = getLayerAt(index);
         if (layer == null) {
@@ -1036,29 +1146,12 @@ class EditorState extends State {
     /**
      * Create a new entity layer
      */
-    public function createEntityLayer(name:String, tilesetName:String):EntityLayer {
-        //TODO:FIX THIS
-        var tileset = tilesetManager.tilesets.get(tilesetName);
-        if (tileset == null) {
-            trace("Cannot create entity layer: tileset '" + tilesetName + "' not found");
-            return null;
-        }
-        
-        var textureProgramInfo = app.renderer.getProgramInfo("texture");
-        if (textureProgramInfo == null) {
-            trace("Cannot create entity layer: texture program not found");
-            return null;
-        }
-        
-        var entityBatch = new ManagedTileBatch(textureProgramInfo, tileset.textureId);
-        entityBatch.debugName = "EntityLayer:" + name;
-        entityBatch.depthTest = false; // Disable depth testing for 2D rendering
-        entityBatch.visible = true; // Ensure batch is visible
-        entityBatch.init(app.renderer);
-        
-        var layer = new EntityLayer(name, tileset, entityBatch);
+    public function createEntityLayer(name:String):EntityLayer {
+        // factory for a new entity layer; caller is responsible for adding batches later when
+        // placing the first entity (tileset is determined by the entity definition)
+        var layer = new EntityLayer(name);
         addLayer(layer);
-        trace("Created entity layer: " + name + " with tileset: " + tilesetName);
+        trace("Created empty entity layer: " + name);
         return layer;
     }
     
@@ -1084,7 +1177,7 @@ class EditorState extends State {
             return;
         }
         
-        var tilemapLayer:ITilesLayer = cast layer;
+        var tilemapLayer:TilemapLayer = cast layer;
         var newTileset = tilesetManager.tilesets.get(newTilesetName);
         
         if (newTileset == null) {
@@ -1201,8 +1294,12 @@ class EditorState extends State {
                 if (tl.tileGrid != null) tl.tileGrid.clear();
             } else if (Std.isOfType(layer, EntityLayer)) {
                 var el:EntityLayer = cast layer;
-                if (el.managedTileBatch != null) el.managedTileBatch.clear();
-                if (el.entities != null) el.entities.clear();
+                // clear all batches within the entity layer
+                for (entry in el.batches) {
+                    if (entry.batch != null) entry.batch.clear();
+                    if (entry.entities != null) entry.entities.clear();
+                    if (entry.definedRegions != null) entry.definedRegions.clear();
+                }
             }
             entities.remove(layer);
         }

@@ -1,12 +1,11 @@
-/**
- * Tileset structure containing texture and tile information
- * This is pure metadata - each layer creates its own batch instance
- */
-typedef Tileset = {
-    var name:String;              // Tileset name (e.g., "devTiles")
-    var texturePath:String;       // Resource path (e.g., "textures/devTiles.tga")
-    var textureId:Texture;        // OpenGL texture object from renderer.uploadTexture()
-    var tileSize:Int;             // Size of each tile in pixels
-    var tilesPerRow:Int;          // Number of tiles per row in atlas
-    var tilesPerCol:Int;          // Number of tiles per column in atlas
+package;
+
+@:structInit 
+class Tileset {
+    public var name:String;              // Tileset name (e.g., "devTiles")
+    public var texturePath:String;       // Resource path (e.g., "textures/devTiles.tga")
+    public var textureId:Texture;        // OpenGL texture object from renderer.uploadTexture()
+    public var tileSize:Int;             // Size of each tile in pixels
+    public var tilesPerRow:Int;          // Number of tiles per row in atlas
+    public var tilesPerCol:Int;          // Number of tiles per column in atlas
 }

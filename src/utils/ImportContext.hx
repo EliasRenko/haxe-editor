@@ -21,5 +21,6 @@ typedef ImportContext = {
     var setCurrentTileset:(String, Int)->Void;
     var updateMapBounds:(Float, Float, Float, Float)->Void;
     var createTilemapLayer:(String, String, Int)->TilemapLayer;
-    var createEntityLayer:(String, String)->EntityLayer;
+    // now only name is required; tilesets are handled per-entity during placement
+    var createEntityLayer:(String)->EntityLayer;
 }

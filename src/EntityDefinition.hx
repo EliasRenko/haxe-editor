@@ -1,15 +1,12 @@
-/**
- * EntityDefinition structure containing entity metadata
- * Defines reusable entity templates with their visual properties
- */
-typedef EntityDefinition = {
-    var name:String;              // Entity name (e.g., "player", "enemy")
-    var width:Int;                // Entity width in pixels
-    var height:Int;               // Entity height in pixels
-    var tilesetName:String;       // Tileset used for this entity
-    var regionX:Int;              // Atlas region X position
-    var regionY:Int;              // Atlas region Y position
-    var regionWidth:Int;          // Atlas region width
-    var regionHeight:Int;         // Atlas region height
-    var definedRegionId: Int; // Atlas region ID for placeholder graphic (used when actual region is not yet created)
+@:structInit
+class EntityDefinition {
+    public var name:String;              // Entity name (e.g., "player", "enemy")
+    public var width:Int;                // Entity width in pixels
+    public var height:Int;               // Entity height in pixels
+    public var tilesetName:String;       // Tileset used for this entity
+    public var regionX:Int;              // Atlas region X position
+    public var regionY:Int;              // Atlas region Y position
+    public var regionWidth:Int;          // Atlas region width
+    public var regionHeight:Int;         // Atlas region height
+    public var definedRegionId: Int; // Atlas region ID for placeholder graphic (used when actual region is not yet created)
 }

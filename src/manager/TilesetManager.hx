@@ -1,5 +1,4 @@
 package manager;
-
 import Tileset;
 
 class TilesetManager {
@@ -22,23 +21,16 @@ class TilesetManager {
         return tilesets.exists(tilesetName);
     }
 
-    public function getTilesetInfo(tilesetName:String):Null<{name:String, texturePath:String, tileSize:Int, tilesPerRow:Int, tilesPerCol:Int, regionCount:Int}> {
-        var tileset = tilesets.get(tilesetName);
+    public function getTilesetInfo(tilesetName:String):Tileset {
+        var tileset:Tileset = tilesets.get(tilesetName);
         if (tileset == null) {
             return null;
         }
         
-        return {
-            name: tileset.name,
-            texturePath: tileset.texturePath,
-            tileSize: tileset.tileSize,
-            tilesPerRow: tileset.tilesPerRow,
-            tilesPerCol: tileset.tilesPerCol,
-            regionCount: tileset.tilesPerRow * tileset.tilesPerCol
-        };
+        return tileset;
     }
 
-    public function getTilesetInfoAt(index:Int):Null<{name:String, texturePath:String, tileSize:Int, tilesPerRow:Int, tilesPerCol:Int, regionCount:Int}> {
+    public function getTilesetInfoAt(index:Int):Tileset {
         var tilesetName = getTilesetNameAt(index);
         if (tilesetName == "") {
             return null;

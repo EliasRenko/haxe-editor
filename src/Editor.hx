@@ -1,9 +1,18 @@
 package;
 
+import data.TextureData;
+import display.Tile;
 import Log.LogCategory;
 import states.EditorState;
 import math.Vec2;
 import layers.TilemapLayer;
+import struct.MapProps;
+import struct.EntityDataStruct;
+import struct.TextureDataStruct;
+import struct.TilesetInfoStruct;
+import struct.LayerInfoStruct;
+import cpp.Pointer;
+import cpp.Reference;
 
 @:headerCode('#include "editor_native.h"')
 @:headerInclude("haxe/io/Bytes.h")
@@ -167,8 +176,8 @@ extern "C" {
         ::Editor_obj::createTilemapLayer(::String(layerName), ::String(tilesetName), index);
     }
     
-    __declspec(dllexport) void createEntityLayer(const char* layerName, const char* tilesetName) {
-        ::Editor_obj::createEntityLayer(::String(layerName), ::String(tilesetName));
+    __declspec(dllexport) void createEntityLayer(const char* layerName) {
+        ::Editor_obj::createEntityLayer(::String(layerName));
     }
     
     __declspec(dllexport) void createFolderLayer(const char* layerName) {
@@ -203,6 +212,44 @@ extern "C" {
         ::String hxLayerName = ::String(layerName);
         return ::Editor_obj::getLayerInfo(hxLayerName, outInfo);
     }
+
+    // entity layer batch accessors
+    __declspec(dllexport) int getEntityLayerBatchCount(const char* layerName) {
+        return ::Editor_obj::getEntityLayerBatchCount(::String(layerName));
+    }
+
+    __declspec(dllexport) int getEntityLayerBatchCountAt(int index) {
+        return ::Editor_obj::getEntityLayerBatchCountAt(index);
+    }
+
+    __declspec(dllexport) const char* getEntityLayerBatchTilesetName(const char* layerName, int batchIndex) {
+        return ::Editor_obj::getEntityLayerBatchTilesetName(::String(layerName), batchIndex).__s;
+    }
+
+    // batch movement wrappers
+    __declspec(dllexport) int moveEntityLayerBatchUp(const char* layerName, int batchIndex) {
+        return ::Editor_obj::moveEntityLayerBatchUp(::String(layerName), batchIndex);
+    }
+
+    __declspec(dllexport) int moveEntityLayerBatchDown(const char* layerName, int batchIndex) {
+        return ::Editor_obj::moveEntityLayerBatchDown(::String(layerName), batchIndex);
+    }
+
+    __declspec(dllexport) int moveEntityLayerBatchTo(const char* layerName, int batchIndex, int newIndex) {
+        return ::Editor_obj::moveEntityLayerBatchTo(::String(layerName), batchIndex, newIndex);
+    }
+
+    __declspec(dllexport) int moveEntityLayerBatchUpByIndex(int layerIndex, int batchIndex) {
+        return ::Editor_obj::moveEntityLayerBatchUpByIndex(layerIndex, batchIndex);
+    }
+
+    __declspec(dllexport) int moveEntityLayerBatchDownByIndex(int layerIndex, int batchIndex) {
+        return ::Editor_obj::moveEntityLayerBatchDownByIndex(layerIndex, batchIndex);
+    }
+
+    __declspec(dllexport) int moveEntityLayerBatchToByIndex(int layerIndex, int batchIndex, int newIndex) {
+        return ::Editor_obj::moveEntityLayerBatchToByIndex(layerIndex, batchIndex, newIndex);
+    }
     
     __declspec(dllexport) int moveLayerUp(const char* layerName) {
         return ::Editor_obj::moveLayerUp(::String(layerName));
@@ -210,6 +257,10 @@ extern "C" {
     
     __declspec(dllexport) int moveLayerDown(const char* layerName) {
         return ::Editor_obj::moveLayerDown(::String(layerName));
+    }
+
+    __declspec(dllexport) int moveLayerTo(const char* layerName, int newIndex) {
+        return ::Editor_obj::moveLayerTo(::String(layerName), newIndex);
     }
     
     __declspec(dllexport) int moveLayerUpByIndex(int index) {
@@ -256,8 +307,17 @@ extern "C" {
     __declspec(dllexport) void replaceLayerTileset(const char* layerName, const char* newTilesetName) {
         ::Editor_obj::replaceLayerTileset(::String(layerName), ::String(newTilesetName));
     }
-}
-')
+
+    // MAP PROPERTIES
+
+    __declspec(dllexport) const char* getMapProps(MapProps* outInfo) {
+        return ::Editor_obj::getMapProps((cpp::Pointer<MapProps>)outInfo);
+    }
+
+    __declspec(dllexport) const char* setMapProps(MapProps* info) {
+        return ::Editor_obj::setMapProps((cpp::Pointer<MapProps>)info);
+    }
+}')
 
 class Editor {
 
@@ -537,45 +597,19 @@ class Editor {
      * @param outData Pointer to TextureDataStruct to fill
      */
     @:keep
-    public static function getTextureData(path:String, outData:cpp.RawPointer<cpp.Void>):Void {
-        if (app == null || !initialized) {
-            log("Editor: Cannot get texture - engine not initialized");
+    public static function getTextureData(path:String, outData:Pointer<TextureDataStruct>):Void {
+        var textureData:TextureData = app.resources.getTexture(path, false);
+        if (textureData == null) {
+            log("Editor: Texture not found: " + path);
             return;
         }
         
-        try {
-            // Load texture from resources
-            var textureData = app.resources.getTexture(path, false);
-            if (textureData == null) {
-                log("Editor: Texture not found: " + path);
-                return;
-            }
-            
-            // Fill the struct using untyped C++ code
-            var width = textureData.width;
-            var height = textureData.height;
-            var bpp = textureData.bytesPerPixel;
-            var dataLength = textureData.bytes.length;
-            var isTransparent = textureData.transparent ? 1 : 0;
-            var bytes = textureData.bytes;
-            
-            untyped __cpp__("
-                TextureDataStruct* outStruct = (TextureDataStruct*){0};
-                outStruct->width = {1};
-                outStruct->height = {2};
-                outStruct->bytesPerPixel = {3};
-                outStruct->dataLength = {4};
-                outStruct->transparent = {5};
-                // ArrayBufferViewImpl has a 'bytes' field of type haxe::io::Bytes
-                // which has a 'b' field of type Array<unsigned char>
-                ::Array<unsigned char> byteArray = {6}->bytes->b;
-                outStruct->data = (unsigned char*)&(byteArray[0]);
-            ", outData, width, height, bpp, dataLength, isTransparent, bytes);
-            
-            log("Editor: Loaded texture: " + path + " (" + width + "x" + height + ", " + bpp + " bpp)");
-        } catch (e:Dynamic) {
-            log("Editor: Error loading texture: " + e);
-        }
+        var ref:Reference<TextureDataStruct> = outData.ref;
+        ref.width = textureData.width;
+        ref.height = textureData.height;
+        ref.bytesPerPixel = textureData.bytesPerPixel;
+        ref.dataLength = textureData.bytes.length;
+        ref.transparent = textureData.transparent ? 1 : 0;
     }
     
     /**
@@ -585,54 +619,30 @@ class Editor {
      * @return 1 if successful, 0 if tileset not found
      */
     @:keep
-    public static function getTileset(tilesetName:String, outInfo:cpp.RawPointer<cpp.Void>):Int {
-        if (app == null || !initialized) {
-            log("Editor: Cannot get tileset - engine not initialized");
+    public static function getTileset(tilesetName:String, outInfo:Pointer<TilesetInfoStruct>):Int {
+
+        var tilesetInfo:Tileset = editorState.tilesetManager.getTilesetInfo(tilesetName);
+            
+        if (tilesetInfo == null) {
+            log("Editor: Tileset not found: " + tilesetName);
             return 0;
         }
         
-        if (editorState == null) {
-            log("Editor: EditorState not loaded");
-            return 0;
-        }
-        
-        try {
-            var tilesetInfo = editorState.tilesetManager.getTilesetInfo(tilesetName);
-            
-            if (tilesetInfo == null) {
-                log("Editor: Tileset not found: " + tilesetName);
-                return 0;
-            }
-            
-            // Fill the struct using untyped C++ code
-            var name = tilesetInfo.name;
-            var texturePath = tilesetInfo.texturePath;
-            var tileSize = tilesetInfo.tileSize;
-            var tilesPerRow = tilesetInfo.tilesPerRow;
-            var tilesPerCol = tilesetInfo.tilesPerCol;
-            var regionCount = tilesetInfo.regionCount;
-            
-            untyped __cpp__("
-                TilesetInfoStruct* outStruct = (TilesetInfoStruct*){0};
-                outStruct->name = {1}.utf8_str();
-                outStruct->texturePath = {2}.utf8_str();
-                outStruct->tileSize = {3};
-                outStruct->tilesPerRow = {4};
-                outStruct->tilesPerCol = {5};
-                outStruct->regionCount = {6};
-            ", outInfo, name, texturePath, tileSize, tilesPerRow, tilesPerCol, regionCount);
-            
-            log("Editor: Retrieved tileset: " + tilesetName + " (" + tilesPerRow + "x" + tilesPerCol + " tiles)");
-            return 1;
-            
-        } catch (e:Dynamic) {
-            log("Editor: Error getting tileset: " + e);
-            return 0;
-        }
+        // copy values directly into the C struct via the pointer reference
+
+        var ref:Reference<TilesetInfoStruct> = outInfo.ref;
+        ref.name = tilesetInfo.name;
+        ref.texturePath = tilesetInfo.texturePath;
+        ref.tileSize = tilesetInfo.tileSize;
+        ref.tilesPerRow = tilesetInfo.tilesPerRow;
+        ref.tilesPerCol = tilesetInfo.tilesPerCol;
+        ref.regionCount = tilesetInfo.tilesPerRow * tilesetInfo.tilesPerCol;
+
+        return 1;
     }
 
     @:keep
-    public static function getTilesetAt(index:Int, outInfo:cpp.RawPointer<cpp.Void>):Int {
+    public static function getTilesetAt(index:Int, outInfo:Pointer<TilesetInfoStruct>):Int {
         if (app == null || !initialized) {
             log("Editor: Cannot get tileset - engine not initialized");
             return 0;
@@ -644,31 +654,29 @@ class Editor {
         }
         
         try {
-            var tilesetInfo = editorState.tilesetManager.getTilesetInfoAt(index);
+            var tilesetInfo:Tileset = editorState.tilesetManager.getTilesetInfoAt(index);
             
             if (tilesetInfo == null) {
                 log("Editor: Tileset not found at index: " + index);
                 return 0;
             }
             
-            // Fill the struct using untyped C++ code
+            // copy values directly into the C struct via the pointer reference
             var name = tilesetInfo.name;
             var texturePath = tilesetInfo.texturePath;
             var tileSize = tilesetInfo.tileSize;
             var tilesPerRow = tilesetInfo.tilesPerRow;
             var tilesPerCol = tilesetInfo.tilesPerCol;
-            var regionCount = tilesetInfo.regionCount;
-            
-            untyped __cpp__("
-                TilesetInfoStruct* outStruct = (TilesetInfoStruct*){0};
-                outStruct->name = {1}.utf8_str();
-                outStruct->texturePath = {2}.utf8_str();
-                outStruct->tileSize = {3};
-                outStruct->tilesPerRow = {4};
-                outStruct->tilesPerCol = {5};
-                outStruct->regionCount = {6};
-            ", outInfo, name, texturePath, tileSize, tilesPerRow, tilesPerCol, regionCount);
-            
+            var regionCount = tilesetInfo.tilesPerRow * tilesetInfo.tilesPerCol;
+
+            var ref:Reference<TilesetInfoStruct> = outInfo.ref;
+            ref.name = name;
+            ref.texturePath = texturePath;
+            ref.tileSize = tileSize;
+            ref.tilesPerRow = tilesPerRow;
+            ref.tilesPerCol = tilesPerCol;
+            ref.regionCount = regionCount;
+
             log("Editor: Retrieved tileset at index " + index + ": " + name + " (" + tilesPerRow + "x" + tilesPerCol + " tiles)");
             return 1;
             
@@ -818,7 +826,7 @@ class Editor {
     }
     
     @:keep
-    public static function getEntityDef(entityName:String, outData:cpp.RawPointer<cpp.Void>):String {
+    public static function getEntityDef(entityName:String, outData:Pointer<EntityDataStruct>):String {
         var error:String = null;
         var entityDef = editorState.entityManager.getEntityDefinition(entityName);
         if (entityDef == null) {
@@ -838,7 +846,7 @@ class Editor {
     }
     
     @:keep
-    public static function getEntityDefAt(index:Int, outData:cpp.RawPointer<cpp.Void>):String {
+    public static function getEntityDefAt(index:Int, outData:Pointer<EntityDataStruct>):String {
         var error:String = null;
         var entityDef:EntityDefinition = editorState.entityManager.getEntityDefinitionAt(index);
         if (entityDef == null) {
@@ -873,20 +881,17 @@ class Editor {
     }
 
     @:keep
-	public static function populateEntityDataStruct(entityDef:EntityDefinition, outData:cpp.RawPointer<cpp.Void>):Void {
-		untyped __cpp__("
-        EntityDataStruct* outStruct = (EntityDataStruct*){0};
-        outStruct->name        = ::String({1}).utf8_str();
-        outStruct->width       = {2};
-        outStruct->height      = {3};
-        outStruct->tilesetName = ::String({4}).utf8_str();
-        outStruct->regionX     = {5};
-        outStruct->regionY     = {6};
-        outStruct->regionWidth = {7};
-        outStruct->regionHeight= {8};
-        ",
-        outData, entityDef.name, entityDef.width, entityDef.height, entityDef.tilesetName, entityDef.regionX, entityDef.regionY, entityDef.regionWidth, entityDef.regionHeight);
-	}
+    public static function populateEntityDataStruct(entityDef:EntityDefinition, outData:Pointer<EntityDataStruct>):Void {
+        var ref:Reference<EntityDataStruct> = outData.ref;
+        ref.name        = entityDef.name;
+        ref.width       = entityDef.width;
+        ref.height      = entityDef.height;
+        ref.tilesetName = entityDef.tilesetName;
+        ref.regionX     = entityDef.regionX;
+        ref.regionY     = entityDef.regionY;
+        ref.regionWidth = entityDef.regionWidth;
+        ref.regionHeight= entityDef.regionHeight;
+    }
     
     // ===== LAYER MANAGEMENT =====
     
@@ -896,8 +901,8 @@ class Editor {
     }
     
     @:keep
-    public static function createEntityLayer(layerName:String, tilesetName:String):Void {
-        editorState.createEntityLayer(layerName, tilesetName);
+    public static function createEntityLayer(layerName:String):Void {
+        editorState.createEntityLayer(layerName);
     }
     
     @:keep
@@ -934,6 +939,11 @@ class Editor {
     public static function moveLayerDown(layerName:String):Int {
         return editorState.moveLayerDown(layerName) ? 1 : 0;
     }
+
+    @:keep
+    public static function moveLayerTo(layerName:String, newIndex:Int):Int {
+        return editorState.moveLayerTo(layerName, newIndex) ? 1 : 0;
+    }
     
     @:keep
     public static function moveLayerUpByIndex(index:Int):Int {
@@ -949,22 +959,73 @@ class Editor {
     public static function getLayerCount():Int {
         return editorState.getLayerCount();
     }
+
+    // ----- entity layer batch accessors -----
+    @:keep
+    public static function getEntityLayerBatchCount(layerName:String):Int {
+        var layer = editorState.getLayerByName(layerName);
+        if (layer == null || !Std.isOfType(layer, layers.EntityLayer)) return 0;
+        return (cast layer:layers.EntityLayer).getBatchCount();
+    }
+
+    @:keep
+    public static function getEntityLayerBatchCountAt(index:Int):Int {
+        var layer = editorState.getLayerAt(index);
+        if (layer == null || !Std.isOfType(layer, layers.EntityLayer)) return 0;
+        return (cast layer:layers.EntityLayer).getBatchCount();
+    }
+
+    @:keep
+    public static function getEntityLayerBatchTilesetName(layerName:String, batchIndex:Int):String {
+        var layer = editorState.getLayerByName(layerName);
+        if (layer == null || !Std.isOfType(layer, layers.EntityLayer)) return "";
+        var entry = (cast layer:layers.EntityLayer).getBatchEntryAt(batchIndex);
+        if (entry == null) return "";
+        return entry.tileset != null ? entry.tileset.name : "";
+    }
+
+    // movement helpers
+    @:keep
+    public static function moveEntityLayerBatchUp(layerName:String, batchIndex:Int):Int {
+        return editorState.moveEntityLayerBatchUp(layerName, batchIndex) ? 1 : 0;
+    }
+
+    @:keep
+    public static function moveEntityLayerBatchDown(layerName:String, batchIndex:Int):Int {
+        return editorState.moveEntityLayerBatchDown(layerName, batchIndex) ? 1 : 0;
+    }
+
+    @:keep
+    public static function moveEntityLayerBatchTo(layerName:String, batchIndex:Int, newIndex:Int):Int {
+        return editorState.moveEntityLayerBatchTo(layerName, batchIndex, newIndex) ? 1 : 0;
+    }
+
+    @:keep
+    public static function moveEntityLayerBatchUpByIndex(layerIndex:Int, batchIndex:Int):Int {
+        return editorState.moveEntityLayerBatchUpByLayerIndex(layerIndex, batchIndex) ? 1 : 0;
+    }
+
+    @:keep
+    public static function moveEntityLayerBatchDownByIndex(layerIndex:Int, batchIndex:Int):Int {
+        return editorState.moveEntityLayerBatchDownByLayerIndex(layerIndex, batchIndex) ? 1 : 0;
+    }
+
+    @:keep
+    public static function moveEntityLayerBatchToByIndex(layerIndex:Int, batchIndex:Int, newIndex:Int):Int {
+        return editorState.moveEntityLayerBatchToByLayerIndex(layerIndex, batchIndex, newIndex) ? 1 : 0;
+    }
     
 	@:keep
-	public static function getLayerInfoAt(index:Int, outInfo:cpp.RawPointer<cpp.Void>):Int {
+	public static function getLayerInfoAt(index:Int, outInfo:Pointer<LayerInfoStruct>):Int {
 		var layer = editorState.getLayerAt(index);
+        var type:Int = 0;
+        var tilesetName:String = "";
+
 		if (layer == null) {
 			log("Editor: Layer not found at index: " + index);
 			return 0;
 		}
 
-		var name = layer.id;
-		var type = 0; // 0 = TilemapLayer, 1 = EntityLayer, 2 = FolderLayer
-		var tilesetName = "";
-		var visible = layer.visible ? 1 : 0;
-		var silhouette = layer.silhouette ? 1 : 0;
-		var silhouetteColor = layer.silhouetteColor.hexValue;
-
 		// Determine layer type
 		if (Std.isOfType(layer, layers.TilemapLayer)) {
 			type = 0;
@@ -973,40 +1034,33 @@ class Editor {
 		} else if (Std.isOfType(layer, layers.EntityLayer)) {
 			type = 1;
 			var entityLayer:layers.EntityLayer = cast layer;
-			tilesetName = entityLayer.tileset.name;
-		} else if (Std.isOfType(layer, layers.FolderLayer)) {
-			type = 2;
-		}
+            if (entityLayer.batches != null && entityLayer.batches.length > 0) {
+                tilesetName = entityLayer.batches[0].tileset.name;
+            }
+        }
 
-		untyped __cpp__("
-                LayerInfoStruct* outStruct = (LayerInfoStruct*)({0});
-                outStruct->name = {1}.utf8_str();
-                outStruct->type = {2};
-                outStruct->tilesetName = {3}.utf8_str();
-                outStruct->silhouette = {5};
-                outStruct->silhouetteColor = {6};
-                outStruct->visible = {4};
-            ", outInfo, name, type, tilesetName, visible, silhouette, silhouetteColor);
+        // write result into the C struct via the pointer reference
+        var ref:Reference<LayerInfoStruct> = outInfo.ref;
+        ref.name = layer.id;
+        ref.type = type; // 0 = TilemapLayer, 1 = EntityLayer, 2 = FolderLayer
+        ref.tilesetName = tilesetName;
+        ref.visible = layer.visible ? 1 : 0;
+        ref.silhouette = layer.silhouette;
+        ref.silhouetteColor = layer.silhouetteColor.hexValue;
+        return 1;
+    }
 
-		return 1;
-	}
-    
     @:keep
-    public static function getLayerInfo(layerName:String, outInfo:cpp.RawPointer<cpp.Void>):Int {
+    public static function getLayerInfo(layerName:String, outInfo:Pointer<LayerInfoStruct>):Int {
 		var layer = editorState.getLayerByName(layerName);
+        var type:Int = 0;
+        var tilesetName:String = "";
 		if (layer == null) {
 			log("Editor: Layer not found: " + layerName);
 			return 0;
 		}
 
-		var name = layer.id;
-		var type = 0; // 0 = TilemapLayer, 1 = EntityLayer, 2 = FolderLayer
-		var tilesetName = "";
-		var visible = layer.visible ? 1 : 0;
-		var silhouette = layer.silhouette;
-		var silhouetteColor = layer.silhouetteColor.hexValue;
-
-		// Determine layer type
+		//Determine layer type
 		if (Std.isOfType(layer, layers.TilemapLayer)) {
 			type = 0;
 			var tilemapLayer:layers.TilemapLayer = cast layer;
@@ -1014,71 +1068,114 @@ class Editor {
 		} else if (Std.isOfType(layer, layers.EntityLayer)) {
 			type = 1;
 			var entityLayer:layers.EntityLayer = cast layer;
-			tilesetName = entityLayer.tileset.name;
-		} else if (Std.isOfType(layer, layers.FolderLayer)) {
-			type = 2;
-		}
+            if (entityLayer.batches != null && entityLayer.batches.length > 0) {
+                tilesetName = entityLayer.batches[0].tileset.name;
+            }
+        }
 
-		untyped __cpp__("
-                LayerInfoStruct* outStruct = (LayerInfoStruct*)({0});
-                outStruct->name = {1}.utf8_str();
-                outStruct->type = {2};
-                outStruct->tilesetName = {3}.utf8_str();
-                outStruct->visible = {4};
-                outStruct->silhouette = {5};
-                outStruct->silhouetteColor = {6};
-            ", outInfo, name, type, tilesetName, visible, silhouette, silhouetteColor);
-
-		return 1;
+        // write result into the C struct via the pointer reference
+        var ref:Reference<LayerInfoStruct> = outInfo.ref;
+        ref.name = layer.id;
+        ref.type = type; // 0 = TilemapLayer, 1 = EntityLayer, 2 = FolderLayer
+        ref.tilesetName = tilesetName;
+        ref.visible = layer.visible ? 1 : 0;
+        ref.silhouette = layer.silhouette;
+        ref.silhouetteColor = layer.silhouetteColor.hexValue;
+        return 1;
     }
-
+    
     @:keep
-	public static function setLayerProperties(layerName:String, properties:cpp.RawPointer<cpp.Void>):Void {
-			var name:String = null;
-			var type:Int = 0;
-			var tilesetName:String = null;
-			var visible:Int = 1;
-			var silhouette:Int = 0;
-			var silhouetteColor:Int = 0xFFFFFFFF;
-            
-			untyped __cpp__("
-            LayerInfoStruct* inStruct = (LayerInfoStruct*)({0});
-            {1} = ::String(inStruct->name);
-            {2} = inStruct->type;
-            {3} = ::String(inStruct->tilesetName);
-            {4} = inStruct->visible;
-            {5} = inStruct->silhouette;
-            {6} = inStruct->silhouetteColor;
-        ", properties, name, type, tilesetName, visible, silhouette, silhouetteColor);
+    public static function setLayerProperties(layerName:String, properties:Pointer<LayerInfoStruct>):Void {
+        
+        var ref:Reference<LayerInfoStruct> = properties.ref;
+        
+        // var name:String = null;
+        // var type:Int = 0;
+        // var tilesetName:String = null;
+        // var visible:Int = 1;
+        // var silhouette:Int = 0;
+        // var silhouetteColor:Int = 0xFFFFFFFF;
 
-		editorState.setLayerProperties(layerName, name, type, tilesetName, visible != 0, silhouette != 0, silhouetteColor);
+        // untyped __cpp__("
+        // LayerInfoStruct* inStruct = (LayerInfoStruct*)({0});
+        // {1} = ::String(inStruct->name);
+        // {2} = inStruct->type;
+        // {3} = ::String(inStruct->tilesetName);
+        // {4} = inStruct->visible;
+        // {5} = inStruct->silhouette;
+        // {6} = inStruct->silhouetteColor;
+        // ", properties, name, type, tilesetName, visible, silhouette, silhouetteColor);
+
+	    editorState.setLayerProperties(layerName, ref.name, ref.type, ref.tilesetName, ref.visible != 0, ref.silhouette, ref.silhouetteColor);
 	}
 
 	@:keep
-	public static function setLayerPropertiesAt(index:Int, properties:cpp.RawPointer<cpp.Void>):Void {
-        var name:String = null;
-        var type:Int = 0;
-        var tilesetName:String = null;
-        var visible:Int = 1;
-        var silhouette:Int = 0;
-        var silhouetteColor:Int = 0xFFFFFFFF;
+	public static function setLayerPropertiesAt(index:Int, properties:Pointer<LayerInfoStruct>):Void {
+        var ref:Reference<LayerInfoStruct> = properties.ref;
+        
+        // var name:String = null;
+        // var type:Int = 0;
+        // var tilesetName:String = null;
+        // var visible:Int = 1;
+        // var silhouette:Int = 0;
+        // var silhouetteColor:Int = 0xFFFFFFFF;
 
-        untyped __cpp__("
-        LayerInfoStruct* inStruct = (LayerInfoStruct*)({0});
-        {1} = ::String(inStruct->name);
-        {2} = inStruct->type;
-        {3} = ::String(inStruct->tilesetName);
-        {4} = inStruct->visible;
-        {5} = inStruct->silhouette;
-        {6} = inStruct->silhouetteColor;
-        ", properties, name, type, tilesetName, visible, silhouette, silhouetteColor);
+        // untyped __cpp__("
+        // LayerInfoStruct* inStruct = (LayerInfoStruct*)({0});
+        // {1} = ::String(inStruct->name);
+        // {2} = inStruct->type;
+        // {3} = ::String(inStruct->tilesetName);
+        // {4} = inStruct->visible;
+        // {5} = inStruct->silhouette;
+        // {6} = inStruct->silhouetteColor;
+        // ", properties, name, type, tilesetName, visible, silhouette, silhouetteColor);
 
-		editorState.setLayerPropertiesAt(index, name, type, tilesetName, visible != 0, silhouette != 0, silhouetteColor);
+		editorState.setLayerPropertiesAt(index, ref.name, ref.type, ref.tilesetName, ref.visible != 0, ref.silhouette, ref.silhouetteColor);
 
 	}
 
+	@:keep
+	public static function replaceLayerTileset(layerName:String, newTilesetName:String):Void {
+		editorState.replaceLayerTileset(layerName, newTilesetName);
+	}
+
+	@:keep
+	public static function getMapProps(outInfo:Pointer<MapProps>):String {
+        var error:String = null;
+
+		try {
+			var ref:Reference<MapProps> = outInfo.ref;
+			ref.idd = editorState.iid;
+			ref.name = editorState.name;
+			ref.worldx = Std.int(editorState.mapX);
+			ref.worldy = Std.int(editorState.mapY);
+			ref.width = Std.int(editorState.mapWidth);
+			ref.height = Std.int(editorState.mapHeight);
+			ref.tileSize = editorState.tileSize;
+			ref.bgColor = editorState.grid.backgroundColor.hexValue;
+			ref.gridColor = editorState.grid.gridColor.hexValue;
+		} catch (e:Dynamic) {
+			error = "Editor: Failed to get map properties: " + e;
+            app.log.error(LogCategory.APP, error);
+			return error;
+		}
+
+		return null;
+	}
+
     @:keep
-    public static function replaceLayerTileset(layerName:String, newTilesetName:String):Void {
-        editorState.replaceLayerTileset(layerName, newTilesetName);
+    public static function setMapProps(info:Pointer<MapProps>):String {
+        var error:String = null;
+
+        try {
+            var ref:Reference<MapProps> = info.ref;
+            editorState.grid.gridColor.hexValue = ref.gridColor; 
+            editorState.grid.backgroundColor.hexValue = ref.bgColor;
+        } catch (e:Dynamic) {
+            error = "Editor: Failed to set map properties: " + e;
+            app.log.error(LogCategory.APP, error);
+        }
+
+        return error;
     }
 }
