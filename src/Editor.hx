@@ -4,6 +4,8 @@ import Log.LogCategory;
 import states.EditorState;
 import math.Vec2;
 import layers.TilemapLayer;
+import struct.MapInfoStruct;
+import cpp.Pointer;
 
 @:headerCode('#include "editor_native.h"')
 @:headerInclude("haxe/io/Bytes.h")
@@ -300,12 +302,12 @@ extern "C" {
     }
 
      __declspec(dllexport) int getMapInfo(MapInfoStruct* outInfo) {
-            return ::Editor_obj::getMapInfo(outInfo);
-        }
+        return ::Editor_obj::getMapInfo((cpp::Pointer<MapInfoStruct>)outInfo);
+    }
 
-        __declspec(dllexport) int setMapInfo(MapInfoStruct* info) {
-            return ::Editor_obj::setMapInfo(info);
-        }
+    __declspec(dllexport) int setMapInfo(MapInfoStruct* info) {
+        return ::Editor_obj::setMapInfo((cpp::Pointer<MapInfoStruct>)info);
+    }
 }
 
 ')
@@ -1187,54 +1189,23 @@ class Editor {
 	}
 
     @:keep
-	public static function getMapInfo(outInfo:cpp.RawPointer<cpp.Void>):Int {
+    public static function getMapInfo(outInfo:Pointer<MapInfoStruct>):Int {
+        var ref = outInfo.ref;
 
-        untyped __cpp__("
-        MapInfoStruct* outStruct = (MapInfoStruct*)({0});
-        outStruct->idd = {1}.utf8_str();
-        outStruct->name = {2}.utf8_str();
-        outStruct->worldx = {3};
-        outStruct->worldy = {4};
-        outStruct->width = {5};
-        outStruct->height = {6};
-        outStruct->tileSize = {7};
-        outStruct->bgColor = {8};
-        outStruct->gridColor = {9};
-        ", outInfo, editorState.iid, editorState.name, editorState.mapX, editorState.mapY, editorState.mapWidth, editorState.mapHeight, editorState.tileSize, editorState.grid.backgroundColor.hexValue, editorState.grid.gridColor.hexValue);
-        
-
+        ref.idd       = editorState.iid;
+        ref.name      = editorState.name;
+        ref.worldx    = Std.int(editorState.mapX);
+        ref.worldy    = Std.int(editorState.mapY);
+        ref.width     = Std.int(editorState.mapWidth);
+        ref.height    = Std.int(editorState.mapHeight);
+        ref.tileSize  = editorState.tileSize;
+        ref.bgColor   = editorState.grid.backgroundColor.hexValue;
+        ref.gridColor = editorState.grid.gridColor.hexValue;
         return 1;
     }
 
     @:keep
-	public static function setMapInfo(info:cpp.RawPointer<cpp.Void>):Int {
-       
-        //TODO: Set the rest of the properties 
-
-        var idd:String = "";
-        var name:String = null;
-        var worldx:Int = 0;
-        var worldy:Int = 0;
-        var width:Int = 0;
-        var height:Int = 0;
-        var tileSize:Int = 0;
-        var bgColor:Int = 0xFF000000;
-        var gridColor:Int = 0xFFFFFFFF;
-
-        untyped __cpp__("
-        MapInfoStruct* outStruct = (MapInfoStruct*)({0});
-        {1} = ::String(outStruct->idd);
-        {2} = ::String(outStruct->name);
-        {3} = outStruct->worldx;
-        {4} = outStruct->worldy;
-        {5} = outStruct->width;
-        {6} = outStruct->height;
-        {7} = outStruct->tileSize;
-        {8} = outStruct->bgColor;
-        {9} = outStruct->gridColor;
-        ", info, idd, name, worldx, worldy, width, height, tileSize, bgColor, gridColor);
-        
-
-        return editorState.setMapInfo(gridColor, bgColor);
-	}
+    public static function setMapInfo(info:Pointer<MapInfoStruct>):Int {
+        return editorState.setMapInfo(info.ref.gridColor, info.ref.bgColor);
+    }
 }

@@ -21,7 +21,7 @@ import utils.MapSerializer;
 
 class EditorState extends State {
 
-    private var grid:Grid;
+    public var grid:Grid;
     private var tileBatch:ManagedTileBatch;
     private var mapFrame:MapFrame;
     private var worldAxes:LineBatch;
@@ -35,7 +35,7 @@ class EditorState extends State {
     public var entityManager:EntityManager = new EntityManager();
     
     // Tile editor settings
-    private var tileSize:Int = 32; // Size of each tile in pixels
+    public var tileSize:Int = 32; // Size of each tile in pixels
     private var tileRegions:Array<Int> = []; // Available tile regions (for backward compatibility)
     
     // Layer management (layers are stored in entities array)
@@ -1340,6 +1340,7 @@ class EditorState extends State {
     /**
      * Apply map info from struct-like object (currently only bounds)
      */
+    @:keep
     public function setMapInfo(gridColor:Int, bgColor:Int):Int {
         grid.gridColor.hexValue = gridColor; 
         grid.backgroundColor.hexValue = bgColor; 
