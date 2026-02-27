@@ -39,6 +39,15 @@ typedef struct {
 } EntityDataStruct;
 
 typedef struct {
+    const char* name;
+    int type;                // 0 = TilemapLayer, 1 = EntityLayer, 2 = FolderLayer
+    const char* tilesetName; // For TilemapLayer only (null for others)
+    int visible;             // 0 = hidden, 1 = visible
+    bool silhouette;          // 0 = no silhouette, 1 = silhouette enabled
+    int silhouetteColor;  // RGBA color for silhouette 
+} LayerInfoStruct;
+
+typedef struct {
     const char* idd;
     const char* name;
     int worldx;
@@ -48,16 +57,7 @@ typedef struct {
     int tileSize;
     int bgColor;
     int gridColor;
-} MapInfoStruct;
-
-typedef struct {
-    const char* name;
-    int type;                // 0 = TilemapLayer, 1 = EntityLayer, 2 = FolderLayer
-    const char* tilesetName; // For TilemapLayer only (null for others)
-    int visible;             // 0 = hidden, 1 = visible
-    bool silhouette;          // 0 = no silhouette, 1 = silhouette enabled
-    int silhouetteColor;  // RGBA color for silhouette 
-} LayerInfoStruct;
+} MapProps;
 
 extern "C" {
     extern bool hxcpp_initialized;
@@ -159,8 +159,8 @@ extern "C" {
     __declspec(dllexport) void replaceLayerTileset(const char* layerName, const char* newTilesetName);
 
     // map
-    __declspec(dllexport) int getMapInfo(MapInfoStruct* outInfo);
-    __declspec(dllexport) int setMapInfo(MapInfoStruct* info);
+    __declspec(dllexport) const char* getMapProps(MapProps* outInfo);
+    __declspec(dllexport) const char* setMapProps(MapProps* info);
 }
 
 #endif // EDITOR_NATIVE_H

@@ -107,13 +107,15 @@ class EditorState extends State {
 
     // CHECKED!
     public function createTileset(texturePath:String, tilesetName:String, tileSize:Int):String {
+        var error:String = null;
+
         if (!app.resources.cached(texturePath)) {
             app.log.info(LogCategory.APP, "Loading texture: " + texturePath);
             app.resources.loadTexture(texturePath, false);
         }
 
         if (tilesetManager.exists(tilesetName)) {
-            var error:String = "Tileset with the name " + tilesetName + " already exists";
+            error = "Tileset with the name " + tilesetName + " already exists";
             app.log.info(LogCategory.APP, error);
             return error;
         }
@@ -128,14 +130,16 @@ class EditorState extends State {
     
     // CHECKED!
     public function createEntity(entityName:String, width:Int, height:Int, tilesetName:String):String {
+        var error:String = null;
+        
         if (!tilesetManager.exists(tilesetName)) {
-            var error:String = "Cannot create entity. Tileset with the name " + tilesetName + " does not exist";
+            error = "Cannot create entity. Tileset with the name " + tilesetName + " does not exist";
             app.log.info(LogCategory.APP, error);
             return error;
         }
 
         if (entityManager.exists(entityName)) {
-            var error:String = "Entity with the name " + entityName + " already exists";
+            error = "Entity with the name " + entityName + " already exists";
             app.log.info(LogCategory.APP, error);
             return error;
         }
@@ -1320,32 +1324,6 @@ class EditorState extends State {
         if (grid != null) {
             grid.setBounds(mapX, mapY, mapX + mapWidth, mapY + mapHeight);
         }
-    }
-
-    // /**
-    //  * Retrieve map info into the provided struct-like object
-    //  */
-    // public function getMapInfo(outInfo:Dynamic):Int {
-    //     outInfo.idd = this.name;
-    //     outInfo.name = this.name;
-    //     outInfo.worldx = Std.int(mapX);
-    //     outInfo.worldy = Std.int(mapY);
-    //     outInfo.width = Std.int(mapWidth);
-    //     outInfo.height = Std.int(mapHeight);
-    //     outInfo.bgColor = 0;
-    //     outInfo.gridColor = 0;
-    //     return 1;
-    // }
-
-    /**
-     * Apply map info from struct-like object (currently only bounds)
-     */
-    @:keep
-    public function setMapInfo(gridColor:Int, bgColor:Int):Int {
-        grid.gridColor.hexValue = gridColor; 
-        grid.backgroundColor.hexValue = bgColor; 
-
-        return 1;
     }
     
     override public function render(renderer:Renderer):Void {
