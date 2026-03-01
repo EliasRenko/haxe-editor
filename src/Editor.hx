@@ -84,19 +84,19 @@ extern "C" {
     }
     
     __declspec(dllexport) int isRunning() {
-        return ::Editor_obj::engineIsRunning();
+        return ::Editor_obj::isRunning();
     }
     
     __declspec(dllexport) int getWindowWidth() {
-        return ::Editor_obj::engineGetWindowWidth();
+        return ::Editor_obj::getWindowWidth();
     }
     
     __declspec(dllexport) int getWindowHeight() {
-        return ::Editor_obj::engineGetWindowHeight();
+        return ::Editor_obj::getWindowHeight();
     }
     
     __declspec(dllexport) void setWindowSize(int width, int height) {
-        ::Editor_obj::engineSetWindowSize(width, height);
+        ::Editor_obj::setWindowSize(width, height);
     }
     
     __declspec(dllexport) void* getWindowHandle() {
@@ -105,10 +105,6 @@ extern "C" {
     
     __declspec(dllexport) void setWindowPosition(int x, int y) {
         ::Editor_obj::setWindowPosition(x, y);
-    }
-    
-    __declspec(dllexport) void setWindowSizeAndBorderless(int width, int height) {
-        ::Editor_obj::engineSetWindowSizeAndBorderless(width, height);
     }
 
     __declspec(dllexport) void onMouseMotion(int x, int y) {
@@ -472,7 +468,7 @@ class Editor {
      * @return 1 if running, 0 if stopped
      */
     @:keep
-    public static function engineIsRunning():Int {
+    public static function isRunning():Int {
         if (app != null && initialized) {
             return app.active ? 1 : 0;
         }
@@ -483,32 +479,24 @@ class Editor {
      * Get window width
      */
     @:keep
-    public static function engineGetWindowWidth():Int {
-        if (app != null && initialized) {
-            return app.WINDOW_WIDTH;
-        }
-        return 0;
+    public static function getWindowWidth():Int {
+        return app.WINDOW_WIDTH;
     }
     
     /**
      * Get window height
      */
     @:keep
-    public static function engineGetWindowHeight():Int {
-        if (app != null && initialized) {
-            return app.WINDOW_HEIGHT;
-        }
-        return 0;
+    public static function getWindowHeight():Int {
+        return app.WINDOW_HEIGHT;
     }
     
     /**
      * Set window size
      */
     @:keep
-    public static function engineSetWindowSize(width:Int, height:Int):Void {
-        if (app != null && initialized) {
-            app.window.size = new Vec2(width, height);
-        }
+    public static function setWindowSize(width:Int, height:Int):Void {
+        app.window.size = new Vec2(width, height);
     }
     
     /**
@@ -523,72 +511,34 @@ class Editor {
         return null;
     }
     
-    /**
-     * Set window position (screen coordinates)
-     */
     @:keep
     public static function setWindowPosition(x:Int, y:Int):Void {
-        if (app != null && initialized && app.window != null) {
-            app.window.setPosition(x, y);
-        }
-    }
-    
-    /**
-     * Set window size and make it borderless for embedding
-     */
-    @:keep
-    public static function engineSetWindowSizeAndBorderless(width:Int, height:Int):Void {
-        if (app != null && initialized && app.window != null) {
-            //app.window.setSize(width, height);
-            //app.window.setBorderless(true);
-        }
+        app.window.setPosition(x, y);
     }
 
-        @:keep
+    @:keep
     public static function onMouseMotion(x:Int, y:Int):Void {
-        if (app != null && initialized) {
-            @:privateAccess app.onMouseMotion(x, y, 0, 0, 1);
-        }
+        @:privateAccess app.onMouseMotion(x, y, 0, 0, 1);
     }
     
     @:keep
     public static function onMouseButtonDown(x:Int, y:Int, button:Int):Void {
-        if (app != null && initialized) {
-            @:privateAccess app.onMouseButtonDown(x, y, button, 1);
-        }
+        @:privateAccess app.onMouseButtonDown(x, y, button, 1);
     }
 
     @:keep
     public static function onMouseButtonUp(x:Int, y:Int, button:Int):Void {
-        if (app != null && initialized) {
-            @:privateAccess app.onMouseButtonUp(x, y, button, 1);
-        }
+        @:privateAccess app.onMouseButtonUp(x, y, button, 1);
     }
 
-    /**
-     * Handle keyboard down event from C# host
-     * @param scancode SDL scancode of the pressed key (from KeyMapper.ToSDLScancode)
-     */
     @:keep
     public static function onKeyboardDown(scancode:Int):Void {
-        if (app != null && initialized) {
-            // Pass scancode as keycode since use_scancodes is not defined
-            // and Keycode constants are actually scancode values
-            @:privateAccess app.onKeyDown(scancode, scancode, false, 0, 1);
-        }
+       @:privateAccess app.onKeyDown(scancode, scancode, false, 0, 1);
     }
 
-    /**
-     * Handle keyboard up event from C# host
-     * @param scancode SDL scancode of the released key (from KeyMapper.ToSDLScancode)
-     */
     @:keep
     public static function onKeyboardUp(scancode:Int):Void {
-        if (app != null && initialized) {
-            // Pass scancode as keycode since use_scancodes is not defined
-            // and Keycode constants are actually scancode values
-            @:privateAccess app.onKeyUp(scancode, scancode, false, 0, 1);
-        }
+        @:privateAccess app.onKeyUp(scancode, scancode, false, 0, 1);
     }
     
     /**
@@ -607,6 +557,26 @@ class Editor {
         var ref:Reference<TextureDataStruct> = outData.ref;
         ref.width = textureData.width;
         ref.height = textureData.height;
+            // take address of first byte; cast the element to cpp.UInt8 so
+        // RawPointer<T> is instantiated with the correct type
+        // reinterpret the UInt8Array as a generic ArrayBufferView to
+        // access its underlying Bytes buffer, then take the address of the
+        // first element.  Cast to cpp.UInt8 so the resulting pointer has the
+        // correct element type.
+        // allocate a C buffer and copy the texture bytes into it; this
+        // avoids needing an l-value for the original array and sidesteps the
+        // private field visibility entirely
+        var len = textureData.bytes.length;
+        if (len > 0) {
+            ref.data = cast cpp.Stdlib.nativeMalloc(len);
+            // copy each byte from the UInt8Array into the C buffer
+            for (i in 0...len) {
+                var v:Int = textureData.bytes.get(i);
+                untyped __cpp__("((unsigned char*){0})[{1}] = {2};", ref.data, i, v);
+            }
+        } else {
+            ref.data = null;
+        }
         ref.bytesPerPixel = textureData.bytesPerPixel;
         ref.dataLength = textureData.bytes.length;
         ref.transparent = textureData.transparent ? 1 : 0;
@@ -883,14 +853,14 @@ class Editor {
     @:keep
     public static function populateEntityDataStruct(entityDef:EntityDefinition, outData:Pointer<EntityDataStruct>):Void {
         var ref:Reference<EntityDataStruct> = outData.ref;
-        ref.name        = entityDef.name;
-        ref.width       = entityDef.width;
-        ref.height      = entityDef.height;
-        ref.tilesetName = entityDef.tilesetName;
-        ref.regionX     = entityDef.regionX;
-        ref.regionY     = entityDef.regionY;
-        ref.regionWidth = entityDef.regionWidth;
-        ref.regionHeight= entityDef.regionHeight;
+		ref.name = entityDef.name;
+		ref.width = entityDef.width;
+		ref.height = entityDef.height;
+		ref.tilesetName = entityDef.tilesetName;
+		ref.regionX = entityDef.regionX;
+		ref.regionY = entityDef.regionY;
+		ref.regionWidth = entityDef.regionWidth;
+		ref.regionHeight = entityDef.regionHeight;
     }
     
     // ===== LAYER MANAGEMENT =====
@@ -960,62 +930,7 @@ class Editor {
         return editorState.getLayerCount();
     }
 
-    // ----- entity layer batch accessors -----
     @:keep
-    public static function getEntityLayerBatchCount(layerName:String):Int {
-        var layer = editorState.getLayerByName(layerName);
-        if (layer == null || !Std.isOfType(layer, layers.EntityLayer)) return 0;
-        return (cast layer:layers.EntityLayer).getBatchCount();
-    }
-
-    @:keep
-    public static function getEntityLayerBatchCountAt(index:Int):Int {
-        var layer = editorState.getLayerAt(index);
-        if (layer == null || !Std.isOfType(layer, layers.EntityLayer)) return 0;
-        return (cast layer:layers.EntityLayer).getBatchCount();
-    }
-
-    @:keep
-    public static function getEntityLayerBatchTilesetName(layerName:String, batchIndex:Int):String {
-        var layer = editorState.getLayerByName(layerName);
-        if (layer == null || !Std.isOfType(layer, layers.EntityLayer)) return "";
-        var entry = (cast layer:layers.EntityLayer).getBatchEntryAt(batchIndex);
-        if (entry == null) return "";
-        return entry.tileset != null ? entry.tileset.name : "";
-    }
-
-    // movement helpers
-    @:keep
-    public static function moveEntityLayerBatchUp(layerName:String, batchIndex:Int):Int {
-        return editorState.moveEntityLayerBatchUp(layerName, batchIndex) ? 1 : 0;
-    }
-
-    @:keep
-    public static function moveEntityLayerBatchDown(layerName:String, batchIndex:Int):Int {
-        return editorState.moveEntityLayerBatchDown(layerName, batchIndex) ? 1 : 0;
-    }
-
-    @:keep
-    public static function moveEntityLayerBatchTo(layerName:String, batchIndex:Int, newIndex:Int):Int {
-        return editorState.moveEntityLayerBatchTo(layerName, batchIndex, newIndex) ? 1 : 0;
-    }
-
-    @:keep
-    public static function moveEntityLayerBatchUpByIndex(layerIndex:Int, batchIndex:Int):Int {
-        return editorState.moveEntityLayerBatchUpByLayerIndex(layerIndex, batchIndex) ? 1 : 0;
-    }
-
-    @:keep
-    public static function moveEntityLayerBatchDownByIndex(layerIndex:Int, batchIndex:Int):Int {
-        return editorState.moveEntityLayerBatchDownByLayerIndex(layerIndex, batchIndex) ? 1 : 0;
-    }
-
-    @:keep
-    public static function moveEntityLayerBatchToByIndex(layerIndex:Int, batchIndex:Int, newIndex:Int):Int {
-        return editorState.moveEntityLayerBatchToByLayerIndex(layerIndex, batchIndex, newIndex) ? 1 : 0;
-    }
-    
-	@:keep
 	public static function getLayerInfoAt(index:Int, outInfo:Pointer<LayerInfoStruct>):Int {
 		var layer = editorState.getLayerAt(index);
         var type:Int = 0;
@@ -1086,52 +1001,14 @@ class Editor {
     
     @:keep
     public static function setLayerProperties(layerName:String, properties:Pointer<LayerInfoStruct>):Void {
-        
         var ref:Reference<LayerInfoStruct> = properties.ref;
-        
-        // var name:String = null;
-        // var type:Int = 0;
-        // var tilesetName:String = null;
-        // var visible:Int = 1;
-        // var silhouette:Int = 0;
-        // var silhouetteColor:Int = 0xFFFFFFFF;
-
-        // untyped __cpp__("
-        // LayerInfoStruct* inStruct = (LayerInfoStruct*)({0});
-        // {1} = ::String(inStruct->name);
-        // {2} = inStruct->type;
-        // {3} = ::String(inStruct->tilesetName);
-        // {4} = inStruct->visible;
-        // {5} = inStruct->silhouette;
-        // {6} = inStruct->silhouetteColor;
-        // ", properties, name, type, tilesetName, visible, silhouette, silhouetteColor);
-
 	    editorState.setLayerProperties(layerName, ref.name, ref.type, ref.tilesetName, ref.visible != 0, ref.silhouette, ref.silhouetteColor);
 	}
 
 	@:keep
 	public static function setLayerPropertiesAt(index:Int, properties:Pointer<LayerInfoStruct>):Void {
         var ref:Reference<LayerInfoStruct> = properties.ref;
-        
-        // var name:String = null;
-        // var type:Int = 0;
-        // var tilesetName:String = null;
-        // var visible:Int = 1;
-        // var silhouette:Int = 0;
-        // var silhouetteColor:Int = 0xFFFFFFFF;
-
-        // untyped __cpp__("
-        // LayerInfoStruct* inStruct = (LayerInfoStruct*)({0});
-        // {1} = ::String(inStruct->name);
-        // {2} = inStruct->type;
-        // {3} = ::String(inStruct->tilesetName);
-        // {4} = inStruct->visible;
-        // {5} = inStruct->silhouette;
-        // {6} = inStruct->silhouetteColor;
-        // ", properties, name, type, tilesetName, visible, silhouette, silhouetteColor);
-
 		editorState.setLayerPropertiesAt(index, ref.name, ref.type, ref.tilesetName, ref.visible != 0, ref.silhouette, ref.silhouetteColor);
-
 	}
 
 	@:keep
@@ -1139,6 +1016,60 @@ class Editor {
 		editorState.replaceLayerTileset(layerName, newTilesetName);
 	}
 
+    // ----- entity layer batch accessors -----
+    @:keep
+    public static function getEntityLayerBatchCount(layerName:String):Int {
+        var layer = editorState.getLayerByName(layerName);
+        if (layer == null || !Std.isOfType(layer, layers.EntityLayer)) return 0;
+        return (cast layer:layers.EntityLayer).getBatchCount();
+    }
+
+    @:keep
+    public static function getEntityLayerBatchCountAt(index:Int):Int {
+        var layer = editorState.getLayerAt(index);
+        if (layer == null || !Std.isOfType(layer, layers.EntityLayer)) return 0;
+        return (cast layer:layers.EntityLayer).getBatchCount();
+    }
+
+    @:keep
+    public static function getEntityLayerBatchTilesetName(layerName:String, batchIndex:Int):String {
+        var layer = editorState.getLayerByName(layerName);
+        if (layer == null || !Std.isOfType(layer, layers.EntityLayer)) return "";
+        var entry = (cast layer:layers.EntityLayer).getBatchEntryAt(batchIndex);
+        if (entry == null) return "";
+        return entry.tileset != null ? entry.tileset.name : "";
+    }
+
+    @:keep
+    public static function moveEntityLayerBatchUp(layerName:String, batchIndex:Int):Int {
+        return editorState.moveEntityLayerBatchUp(layerName, batchIndex) ? 1 : 0;
+    }
+
+    @:keep
+    public static function moveEntityLayerBatchDown(layerName:String, batchIndex:Int):Int {
+        return editorState.moveEntityLayerBatchDown(layerName, batchIndex) ? 1 : 0;
+    }
+
+    @:keep
+    public static function moveEntityLayerBatchTo(layerName:String, batchIndex:Int, newIndex:Int):Int {
+        return editorState.moveEntityLayerBatchTo(layerName, batchIndex, newIndex) ? 1 : 0;
+    }
+
+    @:keep
+    public static function moveEntityLayerBatchUpByIndex(layerIndex:Int, batchIndex:Int):Int {
+        return editorState.moveEntityLayerBatchUpByLayerIndex(layerIndex, batchIndex) ? 1 : 0;
+    }
+
+    @:keep
+    public static function moveEntityLayerBatchDownByIndex(layerIndex:Int, batchIndex:Int):Int {
+        return editorState.moveEntityLayerBatchDownByLayerIndex(layerIndex, batchIndex) ? 1 : 0;
+    }
+
+    @:keep
+    public static function moveEntityLayerBatchToByIndex(layerIndex:Int, batchIndex:Int, newIndex:Int):Int {
+        return editorState.moveEntityLayerBatchToByLayerIndex(layerIndex, batchIndex, newIndex) ? 1 : 0;
+    }
+    
 	@:keep
 	public static function getMapProps(outInfo:Pointer<MapProps>):String {
         var error:String = null;

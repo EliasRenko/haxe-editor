@@ -36,11 +36,9 @@ class EntityManager {
             regionY: 0,
             regionWidth: width,
             regionHeight: height,
-            definedRegionId: -1
         };
         
         entityDefinitions.set(entityName, entity);
-        trace("Created/updated entity definition: " + entityName + " (" + width + "x" + height + ") using tileset: " + tilesetName);
     }
 
 	public function getEntityDefinitionAt(index:Int):Null<EntityDefinition> {
@@ -81,25 +79,21 @@ class EntityManager {
 
     public function deleteEntityDefinition(entityName:String):Bool {
         if (!entityDefinitions.exists(entityName)) {
-            trace("Entity definition not found: " + entityName);
             return false;
         }
         
         entityDefinitions.remove(entityName);
-        trace("Deleted entity definition: " + entityName);
         return true;
     }
 
     public function setEntityRegion(tilesetManager:TilesetManager, entityName:String, x:Int, y:Int, width:Int, height:Int):Void {
         var entityDef = getEntityDefinition(entityName);
         if (entityDef == null) {
-            trace("Cannot set region: entity not found: " + entityName);
             return;
         }
         
         var tileset = tilesetManager.tilesets.get(entityDef.tilesetName);
         if (tileset == null) {
-            trace("Cannot set region: tileset not found: " + entityDef.tilesetName);
             return;
         }
 

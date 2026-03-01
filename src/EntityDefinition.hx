@@ -8,5 +8,4 @@ class EntityDefinition {
     public var regionY:Int;              // Atlas region Y position
     public var regionWidth:Int;          // Atlas region width
     public var regionHeight:Int;         // Atlas region height
-    public var definedRegionId: Int; // Atlas region ID for placeholder graphic (used when actual region is not yet created)
 }

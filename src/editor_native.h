@@ -83,7 +83,6 @@ extern "C" {
     __declspec(dllexport) void setWindowSize(int width, int height);
     __declspec(dllexport) void* getWindowHandle();
     __declspec(dllexport) void setWindowPosition(int x, int y);
-    __declspec(dllexport) void setWindowSizeAndBorderless(int width, int height);
 
     // Input handling
     __declspec(dllexport) void onMouseMotion(int x, int y);
@@ -125,7 +124,18 @@ extern "C" {
     __declspec(dllexport) void createEntityLayer(const char* layerName);
     __declspec(dllexport) void createFolderLayer(const char* layerName);
 
+    __declspec(dllexport) int getLayerInfoAt(int index, LayerInfoStruct* outInfo);
+    __declspec(dllexport) int getLayerCount();
+
     __declspec(dllexport) int getLayerInfo(const char* layerName, LayerInfoStruct* outInfo);
+    __declspec(dllexport) void replaceLayerTileset(const char* layerName, const char* newTilesetName);
+
+    __declspec(dllexport) int setActiveLayer(const char* layerName);
+    __declspec(dllexport) int setActiveLayerAt(int index);
+    __declspec(dllexport) void setLayerProperties(const char* layerName, LayerInfoStruct* properties);
+    __declspec(dllexport) void setLayerPropertiesAt(int index, LayerInfoStruct* properties);
+    __declspec(dllexport) int removeLayer(const char* layerName);
+    __declspec(dllexport) int removeLayerByIndex(int index);
 
     // batch accessors for entity layers
     __declspec(dllexport) int getEntityLayerBatchCount(const char* layerName);
@@ -139,24 +149,12 @@ extern "C" {
     __declspec(dllexport) int moveEntityLayerBatchUpByIndex(int layerIndex, int batchIndex);
     __declspec(dllexport) int moveEntityLayerBatchDownByIndex(int layerIndex, int batchIndex);
     __declspec(dllexport) int moveEntityLayerBatchToByIndex(int layerIndex, int batchIndex, int newIndex);
-    __declspec(dllexport) int getLayerInfoAt(int index, LayerInfoStruct* outInfo);
-    __declspec(dllexport) int getLayerCount();
-
-    __declspec(dllexport) int setActiveLayer(const char* layerName);
-    __declspec(dllexport) int setActiveLayerAt(int index);
-    __declspec(dllexport) int removeLayer(const char* layerName);
-    __declspec(dllexport) int removeLayerByIndex(int index);
     
     __declspec(dllexport) int moveLayerUp(const char* layerName);
     __declspec(dllexport) int moveLayerDown(const char* layerName);
     __declspec(dllexport) int moveLayerTo(const char* layerName, int newIndex);
     __declspec(dllexport) int moveLayerUpByIndex(int index);
     __declspec(dllexport) int moveLayerDownByIndex(int index);
-
-    __declspec(dllexport) void setLayerProperties(const char* layerName, LayerInfoStruct* properties);
-    __declspec(dllexport) void setLayerPropertiesAt(int index, LayerInfoStruct* properties);
-
-    __declspec(dllexport) void replaceLayerTileset(const char* layerName, const char* newTilesetName);
 
     // map
     __declspec(dllexport) const char* getMapProps(MapProps* outInfo);
