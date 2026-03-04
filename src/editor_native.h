@@ -74,7 +74,7 @@ extern "C" {
     __declspec(dllexport) void render();
     __declspec(dllexport) void swapBuffers();
     __declspec(dllexport) void release();
-    __declspec(dllexport) void loadState(int stateIndex);
+    __declspec(dllexport) int loadState(int stateId);
     __declspec(dllexport) int isRunning();
 
     // Window management functions
