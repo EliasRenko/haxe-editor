@@ -138,8 +138,8 @@ class EntityLayer extends Layer implements ITilesLayer {
         var entityId = nextEntityId++;
         entry.entities.set(entityId, {name:def.name, tileId:tileId, x:x, y:y, width:def.width, height:def.height});
 
-        // Insert into the spatial quadtree for future queries
-        if (quadtree != null) quadtree.insert(entityId, x, y, def.width, def.height);
+        // Insert into the spatial quadtree for future queries (quadtree uses center coords)
+        if (quadtree != null) quadtree.insert(entityId, x + def.width * 0.5, y + def.height * 0.5, def.width, def.height);
 
         return entityId;
     }
@@ -252,7 +252,8 @@ class EntityLayer extends Layer implements ITilesLayer {
         for (entry in batches) {
             for (id in entry.entities.keys()) {
                 var e = entry.entities.get(id);
-                quadtree.insert(id, e.x, e.y, e.width, e.height);
+                // quadtree uses center coords; entity x/y is top-left
+                quadtree.insert(id, e.x + e.width * 0.5, e.y + e.height * 0.5, e.width, e.height);
             }
         }
     }
@@ -266,7 +267,8 @@ class EntityLayer extends Layer implements ITilesLayer {
         for (entry in batches) {
             for (id in entry.entities.keys()) {
                 var e = entry.entities.get(id);
-                map.set(id, { id:id, x:e.x, y:e.y, width:e.width, height:e.height });
+                // SAT rect uses center coords; entity x/y is top-left
+                map.set(id, { id:id, x:e.x + e.width * 0.5, y:e.y + e.height * 0.5, width:e.width, height:e.height });
             }
         }
         return map;

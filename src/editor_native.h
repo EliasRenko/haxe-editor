@@ -8,6 +8,8 @@
 #include <stdio.h>
 
 typedef void (__cdecl *CustomCallback)(const char* message);
+typedef struct EntityStruct EntityStruct; // forward declaration
+typedef void (__cdecl *EntitySelectionChangedCallback)(); // fired when selection changes
 
 typedef struct {
     unsigned char* data;
@@ -46,6 +48,14 @@ typedef struct {
     bool silhouette;          // 0 = no silhouette, 1 = silhouette enabled
     int silhouetteColor;  // RGBA color for silhouette 
 } LayerInfoStruct;
+
+typedef struct EntityStruct {
+    const char* name;
+    int width;
+    int height;
+    int x;
+    int y;
+} EntityStruct;
 
 typedef struct {
     const char* idd;
@@ -163,6 +173,11 @@ extern "C" {
     // tool
     __declspec(dllexport) void setToolType(int toolType);
     __declspec(dllexport) int getToolType();
+
+    // entity selection
+    __declspec(dllexport) void setEntitySelectionChangedCallback(EntitySelectionChangedCallback callback);
+    __declspec(dllexport) int getEntitySelectionCount();
+    __declspec(dllexport) int getEntitySelectionInfo(int index, EntityStruct* outData);
 }
 
 #endif // EDITOR_NATIVE_H

@@ -8,6 +8,7 @@ import math.Vec2;
 import layers.TilemapLayer;
 import struct.MapProps;
 import struct.EntityDataStruct;
+import struct.EntityStruct;
 import struct.TextureDataStruct;
 import struct.TilesetInfoStruct;
 import struct.LayerInfoStruct;
@@ -53,6 +54,7 @@ class Editor {
             // Load the font baker state
             editorState = new EditorState(app);
             app.addState(editorState);
+            wireEditorStateCallbacks();
             app.log.info(1, "EditorState loaded");
             
             initialized = true;
@@ -153,6 +155,7 @@ class Editor {
                 case 0: 
                     editorState = new EditorState(app);
                     app.addState(editorState);
+                    wireEditorStateCallbacks();
                     log("Editor: EditorState loaded");
                 default: 
                     log("Editor: Unknown state ID: " + stateId);
@@ -376,6 +379,32 @@ class Editor {
     @:keep
     public static function getToolType():Int {
         return editorState.toolType;
+    }
+
+    @:noExport @:keep
+    public static function wireEditorStateCallbacks():Void {
+        editorState.onEntitySelectionChanged = function() {
+            untyped __cpp__("if (g_entitySelectionChangedCallback) g_entitySelectionChangedCallback()");
+        };
+    }
+
+    @:keep
+    public static function getEntitySelectionCount():Int {
+        return editorState.selectedEntities.length;
+    }
+
+    @:keep
+    public static function getEntitySelectionInfo(index:Int, outData:cpp.Pointer<EntityStruct>):Int {
+        if (index < 0 || index >= editorState.selectedEntities.length) return 0;
+        var ent = editorState.selectedEntities[index];
+        var ref:cpp.Reference<EntityStruct> = outData.ref;
+        var entName:String = ent.name;
+        untyped __cpp__("{0}.name = {1}.__s", ref, entName);
+        ref.x = Std.int(ent.x);
+        ref.y = Std.int(ent.y);
+        ref.width = Std.int(ent.width);
+        ref.height = Std.int(ent.height);
+        return 1;
     }
     
     /**

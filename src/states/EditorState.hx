@@ -61,6 +61,12 @@ class EditorState extends State {
     private var minMapSize:Float = 320.0; // 10 tiles minimum (10 * 32px)
 
     public var toolType:ToolType = ToolType.TILE_DRAW;
+
+    // Selected entity list (supports future multi-select)
+    public var selectedEntities:Array<{id:Int, name:String, x:Float, y:Float, width:Float, height:Float}> = [];
+
+    // Fired whenever the selection changes (added, cleared, etc.)
+    public var onEntitySelectionChanged:()->Void = null;
     
     public function new(app:App) {
         super("EditorState", app);
@@ -489,21 +495,27 @@ class EditorState extends State {
         var entityLayer:EntityLayer = cast activeLayer;
         var entityId = entityLayer.pickEntityAt(worldX, worldY);
 
+        selectedEntities = [];
+
         if (entityId >= 0) {
             for (entry in entityLayer.batches) {
                 if (entry.entities.exists(entityId)) {
                     var ent = entry.entities.get(entityId);
-                    app.log.debug(LogCategory.APP,"Selected entity ID=" + entityId
+                    app.log.debug(LogCategory.APP, "Selected entity ID=" + entityId
                         + " name=" + ent.name
                         + " pos=(" + ent.x + ", " + ent.y + ")"
                         + " size=(" + ent.width + "x" + ent.height + ")"
                         + " tileset=" + entry.tileset.name);
+                    selectedEntities.push({ id: entityId, name: ent.name, x: ent.x, y: ent.y, width: ent.width, height: ent.height });
                     break;
                 }
             }
         } else {
-            app.log.debug(LogCategory.APP,"No entity at (" + worldX + ", " + worldY + ")");
+            app.log.debug(LogCategory.APP, "No entity at (" + worldX + ", " + worldY + ")");
         }
+
+        if (onEntitySelectionChanged != null)
+            onEntitySelectionChanged();
 
         return entityId;
     }

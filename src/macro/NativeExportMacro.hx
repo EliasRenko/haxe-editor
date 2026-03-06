@@ -130,6 +130,7 @@ class NativeExportMacro {
         sb.add('\n');
         sb.add('bool hxcpp_initialized = false;\n');
         sb.add('CustomCallback g_callback = nullptr;\n');
+        sb.add('EntitySelectionChangedCallback g_entitySelectionChangedCallback = nullptr;\n');
         sb.add('\n');
         sb.add('void SDLCALL CustomLogOutput(void* userdata, int category, SDL_LogPriority priority, const char* message) {\n');
         sb.add('    if (g_callback != nullptr) {\n');
@@ -168,6 +169,10 @@ class NativeExportMacro {
         sb.add('            SDL_SetLogOutputFunction(CustomLogOutput, (void*)callback);\n');
         sb.add('        }\n');
         sb.add('        return init();\n');
+        sb.add('    }\n');
+        sb.add('\n');
+        sb.add('    __declspec(dllexport) void setEntitySelectionChangedCallback(EntitySelectionChangedCallback callback) {\n');
+        sb.add('        g_entitySelectionChangedCallback = callback;\n');
         sb.add('    }\n');
 
         // ── Auto-generated wrappers ─────────────────────────────────────────
