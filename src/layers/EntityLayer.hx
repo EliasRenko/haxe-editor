@@ -1,22 +1,25 @@
 package layers;
 
 import display.ManagedTileBatch;
+import display.LineBatch;
 import Tileset;
 import EntityDefinition;
 import Lambda;
 import Map; // for convenience
+import utils.EntityQuadtree;
+import utils.EntityQuadtree.EntityBounds;
 
 
 // helper used only by EntityLayer - combines tileset and its batch plus bookkeeping
 class BatchEntry {
     public var tileset:Tileset;
     public var batch:ManagedTileBatch;
-    public var entities:Map<Int, {name:String, tileId:Int, x:Float, y:Float}>;
+    public var entities:Map<Int, {name:String, tileId:Int, x:Float, y:Float, width:Float, height:Float}>;
     public var definedRegions:Map<String,Int>;
     public function new(tileset:Tileset, batch:ManagedTileBatch) {
         this.tileset = tileset;
         this.batch = batch;
-        this.entities = new Map<Int, {name:String, tileId:Int, x:Float, y:Float}>();
+        this.entities = new Map<Int, {name:String, tileId:Int, x:Float, y:Float, width:Float, height:Float}>();
         this.definedRegions = new Map<String,Int>();
     }
 }
@@ -26,10 +29,23 @@ class EntityLayer extends Layer implements ITilesLayer {
     public var batches:Array<BatchEntry>;
 
     private var nextEntityId:Int = 0;
-    
+
+    /**
+     * Spatial quadtree for broad-phase entity picking and collision queries.
+     * Call setWorldBounds() to configure the root region before placing entities.
+     */
+    public var quadtree:EntityQuadtree;
+
+    // World bounds used when rebuilding the quadtree
+    private var _qtX:Float = 0;
+    private var _qtY:Float = 0;
+    private var _qtW:Float = 4096;
+    private var _qtH:Float = 4096;
+
     public function new(name:String) {
         super(name);
-        batches = [];
+        batches   = [];
+        quadtree  = new EntityQuadtree(_qtX, _qtY, _qtW, _qtH);
     }
 
     /**
@@ -70,6 +86,7 @@ class EntityLayer extends Layer implements ITilesLayer {
             }
             batches = [];
         }
+        if (quadtree != null) quadtree.clear();
         super.cleanup(renderer);
     }
     
@@ -119,7 +136,11 @@ class EntityLayer extends Layer implements ITilesLayer {
         entry.batch.needsBufferUpdate = true;
 
         var entityId = nextEntityId++;
-        entry.entities.set(entityId, {name:def.name, tileId:tileId, x:x, y:y});
+        entry.entities.set(entityId, {name:def.name, tileId:tileId, x:x, y:y, width:def.width, height:def.height});
+
+        // Insert into the spatial quadtree for future queries
+        if (quadtree != null) quadtree.insert(entityId, x, y, def.width, def.height);
+
         return entityId;
     }
 
@@ -132,6 +153,8 @@ class EntityLayer extends Layer implements ITilesLayer {
                 var ent = entry.entities.get(entityId);
                 if (entry.batch != null) entry.batch.removeTile(ent.tileId);
                 entry.entities.remove(entityId);
+                // Quadtree does not support single-node removal — rebuild from remaining data
+                rebuildQuadtree();
                 return true;
             }
         }
@@ -165,6 +188,7 @@ class EntityLayer extends Layer implements ITilesLayer {
         }
         batches = [];
         nextEntityId = 0;
+        if (quadtree != null) quadtree.clear();
     }
 
     /** move specified batch earlier in the sequence */
@@ -198,6 +222,81 @@ class EntityLayer extends Layer implements ITilesLayer {
 
     public function redefineRegions(tileset:Tileset):Void {
         // We should not be able to change the tileset for an EntityLayer since each entity has its own tileset.
+    }
+
+    // -----------------------------------------------------------------------
+    // Quadtree / collision API
+    // -----------------------------------------------------------------------
+
+    /**
+     * Configure the world-space bounds of the quadtree root node and rebuild it.
+     * Call this once when you know the map dimensions (or whenever the map resizes).
+     *
+     * @param wx  Center X of the world region
+     * @param wy  Center Y of the world region
+     * @param ww  Width  of the world region
+     * @param wh  Height of the world region
+     */
+    public function setWorldBounds(wx:Float, wy:Float, ww:Float, wh:Float):Void {
+        _qtX = wx;  _qtY = wy;  _qtW = ww;  _qtH = wh;
+        rebuildQuadtree();
+    }
+
+    /**
+     * Rebuild the quadtree from scratch using the current entity data.
+     * Called automatically after removeEntity(); you can also call it manually
+     * after bulk modifications.
+     */
+    public function rebuildQuadtree():Void {
+        quadtree = new EntityQuadtree(_qtX, _qtY, _qtW, _qtH);
+        for (entry in batches) {
+            for (id in entry.entities.keys()) {
+                var e = entry.entities.get(id);
+                quadtree.insert(id, e.x, e.y, e.width, e.height);
+            }
+        }
+    }
+
+    /**
+     * Build a flat map of every entity's bounding box, keyed by entity ID.
+     * Pass this to EntityQuadtree.pickEntity() for narrow-phase SAT tests.
+     */
+    public function getAllEntityBounds():Map<Int, EntityBounds> {
+        var map = new Map<Int, EntityBounds>();
+        for (entry in batches) {
+            for (id in entry.entities.keys()) {
+                var e = entry.entities.get(id);
+                map.set(id, { id:id, x:e.x, y:e.y, width:e.width, height:e.height });
+            }
+        }
+        return map;
+    }
+
+    /**
+     * Pick the entity at world position (px, py).
+     * Uses broad-phase quadtree + narrow-phase SAT (Differ) for accuracy.
+     * Falls back to getEntityAt() tolerance-based search if the quadtree is null.
+     *
+     * @return Entity ID or -1 if nothing is hit.
+     */
+    public function pickEntityAt(px:Float, py:Float):Int {
+        if (quadtree == null) return getEntityAt(px, py, 5.0);
+        return quadtree.pickEntity(px, py, getAllEntityBounds());
+    }
+
+    /**
+     * Draw the quadtree cell outlines into a LineBatch for debug visualisation.
+     * Intended for use each frame before rendering:
+     *
+     *   entityLayer.drawDebugQuadtree(lineBatch, [0.2, 0.9, 0.2, 0.7]);
+     *   renderer.renderDisplayObject(lineBatch, vpMatrix);
+     *
+     * @param lineBatch  A non-persistent LineBatch cleared each frame,
+     *                   or a persistent one that you clear manually.
+     * @param color      RGBA color, e.g. [0.2, 0.9, 0.2, 0.7]
+     */
+    public function drawDebugQuadtree(lineBatch:LineBatch, color:Array<Float>):Void {
+        if (quadtree != null) quadtree.drawDebug(lineBatch, color);
     }
 
     /** number of batch entries in this layer */

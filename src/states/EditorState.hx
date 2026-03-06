@@ -25,9 +25,11 @@ class EditorState extends State {
     private var tileBatch:ManagedTileBatch;
     private var mapFrame:MapFrame;
     private var worldAxes:LineBatch;
-    
+    private var quadtreeDebug:LineBatch;
+
     // Options
     public var showWorldAxes:Bool = true; // Show X/Y axes at origin (0,0)
+    public var showQuadtreeDebug:Bool = true; // Visualise EntityLayer quadtree cell bounds
     public var deleteOutOfBoundsTilesOnResize:Bool = true; // Auto-delete tiles when shrinking frame
 
     // Managers
@@ -98,6 +100,14 @@ class EditorState extends State {
         
         // Setup world axes
         setupWorldAxes(app.renderer);
+
+        // Setup quadtree debug batch (non-persistent — repopulated every frame)
+        var lineProgramInfo = app.renderer.getProgramInfo("line");
+        if (lineProgramInfo != null) {
+            quadtreeDebug = new LineBatch(lineProgramInfo, false);
+            quadtreeDebug.depthTest = false;
+            quadtreeDebug.init(app.renderer);
+        }
 
         // Create default programInfo
         var textureVertShader = app.resources.getText("shaders/texture.vert");
@@ -243,13 +253,13 @@ class EditorState extends State {
         super.update(deltaTime);
         
         // Handle mouse input for tile placement/removal
-        handleTileInput();
+        handleInput();
     }
     
     /**
      * Handle mouse input for placing and removing tiles, and resizing the map frame
      */
-    private function handleTileInput():Void {
+    private function handleInput():Void {
         var mouse = app.input.mouse;
 
         // Get mouse screen position from C# (assumed to be in screen coordinates)
@@ -295,7 +305,8 @@ class EditorState extends State {
             if (mouse.pressed(1)) {
                 placeEntityAt(worldPos.x, worldPos.y);
             } else if (mouse.pressed(3)) {
-                removeEntityAt(worldPos.x, worldPos.y);
+                //removeEntityAt(worldPos.x, worldPos.y);
+                selectEntityAt(worldPos.x, worldPos.y);
             }
 		}
 
@@ -388,21 +399,8 @@ class EditorState extends State {
             newHeight = minMapSize;
         }
         
-        // Update map bounds
-        mapX = newX;
-        mapY = newY;
-        mapWidth = newWidth;
-        mapHeight = newHeight;
-        
-        // Update frame visual
-        if (mapFrame != null) {
-            mapFrame.setBounds(mapX, mapY, mapWidth, mapHeight);
-        }
-        
-        // Update grid bounds to match map frame
-        if (grid != null) {
-            grid.setBounds(mapX, mapY, mapX + mapWidth, mapY + mapHeight);
-        }
+        // Update map bounds (also syncs EntityLayer quadtrees, grid, and mapFrame)
+        updateMapBounds(newX, newY, newWidth, newHeight);
         
         // Optionally delete tiles outside new bounds
         if (deleteOutOfBoundsTilesOnResize) {
@@ -462,28 +460,51 @@ class EditorState extends State {
     }
     
     /**
-     * Remove entity at world position
+     * Remove entity at world position using the quadtree for accurate picking
      */
     private function removeEntityAt(worldX:Float, worldY:Float):Void {
-        // Check if active layer is an entity layer
-        if (activeLayer == null || !Std.isOfType(activeLayer, EntityLayer)) {
-            return;
-        }
-        
+        if (activeLayer == null || !Std.isOfType(activeLayer, EntityLayer)) return;
+
         var entityLayer:EntityLayer = cast activeLayer;
-        
-        // Find entity at this position
-        var entityId = entityLayer.getEntityAt(worldX, worldY, 16.0);
-        
+        var entityId = entityLayer.pickEntityAt(worldX, worldY);
+
         if (entityId >= 0) {
             entityLayer.removeEntity(entityId);
-            trace("Removed entity ID: " + entityId + " at (" + worldX + ", " + worldY + ")");
+            trace("Removed entity ID=" + entityId + " at (" + worldX + ", " + worldY + ")");
         }
+    }
+
+    /**
+     * Select (pick) an entity at world position using the quadtree + SAT and trace its data
+     */
+    public function selectEntityAt(worldX:Float, worldY:Float):Int {
+        if (activeLayer == null || !Std.isOfType(activeLayer, EntityLayer)) return -1;
+
+        var entityLayer:EntityLayer = cast activeLayer;
+        var entityId = entityLayer.pickEntityAt(worldX, worldY);
+
+        if (entityId >= 0) {
+            for (entry in entityLayer.batches) {
+                if (entry.entities.exists(entityId)) {
+                    var ent = entry.entities.get(entityId);
+                    app.log.debug(LogCategory.APP,"Selected entity ID=" + entityId
+                        + " name=" + ent.name
+                        + " pos=(" + ent.x + ", " + ent.y + ")"
+                        + " size=(" + ent.width + "x" + ent.height + ")"
+                        + " tileset=" + entry.tileset.name);
+                    break;
+                }
+            }
+        } else {
+            app.log.debug(LogCategory.APP,"No entity at (" + worldX + ", " + worldY + ")");
+        }
+
+        return entityId;
     }
 
     public function getActiveTile():Int {
         if (activeLayer == null || !Std.isOfType(activeLayer, TilemapLayer)) {
-            trace("Cannot set active tile region: no active tilemap layer");
+            app.log.debug(LogCategory.APP,"Cannot set active tile region: no active tilemap layer");
             return 0;
         }
 
@@ -639,11 +660,15 @@ class EditorState extends State {
     private function addLayer(layer:Layer):Void {
         if (layer != null) {
             addEntity(layer);
-            
+
+            // Initialise quadtree bounds for any new entity layer
+            var el = Std.downcast(layer, EntityLayer);
+            if (el != null) el.setWorldBounds(mapX + mapWidth * 0.5, mapY + mapHeight * 0.5, mapWidth, mapHeight);
+
             // If this is the first layer, make it active
             if (activeLayer == null) {
                 activeLayer = layer;
-                
+
                 // Auto-switch tileset if it's a tilemap layer
                 if (Std.isOfType(layer, TilemapLayer)) {
                     var tilemapLayer:TilemapLayer = cast layer;
@@ -688,12 +713,16 @@ class EditorState extends State {
         // If this is the first layer, make it active
         if (activeLayer == null) {
             activeLayer = layer;
-            
-            // Auto-switch tileset if it's a tilemap layer
-            if (Std.isOfType(layer, TilemapLayer)) {
-                var tilemapLayer:TilemapLayer = cast layer;
-                tilesetManager.setActiveTileset(tilemapLayer.tileset.name);
-            }
+        }
+
+        // Initialise quadtree bounds for entity layers added at an index
+        var elIdx = Std.downcast(layer, EntityLayer);
+        if (elIdx != null) elIdx.setWorldBounds(mapX + mapWidth * 0.5, mapY + mapHeight * 0.5, mapWidth, mapHeight);
+
+        // Auto-switch tileset if it's a tilemap layer and this is the first/active layer
+        if (activeLayer == layer && Std.isOfType(layer, TilemapLayer)) {
+            var tilemapLayer:TilemapLayer = cast layer;
+            tilesetManager.setActiveTileset(tilemapLayer.tileset.name);
         }
     }
     
@@ -1316,13 +1345,21 @@ class EditorState extends State {
         mapY = y;
         mapWidth = width;
         mapHeight = height;
-        
+
         // Update visuals
         if (mapFrame != null) {
             mapFrame.setBounds(mapX, mapY, mapWidth, mapHeight);
         }
         if (grid != null) {
             grid.setBounds(mapX, mapY, mapX + mapWidth, mapY + mapHeight);
+        }
+
+        // Sync every EntityLayer quadtree to the new world bounds
+        var cx = mapX + mapWidth  * 0.5;
+        var cy = mapY + mapHeight * 0.5;
+        for (entity in entities) {
+            var el = Std.downcast(entity, EntityLayer);
+            if (el != null) el.setWorldBounds(cx, cy, mapWidth, mapHeight);
         }
     }
     
@@ -1342,6 +1379,17 @@ class EditorState extends State {
         }
 
         renderDisplayObject(renderer, viewProjectionMatrix, worldAxes);
+
+        // Draw quadtree debug overlay (repopulated each frame from all EntityLayers)
+        if (showQuadtreeDebug && quadtreeDebug != null) {
+            quadtreeDebug.clear();
+            for (entity in entities) {
+                var el = Std.downcast(entity, EntityLayer);
+                if (el != null) el.drawDebugQuadtree(quadtreeDebug, [1.0, 1.0, 1.0, 1.0]);
+            }
+            quadtreeDebug.updateBuffers(renderer);
+            renderDisplayObject(renderer, viewProjectionMatrix, quadtreeDebug);
+        }
 
         // Render entities from last to first (Photoshop-style: top of list renders on top)
         // This makes layer order intuitive - first layer in list = bottom, last layer = top
