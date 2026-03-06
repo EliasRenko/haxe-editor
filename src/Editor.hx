@@ -367,6 +367,16 @@ class Editor {
     public static function setActiveTile(tileRegionId:Int):Void {
         editorState.setActiveTile(tileRegionId);
     }
+
+    @:keep
+    public static function setToolType(toolType:Int):Void {
+        editorState.toolType = toolType;
+    }
+
+    @:keep
+    public static function getToolType():Int {
+        return editorState.toolType;
+    }
     
     /**
      * Export the current tilemap to a JSON file

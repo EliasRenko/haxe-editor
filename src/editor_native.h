@@ -159,6 +159,10 @@ extern "C" {
     // map
     __declspec(dllexport) const char* getMapProps(MapProps* outInfo);
     __declspec(dllexport) const char* setMapProps(MapProps* info);
+
+    // tool
+    __declspec(dllexport) void setToolType(int toolType);
+    __declspec(dllexport) int getToolType();
 }
 
 #endif // EDITOR_NATIVE_H

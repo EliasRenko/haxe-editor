@@ -1,5 +1,6 @@
 ﻿package states;
 
+import type.ToolType;
 import utils.Color;
 import layers.ITilesLayer;
 import Log.LogCategory;
@@ -58,6 +59,8 @@ class EditorState extends State {
     private var resizeDragStart:{x:Float, y:Float} = null;
     private var resizeOriginalBounds:{x:Float, y:Float, width:Float, height:Float} = null;
     private var minMapSize:Float = 320.0; // 10 tiles minimum (10 * 32px)
+
+    public var toolType:ToolType = ToolType.TILE_DRAW;
     
     public function new(app:App) {
         super("EditorState", app);
@@ -301,20 +304,23 @@ class EditorState extends State {
             }
         }
 
-		if (activeLayer != null && Std.isOfType(activeLayer, EntityLayer)) {
-            if (mouse.pressed(1)) {
-                placeEntityAt(worldPos.x, worldPos.y);
-            } else if (mouse.pressed(3)) {
-                //removeEntityAt(worldPos.x, worldPos.y);
-                selectEntityAt(worldPos.x, worldPos.y);
-            }
-		}
-
-        if (activeLayer != null && Std.isOfType(activeLayer, TilemapLayer)) {
-            if (mouse.check(1)) {
-                placeTileAt(worldPos.x, worldPos.y);
-            } else if (mouse.check(3)) {
-                removeTileAt(worldPos.x, worldPos.y);
+        if (activeLayer != null) {
+            switch (toolType) {
+                case ToolType.TILE_DRAW:
+                    if (Std.isOfType(activeLayer, TilemapLayer) && mouse.check(1))
+                        placeTileAt(worldPos.x, worldPos.y);
+                case ToolType.TILE_ERASE:
+                    if (Std.isOfType(activeLayer, TilemapLayer) && mouse.check(1))
+                        removeTileAt(worldPos.x, worldPos.y);
+                case ToolType.ENTITY_ADD:
+                    if (Std.isOfType(activeLayer, EntityLayer) && mouse.pressed(1))
+                        placeEntityAt(worldPos.x, worldPos.y);
+                    if (Std.isOfType(activeLayer, EntityLayer) && mouse.pressed(3))
+                        removeEntityAt(worldPos.x, worldPos.y);
+                case ToolType.ENTITY_SELECT:
+                    if (Std.isOfType(activeLayer, EntityLayer) && mouse.pressed(1))
+                        selectEntityAt(worldPos.x, worldPos.y);
+                default:
             }
         }
     }
