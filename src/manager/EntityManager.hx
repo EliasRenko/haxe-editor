@@ -36,8 +36,29 @@ class EntityManager {
             regionY: 0,
             regionWidth: width,
             regionHeight: height,
+            pivotX: 0.0,
+            pivotY: 0.0
         };
         
+        entityDefinitions.set(entityName, entity);
+    }
+
+    /** Create or fully overwrite an entity definition with all fields provided. */
+    public function setEntityFull(entityName:String, width:Int, height:Int, tilesetName:String,
+                                   regionX:Int, regionY:Int, regionWidth:Int, regionHeight:Int,
+                                   pivotX:Float, pivotY:Float):Void {
+        var entity:EntityDefinition = {
+            name: entityName,
+            width: width,
+            height: height,
+            tilesetName: tilesetName,
+            regionX: regionX,
+            regionY: regionY,
+            regionWidth: regionWidth,
+            regionHeight: regionHeight,
+            pivotX: pivotX,
+            pivotY: pivotY
+        };
         entityDefinitions.set(entityName, entity);
     }
 

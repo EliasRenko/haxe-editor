@@ -12,4 +12,8 @@ extern class EntityDataStruct {
     var regionY:Int;
     var regionWidth:Int;
     var regionHeight:Int;
+    /** Default normalized pivot X for this entity type (0 = left, 0.5 = center, 1 = right). */
+    var pivotX:Float;
+    /** Default normalized pivot Y for this entity type (0 = top, 0.5 = center, 1 = bottom). */
+    var pivotY:Float;
 }

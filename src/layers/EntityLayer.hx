@@ -5,21 +5,33 @@ import display.LineBatch;
 import Tileset;
 import EntityDefinition;
 import Lambda;
-import Map; // for convenience
+import Map;
 import utils.EntityQuadtree;
 import utils.EntityQuadtree.EntityBounds;
 
+typedef Entity = {
+    name:String,
+    tileId:Int,
+    x:Float,
+    y:Float,
+    width:Float,
+    height:Float,
+    /** Normalized pivot X (0 = left edge, 0.5 = center, 1 = right edge). x/y is the world position of this pivot point. */
+    pivotX:Float,
+    /** Normalized pivot Y (0 = top edge, 0.5 = center, 1 = bottom edge). x/y is the world position of this pivot point. */
+    pivotY:Float
+}
 
 // helper used only by EntityLayer - combines tileset and its batch plus bookkeeping
 class BatchEntry {
     public var tileset:Tileset;
     public var batch:ManagedTileBatch;
-    public var entities:Map<Int, {name:String, tileId:Int, x:Float, y:Float, width:Float, height:Float}>;
+    public var entities:Map<Int, Entity>;
     public var definedRegions:Map<String,Int>;
     public function new(tileset:Tileset, batch:ManagedTileBatch) {
         this.tileset = tileset;
         this.batch = batch;
-        this.entities = new Map<Int, {name:String, tileId:Int, x:Float, y:Float, width:Float, height:Float}>();
+        this.entities = new Map<Int, Entity>();
         this.definedRegions = new Map<String,Int>();
     }
 }
@@ -62,7 +74,6 @@ class EntityLayer extends Layer implements ITilesLayer {
     
     override public function render(renderer:Dynamic, viewProjectionMatrix:Dynamic):Void {
         if (!visible) {
-            trace("EntityLayer '" + id + "': not visible");
             return;
         }
         
@@ -72,8 +83,25 @@ class EntityLayer extends Layer implements ITilesLayer {
             var mb = entry.batch;
             if (mb == null) continue;
             if (!mb.visible) continue;
-            // allow caller to control silhouette per-batch via uniforms if desired
+
+            // Always reset silhouette to false first — GLSL uniforms are program-wide and
+            // persist across draw calls, so a previous TilemapLayer that rendered with
+            // silhouette=true would otherwise bleed into entity rendering.
+            mb.uniforms.set("silhouette", false);
+
             renderer.renderDisplayObject(mb, viewProjectionMatrix);
+
+            if (silhouette) {
+                mb.uniforms.set("silhouette", true);
+                mb.uniforms.set("silhouetteColor", [silhouetteColor.r, silhouetteColor.g, silhouetteColor.b, 0.4]);
+                renderer.renderDisplayObject(mb, viewProjectionMatrix);
+            }
+
+            if (missingTileset) {
+                mb.uniforms.set("silhouette", true);
+                mb.uniforms.set("silhouetteColor", [1.0, 0.0, 0.0, 0.5]);
+                renderer.renderDisplayObject(mb, viewProjectionMatrix);
+            }
         }
     }
     
@@ -97,7 +125,18 @@ class EntityLayer extends Layer implements ITilesLayer {
      * using the supplied renderer and program info.
      * Returns a unique entity ID or -1 on failure.
      */
-    public function placeEntity(def:EntityDefinition, tileset:Tileset, x:Float, y:Float, renderer:Dynamic, programInfo:Dynamic):Int {
+    /**
+     * pivotX / pivotY are normalised (0–1).
+     * (0, 0) = top-left   (0.5, 0.5) = centre   (1, 1) = bottom-right
+     * x / y always refer to the world position of the pivot point on the tile.
+     *
+     * When pivotX / pivotY are omitted (or Math.NaN), the entity definition's
+     * own default pivot (def.pivotX / def.pivotY) is used instead.
+     */
+    public function placeEntity(def:EntityDefinition, tileset:Tileset, x:Float, y:Float, renderer:Dynamic, programInfo:Dynamic, ?pivotX:Null<Float>, ?pivotY:Null<Float>):Int {
+        // Resolve pivot: explicit override > definition default
+        var px:Float = (pivotX != null) ? pivotX : def.pivotX;
+        var py:Float = (pivotY != null) ? pivotY : def.pivotY;
         // find or create batch entry for the provided tileset
         var entry:BatchEntry = null;
         for (e in batches) {
@@ -128,7 +167,11 @@ class EntityLayer extends Layer implements ITilesLayer {
             entry.definedRegions.set(def.name, regionId);
         }
 
-        var tileId = entry.batch.addTile(x, y, def.width, def.height, regionId);
+        // Actual top-left render position is offset from the pivot world position
+        var renderX = x - px * def.width;
+        var renderY = y - py * def.height;
+
+        var tileId = entry.batch.addTile(renderX, renderY, def.width, def.height, regionId);
         if (tileId < 0) {
             trace("EntityLayer.placeEntity: addTile failed");
             return -1;
@@ -136,12 +179,107 @@ class EntityLayer extends Layer implements ITilesLayer {
         entry.batch.needsBufferUpdate = true;
 
         var entityId = nextEntityId++;
-        entry.entities.set(entityId, {name:def.name, tileId:tileId, x:x, y:y, width:def.width, height:def.height});
+        entry.entities.set(entityId, {name:def.name, tileId:tileId, x:x, y:y, width:def.width, height:def.height, pivotX:px, pivotY:py});
 
         // Insert into the spatial quadtree for future queries (quadtree uses center coords)
-        if (quadtree != null) quadtree.insert(entityId, x + def.width * 0.5, y + def.height * 0.5, def.width, def.height);
+        // Center = pivot world pos + offset from pivot to center
+        var cx = x + (0.5 - px) * def.width;
+        var cy = y + (0.5 - py) * def.height;
+        if (quadtree != null) quadtree.insert(entityId, cx, cy, def.width, def.height);
 
         return entityId;
+    }
+
+    /**
+     * Propagate an updated EntityDefinition to every placed entity of that type.
+     * Re-registers the atlas region with the new pixel coordinates, then patches
+     * each matching tile's position, size, and regionId in-place.
+     * Call this after updating the definition in EntityManager (via editEntityDef).
+     *
+     * @param def The already-updated definition object.
+     */
+    public function applyDefinitionUpdate(def:EntityDefinition):Void {
+        var changed = false;
+        for (entry in batches) {
+            // Skip batches that have no entities of this type
+            var hasAny = false;
+            for (ent in entry.entities) {
+                if (ent.name == def.name) { hasAny = true; break; }
+            }
+            if (!hasAny) continue;
+
+            syncRegion(entry, def);
+
+            for (id in entry.entities.keys()) {
+                var ent = entry.entities.get(id);
+                if (ent.name != def.name) continue;
+
+                ent.width  = def.width;
+                ent.height = def.height;
+                ent.pivotX = def.pivotX;
+                ent.pivotY = def.pivotY;
+
+                var renderX = ent.x - def.pivotX * def.width;
+                var renderY = ent.y - def.pivotY * def.height;
+
+                var tile = entry.batch.getTile(ent.tileId);
+                if (tile != null) {
+                    tile.x      = renderX;
+                    tile.y      = renderY;
+                    tile.width  = def.width;
+                    tile.height = def.height;
+                }
+            }
+            entry.batch.needsBufferUpdate = true;
+            changed = true;
+        }
+        if (changed) rebuildQuadtree();
+    }
+
+    /**
+     * Ensure the atlas region for `def` in `entry` is up-to-date.
+     *
+     * - If the region has never been registered, register it now.
+     * - If it exists but the pixel rect changed, patch the UV in-place via updateRegion.
+     * - If updateRegion reports the slot is missing, create a fresh region and
+     *   re-point every matching tile to the new ID.
+     * - Skips region work when regionWidth/Height are 0 (partially-filled struct).
+     */
+    private function syncRegion(entry:BatchEntry, def:EntityDefinition):Void {
+        if (def.regionWidth <= 0 || def.regionHeight <= 0) return;
+
+        var regionId = entry.definedRegions.get(def.name);
+
+        if (regionId == null) {
+            // First time this entity type appears in this batch — register fresh.
+            regionId = entry.batch.defineRegion(
+                def.regionX, def.regionY, def.regionWidth, def.regionHeight);
+            entry.definedRegions.set(def.name, regionId);
+            return;
+        }
+
+        // Check whether the pixel rect actually changed before touching the GPU data.
+        var existing = entry.batch.getRegion(regionId);
+        var changed = (existing == null)
+            || existing.x != def.regionX     || existing.y != def.regionY
+            || existing.width != def.regionWidth || existing.height != def.regionHeight;
+
+        if (!changed) return;
+
+        if (entry.batch.updateRegion(regionId,
+                def.regionX, def.regionY, def.regionWidth, def.regionHeight)) return;
+
+        // updateRegion returned false — the slot was somehow lost.
+        // Create a new region and re-point every matching tile to it.
+        var newId = entry.batch.defineRegion(
+            def.regionX, def.regionY, def.regionWidth, def.regionHeight);
+        entry.definedRegions.set(def.name, newId);
+        for (id in entry.entities.keys()) {
+            var ent = entry.entities.get(id);
+            if (ent.name != def.name) continue;
+            var t = entry.batch.getTile(ent.tileId);
+            if (t != null) t.regionId = newId;
+        }
     }
 
     /**
@@ -252,8 +390,10 @@ class EntityLayer extends Layer implements ITilesLayer {
         for (entry in batches) {
             for (id in entry.entities.keys()) {
                 var e = entry.entities.get(id);
-                // quadtree uses center coords; entity x/y is top-left
-                quadtree.insert(id, e.x + e.width * 0.5, e.y + e.height * 0.5, e.width, e.height);
+                // quadtree uses center coords; e.x/y is the pivot world position
+                var cx = e.x + (0.5 - e.pivotX) * e.width;
+                var cy = e.y + (0.5 - e.pivotY) * e.height;
+                quadtree.insert(id, cx, cy, e.width, e.height);
             }
         }
     }
@@ -267,8 +407,10 @@ class EntityLayer extends Layer implements ITilesLayer {
         for (entry in batches) {
             for (id in entry.entities.keys()) {
                 var e = entry.entities.get(id);
-                // SAT rect uses center coords; entity x/y is top-left
-                map.set(id, { id:id, x:e.x + e.width * 0.5, y:e.y + e.height * 0.5, width:e.width, height:e.height });
+                // SAT rect uses center coords; e.x/y is the pivot world position
+                var cx = e.x + (0.5 - e.pivotX) * e.width;
+                var cy = e.y + (0.5 - e.pivotY) * e.height;
+                map.set(id, { id:id, x:cx, y:cy, width:e.width, height:e.height });
             }
         }
         return map;

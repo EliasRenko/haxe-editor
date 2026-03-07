@@ -8,4 +8,8 @@ class EntityDefinition {
     public var regionY:Int;              // Atlas region Y position
     public var regionWidth:Int;          // Atlas region width
     public var regionHeight:Int;         // Atlas region height
+    /** Default normalised pivot X (0 = left, 0.5 = centre, 1 = right). Applied when placing without an explicit override. */
+    public var pivotX:Float = 0.0;
+    /** Default normalised pivot Y (0 = top, 0.5 = centre, 1 = bottom). Applied when placing without an explicit override. */
+    public var pivotY:Float = 0.0;
 }

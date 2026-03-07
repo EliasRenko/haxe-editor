@@ -37,6 +37,8 @@ typedef struct {
     int regionY;
     int regionWidth;
     int regionHeight;
+    float pivotX; /* default normalised pivot X (0=left, 0.5=centre, 1=right) */
+    float pivotY; /* default normalised pivot Y (0=top,  0.5=centre, 1=bottom) */
 } EntityDataStruct;
 
 typedef struct {
@@ -120,14 +122,17 @@ extern "C" {
     __declspec(dllexport) void setActiveTile(int tileRegionId);
     
     // Entity definition management
-    __declspec(dllexport) const char* createEntityDef(const char* entityName, int width, int height, const char* tilesetName);
+    // Creates a new entity definition. Fails if a definition with the same name already exists.
+    __declspec(dllexport) const char* createEntityDef(const char* entityName, EntityDataStruct* data);
+    // Updates all fields of an existing entity definition and propagates the changes to every
+    // placed entity in the scene that was created from that definition.
+    __declspec(dllexport) const char* editEntityDef(const char* entityName, EntityDataStruct* data);
 
     __declspec(dllexport) const char* getEntityDef(const char* entityName, EntityDataStruct* outData);
     __declspec(dllexport) const char* getEntityDefAt(int index, EntityDataStruct* outData);
     __declspec(dllexport) int getEntityDefCount();
 
     __declspec(dllexport) int setActiveEntityDef(const char* entityName);
-    __declspec(dllexport) void setEntityDefRegion(const char* entityName, int x, int y, int width, int height);
 
     // Layer management
     __declspec(dllexport) void createTilemapLayer(const char* layerName, const char* tilesetName, int index);

@@ -31,6 +31,15 @@ class Editor {
     private static function log(msg:String):Void {
         untyped __cpp__("SDL_LogInfo(SDL_LOG_CATEGORY_APPLICATION, \"%s\", {0})", msg);
     }
+
+    // Redirect haxe.Log.trace → OutputDebugString so traces appear in the
+    // Visual Studio Output (Debug) panel even when running as a DLL.
+    private static function redirectTraceToDebugOutput():Void {
+        haxe.Log.trace = function(v:Dynamic, ?pos:haxe.PosInfos):Void {
+            var msg = (pos != null ? pos.fileName + ":" + pos.lineNumber + ": " : "") + Std.string(v);
+            untyped __cpp__("OutputDebugStringA({0})", msg + "\n");
+        };
+    }
     
     /**
      * Initialize the engine
@@ -38,6 +47,7 @@ class Editor {
      */
     @:keep @:noExport
     public static function init():Int {
+        redirectTraceToDebugOutput();
         if (initialized) {
             log("Engine already initialized");
             return 1;
@@ -532,8 +542,29 @@ class Editor {
     // ===== ENTITY DEFINITION MANAGEMENT =====
     
     @:keep
-    public static function createEntityDef(entityName:String, width:Int, height:Int, tilesetName:String):String {
-        return editorState.createEntity(entityName, width, height, tilesetName);
+    public static function createEntityDef(entityName:String, data:Pointer<EntityDataStruct>):String {
+        var ref:Reference<EntityDataStruct> = data.ref;
+        var tilesetName:String = ref.tilesetName;
+        return editorState.createEntityFull(
+            entityName,
+            ref.width, ref.height,
+            tilesetName,
+            ref.regionX, ref.regionY, ref.regionWidth, ref.regionHeight,
+            ref.pivotX, ref.pivotY
+        );
+    }
+
+    @:keep
+    public static function editEntityDef(entityName:String, data:Pointer<EntityDataStruct>):String {
+        var ref:Reference<EntityDataStruct> = data.ref;
+        var tilesetName:String = ref.tilesetName;
+        return editorState.editEntity(
+            entityName,
+            ref.width, ref.height,
+            tilesetName,
+            ref.regionX, ref.regionY, ref.regionWidth, ref.regionHeight,
+            ref.pivotX, ref.pivotY
+        );
     }
     
     @:keep
@@ -582,11 +613,6 @@ class Editor {
     }
 
     @:keep
-    public static function setEntityDefRegion(entityName:String, x:Int, y:Int, width:Int, height:Int):Void {
-        editorState.setEntityRegion(entityName, x, y, width, height);
-    }
-    
-    @:keep
     public static function setActiveEntityDef(entityName:String):Int {
         return editorState.setActiveEntity(entityName) ? 1 : 0;
     }
@@ -602,6 +628,8 @@ class Editor {
 		ref.regionY = entityDef.regionY;
 		ref.regionWidth = entityDef.regionWidth;
 		ref.regionHeight = entityDef.regionHeight;
+		ref.pivotX = entityDef.pivotX;
+		ref.pivotY = entityDef.pivotY;
     }
     
     // ===== LAYER MANAGEMENT =====

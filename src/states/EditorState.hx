@@ -38,7 +38,7 @@ class EditorState extends State {
     // Tile editor settings
     public var tileSizeX:Int = 64; // Width of each tile in pixels
     public var tileSizeY:Int = 64; // Height of each tile in pixels
-    private var tileRegions:Array<Int> = []; // Available tile regions (for backward compatibility)
+    //private var tileRegions:Array<Int> = []; // Available tile regions (for backward compatibility)
     
     // Layer management (layers are stored in entities array)
     private var activeLayer:Layer = null;
@@ -166,6 +166,71 @@ class EditorState extends State {
 
         entityManager.setEntity(entityName, width, height, tilesetName);
 
+        return null;
+    }
+
+    /**
+     * Update every field of an existing entity definition and propagate the changes
+     * to all placed entities across every EntityLayer.
+     */
+    public function editEntity(entityName:String, width:Int, height:Int, tilesetName:String,
+                               regionX:Int, regionY:Int, regionWidth:Int, regionHeight:Int,
+                               pivotX:Float, pivotY:Float):String {
+        if (!entityManager.exists(entityName)) {
+            var error = "Cannot edit entity '" + entityName + "': definition does not exist";
+            app.log.info(LogCategory.APP, error);
+            return error;
+        }
+        if (!tilesetManager.exists(tilesetName)) {
+            var error = "Cannot edit entity '" + entityName + "': tileset '" + tilesetName + "' does not exist";
+            app.log.info(LogCategory.APP, error);
+            return error;
+        }
+        entityManager.setEntityFull(entityName, width, height, tilesetName,
+                                    regionX, regionY, regionWidth, regionHeight,
+                                    pivotX, pivotY);
+        var def = entityManager.getEntityDefinition(entityName);
+        // Collect all EntityLayers recursively (including those nested in FolderLayers)
+        var allEntityLayers:Array<EntityLayer> = [];
+        collectEntityLayers(entities, allEntityLayers);
+        for (entityLayer in allEntityLayers) {
+            entityLayer.applyDefinitionUpdate(def);
+        }
+        return null;
+    }
+
+    /** Recursively collect all EntityLayer instances from an entity array (includes FolderLayer children). */
+    private function collectEntityLayers(source:Array<Dynamic>, result:Array<EntityLayer>):Void {
+        for (entity in source) {
+            if (Std.isOfType(entity, EntityLayer)) {
+                result.push(cast entity);
+            } else if (Std.isOfType(entity, FolderLayer)) {
+                var folder:FolderLayer = cast entity;
+                if (folder.children != null) collectEntityLayers(cast folder.children, result);
+            }
+        }
+    }
+
+    /**
+     * Create a brand-new entity definition from a full set of fields.
+     * Fails if a definition with the same name already exists.
+     */
+    public function createEntityFull(entityName:String, width:Int, height:Int, tilesetName:String,
+                                     regionX:Int, regionY:Int, regionWidth:Int, regionHeight:Int,
+                                     pivotX:Float, pivotY:Float):String {
+        if (!tilesetManager.exists(tilesetName)) {
+            var error = "Cannot create entity '" + entityName + "': tileset '" + tilesetName + "' does not exist";
+            app.log.info(LogCategory.APP, error);
+            return error;
+        }
+        if (entityManager.exists(entityName)) {
+            var error = "Cannot create entity '" + entityName + "': definition already exists. Use editEntityDef to update it.";
+            app.log.info(LogCategory.APP, error);
+            return error;
+        }
+        entityManager.setEntityFull(entityName, width, height, tilesetName,
+                                    regionX, regionY, regionWidth, regionHeight,
+                                    pivotX, pivotY);
         return null;
     }
     

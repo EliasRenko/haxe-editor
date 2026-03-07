@@ -10,7 +10,7 @@ import utils.ImportContext;
 
 /**
  * Handles importing and exporting map data to JSON format
- * Version 1.4 format supports both tilemap and entity layers
+ * Version 1.5 format adds pivotX/pivotY per entity
  */
 class MapSerializer {
     
@@ -94,7 +94,9 @@ class MapSerializer {
                         batchEntities.push({
                             name: entityData.name,
                             x: entityData.x,
-                            y: entityData.y
+                            y: entityData.y,
+                            pivotX: entityData.pivotX,
+                            pivotY: entityData.pivotY
                         });
                     }
                     if (batchEntities.length > 0) {
@@ -149,7 +151,7 @@ class MapSerializer {
         
         // Create JSON structure
         var data = {
-            version: "1.4",
+            version: "1.5",
             tilesets: tilesetsArray,
             entityDefinitions: entitiesArray,
             currentTileset: tilesetManager.currentTilesetName,
@@ -339,9 +341,11 @@ class MapSerializer {
                                         var entityName:String = entityData.name;
                                         var x:Float = entityData.x;
                                         var y:Float = entityData.y;
+                                        var pivotX:Float = entityData.pivotX != null ? entityData.pivotX : 0.0;
+                                        var pivotY:Float = entityData.pivotY != null ? entityData.pivotY : 0.0;
                                         var entityDef = context.entityManager.getEntityDefinition(entityName);
                                         if (entityDef == null) continue;
-                                        entityLayer.placeEntity(entityDef, tileset, x, y, context.renderer, programInfo);
+                                        entityLayer.placeEntity(entityDef, tileset, x, y, context.renderer, programInfo, pivotX, pivotY);
                                         importedCount++;
                                     }
                                 }
@@ -353,13 +357,15 @@ class MapSerializer {
                                     var entityName:String = entityData.name;
                                     var x:Float = entityData.x;
                                     var y:Float = entityData.y;
+                                    var pivotX:Float = entityData.pivotX != null ? entityData.pivotX : 0.0;
+                                    var pivotY:Float = entityData.pivotY != null ? entityData.pivotY : 0.0;
                                     var tsName:String = Std.is(entityData.tilesetName,String) ? entityData.tilesetName : null;
                                     var entityDef = context.entityManager.getEntityDefinition(entityName);
                                     if (entityDef == null) continue;
                                     var lookupName = tsName != null ? tsName : entityDef.tilesetName;
                                     var tileset:Tileset = context.tilesetManager.tilesets.get(lookupName);
                                     if (tileset == null) continue;
-                                    entityLayer.placeEntity(entityDef, tileset, x, y, context.renderer, programInfo);
+                                    entityLayer.placeEntity(entityDef, tileset, x, y, context.renderer, programInfo, pivotX, pivotY);
                                     importedCount++;
                                 }
                             }
