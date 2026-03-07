@@ -17,8 +17,10 @@ import math.Matrix;
 class Grid extends Transform {
 
     // Grid properties
-    public var gridSize:Float = 100.0;
-    public var subGridSize:Float = 25.0;
+    public var gridSizeX:Float = 100.0;
+    public var gridSizeY:Float = 100.0;
+    public var subGridSizeX:Float = 25.0;
+    public var subGridSizeY:Float = 25.0;
     //public var gridColor:Array<Float> = [0.3, 0.3, 0.3]; // RGB
     //public var backgroundColor:Array<Float> = [0.0, 0.0, 0.0]; // RGB
     public var fadeDistance:Float = 2000.0;
@@ -74,8 +76,8 @@ class Grid extends Transform {
         if (!visible) return;
 
         // Set uniforms for the grid shader
-        uniforms.set("uGridSize", gridSize);
-        uniforms.set("uSubGridSize", subGridSize);
+        uniforms.set("uGridSize", [gridSizeX, gridSizeY]);
+        uniforms.set("uSubGridSize", [subGridSizeX, subGridSizeY]);
         uniforms.set("uGridColor", [gridColor.r, gridColor.g, gridColor.b, 1.0]); // Convert Color to RGBA array
         uniforms.set("uBackgroundColor", [backgroundColor.r, backgroundColor.g, backgroundColor.b, 1.0]); // Convert Color to RGBA array
         //uniforms.set("uBackgroundColor", [0, 0, 0, 1.0]); // Convert Color to RGBA array

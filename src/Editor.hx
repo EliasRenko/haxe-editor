@@ -823,7 +823,8 @@ class Editor {
 			ref.worldy = Std.int(editorState.mapY);
 			ref.width = Std.int(editorState.mapWidth);
 			ref.height = Std.int(editorState.mapHeight);
-			ref.tileSize = editorState.tileSize;
+			ref.tileSizeX = editorState.tileSizeX;
+			ref.tileSizeY = editorState.tileSizeY;
 			ref.bgColor = editorState.grid.backgroundColor.hexValue;
 			ref.gridColor = editorState.grid.gridColor.hexValue;
 		} catch (e:Dynamic) {
@@ -843,6 +844,9 @@ class Editor {
             var ref:Reference<MapProps> = info.ref;
             editorState.grid.gridColor.hexValue = ref.gridColor; 
             editorState.grid.backgroundColor.hexValue = ref.bgColor;
+            if (ref.tileSizeX != editorState.tileSizeX || ref.tileSizeY != editorState.tileSizeY) {
+                editorState.recalibrateTileSize(ref.tileSizeX, ref.tileSizeY);
+            }
         } catch (e:Dynamic) {
             error = "Editor: Failed to set map properties: " + e;
             app.log.error(LogCategory.APP, error);

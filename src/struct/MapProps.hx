@@ -10,7 +10,8 @@ extern class MapProps {
 	var worldy:Int;
 	var width:Int;
 	var height:Int;
-	var tileSize:Int;
+	var tileSizeX:Int;
+	var tileSizeY:Int;
 	var bgColor:Int;
 	var gridColor:Int;
 }

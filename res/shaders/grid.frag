@@ -3,8 +3,8 @@
 in vec2 fragPos;
 out vec4 FragColor;
 
-uniform float uGridSize;
-uniform float uSubGridSize;
+uniform vec2 uGridSize;
+uniform vec2 uSubGridSize;
 uniform vec3 uGridColor;
 uniform vec3 uBackgroundColor;
 uniform float uFadeDistance;
@@ -12,7 +12,7 @@ uniform vec2 uBoundsMin; // Min bounds (x, y)
 uniform vec2 uBoundsMax; // Max bounds (x, y)
 uniform int uEnableBounds; // 0 = disabled, 1 = enabled
 
-float grid(vec2 pos, float gridSize) {
+float grid(vec2 pos, vec2 gridSize) {
     // Calculate grid lines
     vec2 grid = abs(fract(pos / gridSize - 0.5) - 0.5) / fwidth(pos / gridSize);
     float line = min(grid.x, grid.y);

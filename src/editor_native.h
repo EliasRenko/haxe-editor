@@ -1,7 +1,6 @@
 #ifndef EDITOR_NATIVE_H
 #define EDITOR_NATIVE_H
 
-//#include <hx/Thread.h>
 #include <windows.h>
 #include <io.h>
 #include <fcntl.h>
@@ -64,7 +63,8 @@ typedef struct {
     int worldy;
     int width;
     int height;
-    int tileSize;
+    int tileSizeX;
+    int tileSizeY;
     int bgColor;
     int gridColor;
 } MapProps;

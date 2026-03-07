@@ -29,7 +29,8 @@ class MapSerializer {
         tilesetManager:TilesetManager,
         entityManager:EntityManager,
         mapBounds:Dynamic,
-        tileSize:Int,
+        tileSizeX:Int,
+        tileSizeY:Int,
         filePath:String
     ):Int {
         var layersData:Array<Dynamic> = [];
@@ -54,8 +55,8 @@ class MapSerializer {
                     
                     if (tile != null) {
                         // Convert world position back to grid coordinates
-                        var gridX = Std.int(tile.x / tileset.tileSize);
-                        var gridY = Std.int(tile.y / tileset.tileSize);
+                        var gridX = Std.int(tile.x / tileSizeX);
+                        var gridY = Std.int(tile.y / tileSizeY);
                         
                         // Get tile region (atlas index)
                         var region = tile.regionId;
@@ -63,8 +64,6 @@ class MapSerializer {
                         layerTiles.push({
                             gridX: gridX,
                             gridY: gridY,
-                            x: tile.x,
-                            y: tile.y,
                             region: region
                         });
                     }
@@ -159,8 +158,10 @@ class MapSerializer {
                 y: mapBounds.y,
                 width: mapBounds.width,
                 height: mapBounds.height,
-                gridWidth: Std.int(mapBounds.width / tileSize),
-                gridHeight: Std.int(mapBounds.height / tileSize)
+                tileSizeX: tileSizeX,
+                tileSizeY: tileSizeY,
+                gridWidth: Std.int(mapBounds.width / tileSizeX),
+                gridHeight: Std.int(mapBounds.height / tileSizeY)
             },
             layers: layersData,
             tileCount: totalTileCount
@@ -239,6 +240,10 @@ class MapSerializer {
                 }
             }
             
+            // Tile size used for recomputing world positions from grid coords (defaults, overridden by mapBounds)
+            var tsx:Int = (data.mapBounds != null && data.mapBounds.tileSizeX != null) ? Std.int(data.mapBounds.tileSizeX) : 64;
+            var tsy:Int = (data.mapBounds != null && data.mapBounds.tileSizeY != null) ? Std.int(data.mapBounds.tileSizeY) : 64;
+
             // Update map bounds
             if (data.mapBounds != null) {
                 context.updateMapBounds(
@@ -247,6 +252,8 @@ class MapSerializer {
                     data.mapBounds.width,
                     data.mapBounds.height
                 );
+                // Restore tile size
+                context.setTileSize(tsx, tsy);
             }
             
             // Create layers and place tiles/entities
@@ -281,12 +288,14 @@ class MapSerializer {
                                 var tiles:Array<Dynamic> = layerData.tiles;
                                 
                                 for (tileData in tiles) {
-                                    var x:Float = tileData.x;
-                                    var y:Float = tileData.y;
                                     var region:Int = tileData.region;
                                     var gridX:Int = tileData.gridX;
                                     var gridY:Int = tileData.gridY;
                                     var gridKey = gridX + "_" + gridY;
+                                    
+                                    // Compute world position from grid coords and tile size
+                                    var x:Float = gridX * tsx;
+                                    var y:Float = gridY * tsy;
                                     
                                     // Add tile using the layer's batch
                                     var tileId = tilemapLayer.managedTileBatch.addTile(x, y, tileset.tileSize, tileset.tileSize, region);

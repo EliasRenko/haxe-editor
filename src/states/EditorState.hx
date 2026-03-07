@@ -1,8 +1,6 @@
 ﻿package states;
 
 import type.ToolType;
-import utils.Color;
-import layers.ITilesLayer;
 import Log.LogCategory;
 import State;
 import App;
@@ -38,7 +36,8 @@ class EditorState extends State {
     public var entityManager:EntityManager = new EntityManager();
     
     // Tile editor settings
-    public var tileSize:Int = 32; // Size of each tile in pixels
+    public var tileSizeX:Int = 64; // Width of each tile in pixels
+    public var tileSizeY:Int = 64; // Height of each tile in pixels
     private var tileRegions:Array<Int> = []; // Available tile regions (for backward compatibility)
     
     // Layer management (layers are stored in entities array)
@@ -90,8 +89,10 @@ class EditorState extends State {
         var gridProgramInfo = app.renderer.createProgramInfo("grid", gridVertShader, gridFragShader);
         
         grid = new Grid(gridProgramInfo, 5000.0); // 5000 unit quad
-        grid.gridSize = 128.0; // 128 pixel large grid
-        grid.subGridSize = 32.0; // 32 pixel small grid
+        grid.subGridSizeX = tileSizeX;
+        grid.subGridSizeY = tileSizeY;
+        grid.gridSizeX = tileSizeX * 4.0;
+        grid.gridSizeY = tileSizeY * 4.0;
         //grid.setGridColor(0.2, 0.4, 0.6); // Blue-ish grid lines
         //grid.setBackgroundColor(0.05, 0.05, 0.1); // Dark blue background
         //grid.gridColor = new Color(0xFF336699); // Blue-ish grid lines
@@ -366,9 +367,9 @@ class EditorState extends State {
         var deltaX = worldX - resizeDragStart.x;
         var deltaY = worldY - resizeDragStart.y;
         
-        // Snap delta to grid (32px increments)
-        deltaX = Math.round(deltaX / tileSize) * tileSize;
-        deltaY = Math.round(deltaY / tileSize) * tileSize;
+        // Snap delta to grid
+        deltaX = Math.round(deltaX / tileSizeX) * tileSizeX;
+        deltaY = Math.round(deltaY / tileSizeY) * tileSizeY;
         
         var newX = resizeOriginalBounds.x;
         var newY = resizeOriginalBounds.y;
@@ -557,8 +558,8 @@ class EditorState extends State {
         var layerTileset = tilemapLayer.tileset;
         
         // Snap to grid (tiles are positioned by top-left corner)
-        var tileX = Std.int(Math.floor(worldX / layerTileset.tileSize) * layerTileset.tileSize);
-        var tileY = Std.int(Math.floor(worldY / layerTileset.tileSize) * layerTileset.tileSize);
+        var tileX = Std.int(Math.floor(worldX / tileSizeX) * tileSizeX);
+        var tileY = Std.int(Math.floor(worldY / tileSizeY) * tileSizeY);
         
         // Check if tile is within map bounds
         if (tileX < mapX || tileX >= mapX + mapWidth || 
@@ -568,8 +569,8 @@ class EditorState extends State {
         }
         
         // Convert to grid coordinates
-        var gridX = Std.int(tileX / layerTileset.tileSize);
-        var gridY = Std.int(tileY / layerTileset.tileSize);
+        var gridX = Std.int(tileX / tileSizeX);
+        var gridY = Std.int(tileY / tileSizeY);
         var gridKey = gridX + "_" + gridY;
         
         // Check if tile already exists at this grid position (O(1) lookup!)
@@ -600,11 +601,11 @@ class EditorState extends State {
         }
         
         var tilemapLayer:TilemapLayer = cast activeLayer;
-        var layerTileset = tilemapLayer.tileset;
+        //var layerTileset = tilemapLayer.tileset;
         
         // Snap to grid
-        var tileX = Math.floor(worldX / layerTileset.tileSize) * layerTileset.tileSize;
-        var tileY = Math.floor(worldY / layerTileset.tileSize) * layerTileset.tileSize;
+        var tileX = Math.floor(worldX / tileSizeX) * tileSizeX;
+        var tileY = Math.floor(worldY / tileSizeY) * tileSizeY;
         
         // Check if position is within map bounds
         if (tileX < mapX || tileX >= mapX + mapWidth || 
@@ -614,8 +615,8 @@ class EditorState extends State {
         }
         
         // Convert to grid coordinates
-        var gridX = Std.int(tileX / layerTileset.tileSize);
-        var gridY = Std.int(tileY / layerTileset.tileSize);
+        var gridX = Std.int(tileX / tileSizeX);
+        var gridY = Std.int(tileY / tileSizeY);
         var gridKey = gridX + "_" + gridY;
         
         // Fast lookup in grid index (O(1) instead of O(n)!)
@@ -1271,7 +1272,8 @@ class EditorState extends State {
             tilesetManager,
             entityManager,
             mapBounds,
-            tileSize,
+            tileSizeX,
+            tileSizeY,
             filePath
         );
     }
@@ -1315,6 +1317,7 @@ class EditorState extends State {
             setEntityRegionPixels: setEntityRegionPixels,
             setCurrentTileset: setCurrentTileset,
             updateMapBounds: updateMapBounds,
+            setTileSize: setTileSize,
             createTilemapLayer: createTilemapLayer,
             createEntityLayer: createEntityLayer
         };
@@ -1355,7 +1358,53 @@ class EditorState extends State {
     
     private function setCurrentTileset(name:String, size:Int):Void {
         tilesetManager.currentTilesetName = name;
-        tileSize = size;
+    }
+    
+    private function setTileSize(x:Int, y:Int):Void {
+        tileSizeX = x;
+        tileSizeY = y;
+    }
+
+    /**
+     * Change the snap tile size and reposition all existing tiles in every
+     * TilemapLayer so their world coordinates stay consistent with the new grid.
+     * @param newSizeX New tile width in pixels
+     * @param newSizeY New tile height in pixels
+     */
+    public function recalibrateTileSize(newSizeX:Int, newSizeY:Int):Void {
+        if (newSizeX <= 0 || newSizeY <= 0) return;
+
+        for (entity in entities) {
+            if (!Std.isOfType(entity, TilemapLayer)) continue;
+            var tilemapLayer:TilemapLayer = cast entity;
+
+            for (gridKey in tilemapLayer.tileGrid.keys()) {
+                var parts = gridKey.split("_");
+                var gridX = Std.parseInt(parts[0]);
+                var gridY = Std.parseInt(parts[1]);
+                var tileId = tilemapLayer.tileGrid.get(gridKey);
+
+                tilemapLayer.managedTileBatch.updateTilePosition(
+                    tileId,
+                    gridX * newSizeX,
+                    gridY * newSizeY
+                );
+            }
+
+            if (Lambda.count(tilemapLayer.tileGrid) > 0)
+                tilemapLayer.managedTileBatch.needsBufferUpdate = true;
+        }
+
+        tileSizeX = newSizeX;
+        tileSizeY = newSizeY;
+
+        // Sync the visual grid
+        if (grid != null) {
+            grid.subGridSizeX = newSizeX;
+            grid.subGridSizeY = newSizeY;
+            grid.gridSizeX = newSizeX * 4.0;
+            grid.gridSizeY = newSizeY * 4.0;
+        }
     }
     
     private function updateMapBounds(x:Float, y:Float, width:Float, height:Float):Void {
