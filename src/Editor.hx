@@ -481,6 +481,10 @@ class Editor {
     @:keep public static function createTileset(texturePath:String, tilesetName:String, tileSize:Int):String { 
         return editorState.createTileset(texturePath, tilesetName, tileSize);
     }
+
+    @:keep public static function deleteTileset(name:String):String {
+        return editorState.deleteTileset(name);
+    }
     
     /**
      * Get the count of loaded tilesets

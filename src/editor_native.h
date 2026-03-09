@@ -122,6 +122,10 @@ extern "C" {
     __declspec(dllexport) void setActiveTile(int tileRegionId);
     
     // Entity definition management
+    // Removes a tileset by name. Also removes every TilemapLayer using it and every entity
+    // batch in EntityLayers that references it. Returns null on success, error string on failure.
+    __declspec(dllexport) const char* deleteTileset(const char* name);
+
     // Creates a new entity definition. Fails if a definition with the same name already exists.
     __declspec(dllexport) const char* createEntityDef(const char* entityName, EntityDataStruct* data);
     // Updates all fields of an existing entity definition and propagates the changes to every

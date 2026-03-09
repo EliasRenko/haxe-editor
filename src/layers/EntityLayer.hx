@@ -336,6 +336,26 @@ class EntityLayer extends Layer implements ITilesLayer {
         return false;
     }
 
+    /**
+     * Remove all batch entries that reference the given tileset name.
+     * Clears every tile and entity record in those batches, then drops them
+     * from the batches array. The quadtree is rebuilt if anything changed.
+     */
+    public function removeEntitiesByTileset(tilesetName:String):Void {
+        var batchesToRemove:Array<BatchEntry> = [];
+        for (entry in batches) {
+            if (entry.tileset != null && entry.tileset.name == tilesetName)
+                batchesToRemove.push(entry);
+        }
+        for (entry in batchesToRemove) {
+            if (entry.batch != null) entry.batch.clear();
+            entry.entities.clear();
+            entry.definedRegions.clear();
+            batches.remove(entry);
+        }
+        if (batchesToRemove.length > 0) rebuildQuadtree();
+    }
+
     public function getEntityAt(worldX:Float, worldY:Float, tolerance:Float = 5.0):Int {
         for (entry in batches) {
             for (id in entry.entities.keys()) {

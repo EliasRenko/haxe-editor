@@ -230,6 +230,50 @@ class EditorState extends State {
         }
     }
 
+    /** Recursively collect the names of all TilemapLayers bound to the given tileset (includes FolderLayer children). */
+    private function collectTilemapLayerNamesByTileset(source:Array<Dynamic>, tilesetName:String, result:Array<String>):Void {
+        for (entity in source) {
+            if (Std.isOfType(entity, TilemapLayer)) {
+                var tl:TilemapLayer = cast entity;
+                if (tl.tileset != null && tl.tileset.name == tilesetName) result.push(tl.id);
+            } else if (Std.isOfType(entity, FolderLayer)) {
+                var folder:FolderLayer = cast entity;
+                if (folder.children != null) collectTilemapLayerNamesByTileset(cast folder.children, tilesetName, result);
+            }
+        }
+    }
+
+    /**
+     * Delete a tileset by name.
+     * First removes every TilemapLayer that references it, then strips the
+     * matching batch (and all its entity instances) from every EntityLayer,
+     * and finally deletes the tileset itself from the manager.
+     * Returns null on success or an error string on failure.
+     */
+    public function deleteTileset(tilesetName:String):String {
+        if (!tilesetManager.exists(tilesetName)) {
+            var error = "Cannot delete tileset '" + tilesetName + "': does not exist";
+            app.log.info(LogCategory.APP, error);
+            return error;
+        }
+
+        // 1. Remove every TilemapLayer that uses this tileset
+        var tilemapNames:Array<String> = [];
+        collectTilemapLayerNamesByTileset(entities, tilesetName, tilemapNames);
+        for (name in tilemapNames) removeLayer(name);
+
+        // 2. Drop the tileset batch (and its entity instances) from every EntityLayer
+        var allEntityLayers:Array<EntityLayer> = [];
+        collectEntityLayers(entities, allEntityLayers);
+        for (entityLayer in allEntityLayers) {
+            entityLayer.removeEntitiesByTileset(tilesetName);
+        }
+
+        // 3. Delete the tileset itself
+        tilesetManager.deleteTileset(tilesetName);
+        return null;
+    }
+
     /**
      * Create a brand-new entity definition from a full set of fields.
      * Fails if a definition with the same name already exists.
