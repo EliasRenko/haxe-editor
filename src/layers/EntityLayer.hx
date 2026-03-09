@@ -283,6 +283,38 @@ class EntityLayer extends Layer implements ITilesLayer {
     }
 
     /**
+     * Remove all placed entities associated with the given definition name across all batches.
+     * Cleans up tiles and de-registers the atlas region for that definition.
+     * Returns the number of entities removed.
+     */
+    public function removeEntitiesByDefName(defName:String):Int {
+        var count = 0;
+        var batchesToRemove:Array<BatchEntry> = [];
+        for (entry in batches) {
+            var idsToRemove:Array<Int> = [];
+            for (id in entry.entities.keys()) {
+                if (entry.entities.get(id).name == defName) idsToRemove.push(id);
+            }
+            for (id in idsToRemove) {
+                var ent = entry.entities.get(id);
+                if (entry.batch != null) entry.batch.removeTile(ent.tileId);
+                entry.entities.remove(id);
+                count++;
+            }
+            // Clean up the cached region ID so it won't be reused if the definition is recreated later
+            entry.definedRegions.remove(defName);
+            // If this batch is now empty, schedule it for removal
+            if (!entry.entities.keys().hasNext()) {
+                if (entry.batch != null) entry.batch.clear();
+                batchesToRemove.push(entry);
+            }
+        }
+        for (entry in batchesToRemove) batches.remove(entry);
+        if (count > 0) rebuildQuadtree();
+        return count;
+    }
+
+    /**
      * Remove an entity by ID, searching all batches
      */
     public function removeEntity(entityId:Int):Bool {
@@ -291,6 +323,11 @@ class EntityLayer extends Layer implements ITilesLayer {
                 var ent = entry.entities.get(entityId);
                 if (entry.batch != null) entry.batch.removeTile(ent.tileId);
                 entry.entities.remove(entityId);
+                // If this was the last entity in the batch, remove the batch entirely
+                if (!entry.entities.keys().hasNext()) {
+                    if (entry.batch != null) entry.batch.clear();
+                    batches.remove(entry);
+                }
                 // Quadtree does not support single-node removal — rebuild from remaining data
                 rebuildQuadtree();
                 return true;

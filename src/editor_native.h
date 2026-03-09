@@ -127,6 +127,9 @@ extern "C" {
     // Updates all fields of an existing entity definition and propagates the changes to every
     // placed entity in the scene that was created from that definition.
     __declspec(dllexport) const char* editEntityDef(const char* entityName, EntityDataStruct* data);
+    // Removes all placed entities associated with the definition from every layer, then deletes
+    // the definition itself. Returns null on success or an error string on failure.
+    __declspec(dllexport) const char* deleteEntityDef(const char* entityName);
 
     __declspec(dllexport) const char* getEntityDef(const char* entityName, EntityDataStruct* outData);
     __declspec(dllexport) const char* getEntityDefAt(int index, EntityDataStruct* outData);
@@ -156,6 +159,10 @@ extern "C" {
     __declspec(dllexport) int getEntityLayerBatchCount(const char* layerName);
     __declspec(dllexport) int getEntityLayerBatchCountAt(int index);
     __declspec(dllexport) const char* getEntityLayerBatchTilesetName(const char* layerName, int batchIndex);
+
+    // entity instance accessors (batchIndex = -1 for all batches)
+    __declspec(dllexport) int getEntityLayerInstanceCount(const char* layerName, int batchIndex);
+    __declspec(dllexport) int getEntityLayerInstanceAt(const char* layerName, int batchIndex, int instanceIndex, EntityStruct* outData);
 
     // batch movement
     __declspec(dllexport) int moveEntityLayerBatchUp(const char* layerName, int batchIndex);

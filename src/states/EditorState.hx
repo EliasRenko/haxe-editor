@@ -199,6 +199,25 @@ class EditorState extends State {
         return null;
     }
 
+    /**
+     * Remove all placed entities of the given definition from every EntityLayer,
+     * then delete the definition itself from the EntityManager.
+     */
+    public function deleteEntityDef(entityName:String):String {
+        if (!entityManager.exists(entityName)) {
+            var error = "Cannot delete entity '" + entityName + "': definition does not exist";
+            app.log.info(LogCategory.APP, error);
+            return error;
+        }
+        var allEntityLayers:Array<EntityLayer> = [];
+        collectEntityLayers(entities, allEntityLayers);
+        for (entityLayer in allEntityLayers) {
+            entityLayer.removeEntitiesByDefName(entityName);
+        }
+        entityManager.deleteEntityDefinition(entityName);
+        return null;
+    }
+
     /** Recursively collect all EntityLayer instances from an entity array (includes FolderLayer children). */
     private function collectEntityLayers(source:Array<Dynamic>, result:Array<EntityLayer>):Void {
         for (entity in source) {
@@ -1428,6 +1447,13 @@ class EditorState extends State {
     private function setTileSize(x:Int, y:Int):Void {
         tileSizeX = x;
         tileSizeY = y;
+
+        if (grid != null) {
+            grid.subGridSizeX = tileSizeX;
+            grid.subGridSizeY = tileSizeY;
+            grid.gridSizeX = tileSizeX * 4.0;
+            grid.gridSizeY = tileSizeY * 4.0;
+        }
     }
 
     /**

@@ -1,7 +1,6 @@
 package;
 
 import data.TextureData;
-import display.Tile;
 import Log.LogCategory;
 import states.EditorState;
 import math.Vec2;
@@ -617,6 +616,11 @@ class Editor {
         return editorState.setActiveEntity(entityName) ? 1 : 0;
     }
 
+    @:keep
+    public static function deleteEntityDef(entityName:String):String {
+        return editorState.deleteEntityDef(entityName);
+    }
+
     @:keep @:noExport
     public static function populateEntityDataStruct(entityDef:EntityDefinition, outData:Pointer<EntityDataStruct>):Void {
         var ref:Reference<EntityDataStruct> = outData.ref;
@@ -807,6 +811,55 @@ class Editor {
         var entry = (cast layer:layers.EntityLayer).getBatchEntryAt(batchIndex);
         if (entry == null) return "";
         return entry.tileset != null ? entry.tileset.name : "";
+    }
+
+    @:keep
+    public static function getEntityLayerInstanceCount(layerName:String, batchIndex:Int):Int {
+        var layer = editorState.getLayerByName(layerName);
+        if (layer == null || !Std.isOfType(layer, layers.EntityLayer)) return 0;
+        var entityLayer:layers.EntityLayer = cast layer;
+        if (batchIndex == -1) return entityLayer.getEntityCount();
+        var entry = entityLayer.getBatchEntryAt(batchIndex);
+        if (entry == null) return 0;
+        return Lambda.count(entry.entities);
+    }
+
+    @:keep
+    public static function getEntityLayerInstanceAt(layerName:String, batchIndex:Int, instanceIndex:Int, outData:cpp.Pointer<EntityStruct>):Int {
+        var layer = editorState.getLayerByName(layerName);
+        if (layer == null || !Std.isOfType(layer, layers.EntityLayer)) return 0;
+        var entityLayer:layers.EntityLayer = cast layer;
+
+        // Collect the target entity by walking batches up to instanceIndex
+        var counter = 0;
+        var found:layers.EntityLayer.Entity = null;
+        if (batchIndex == -1) {
+            var done = false;
+            for (entry in entityLayer.batches) {
+                if (done) break;
+                for (ent in entry.entities) {
+                    if (counter == instanceIndex) { found = ent; done = true; break; }
+                    counter++;
+                }
+            }
+        } else {
+            var entry = entityLayer.getBatchEntryAt(batchIndex);
+            if (entry == null) return 0;
+            for (ent in entry.entities) {
+                if (counter == instanceIndex) { found = ent; break; }
+                counter++;
+            }
+        }
+
+        if (found == null) return 0;
+        var ref:cpp.Reference<EntityStruct> = outData.ref;
+        var entName:String = found.name;
+        untyped __cpp__("{0}.name = {1}.__s", ref, entName);
+        ref.x = Std.int(found.x);
+        ref.y = Std.int(found.y);
+        ref.width = Std.int(found.width);
+        ref.height = Std.int(found.height);
+        return 1;
     }
 
     @:keep
