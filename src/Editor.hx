@@ -21,7 +21,14 @@ class Editor {
 
     private static var app:App = null;
     private static var initialized:Bool = false;
-    private static var editorState:states.EditorState = null; // Store reference to editor state
+    // All editor states created via loadState()
+    private static var editorStates:Array<states.EditorState> = [];
+    // Convenience accessor — always mirrors app.currentState
+    private static var editorState(get, never):states.EditorState;
+    private static inline function get_editorState():states.EditorState {
+        return (app != null && Std.isOfType(app.currentState, states.EditorState))
+            ? cast app.currentState : null;
+    }
     
     public static function main():Void {
     }
@@ -60,9 +67,10 @@ class Editor {
                 return 0;
             }
             
-            // Load the font baker state
-            editorState = new EditorState(app);
-            app.addState(editorState);
+            // Create and register the first editor state
+            var initialState = new EditorState(app);
+            editorStates.push(initialState);
+            app.addState(initialState);
             wireEditorStateCallbacks();
             app.log.info(1, "EditorState loaded");
             
@@ -162,10 +170,12 @@ class Editor {
             log("Editor: Loading state " + stateId);
             switch (stateId) {
                 case 0: 
-                    editorState = new EditorState(app);
-                    app.addState(editorState);
+                    var newState = new EditorState(app);
+                    editorStates.push(newState);
+                    app.addState(newState);
+                    app.switchToState(newState);
                     wireEditorStateCallbacks();
-                    log("Editor: EditorState loaded");
+                    log("Editor: EditorState loaded (index " + (editorStates.length - 1) + ")");
                 default: 
                     log("Editor: Unknown state ID: " + stateId);
                     return 0;
@@ -177,6 +187,44 @@ class Editor {
         }
     }
     
+    /**
+     * Switch the active editor state by index (its position in the editorStates array).
+     * @return 1 on success, 0 if index is out of range
+     */
+    @:keep
+    public static function setActiveState(index:Int):Int {
+        if (app == null || !initialized) return 0;
+        if (index < 0 || index >= editorStates.length) {
+            log("Editor: setActiveState — index " + index + " out of range (" + editorStates.length + " states)");
+            return 0;
+        }
+        var success = app.switchToState(editorStates[index]);
+        if (success) wireEditorStateCallbacks();
+        return success ? 1 : 0;
+    }
+
+    /**
+     * Fully release and destroy the editor state at the given index.
+     * Removes it from both the app and the editorStates array.
+     * If it was the active state the app will switch to the next available one.
+     * @return 1 on success, 0 if index is out of range
+     */
+    @:keep
+    public static function releaseState(index:Int):Int {
+        if (app == null || !initialized) return 0;
+        if (index < 0 || index >= editorStates.length) {
+            log("Editor: releaseState — index " + index + " out of range (" + editorStates.length + " states)");
+            return 0;
+        }
+        var state = editorStates[index];
+        editorStates.splice(index, 1);
+        app.removeState(state);
+        // Re-wire callbacks to whichever state is now active (if any)
+        if (editorState != null) wireEditorStateCallbacks();
+        log("Editor: Released state " + index + " (" + editorStates.length + " remaining)");
+        return 1;
+    }
+
     /**
      * Check if engine is running
      * @return 1 if running, 0 if stopped
@@ -448,9 +496,10 @@ class Editor {
     }
     
     /**
-     * Import tilemap from a JSON file
+     * Import tilemap from a JSON file into a brand-new EditorState.
+     * The new state is pushed onto editorStates and made active.
      * @param filePath Absolute path to the JSON file
-     * @return Number of tiles imported, or -1 on error
+     * @return The index of the newly created state, or -1 on error
      */
     @:keep
     public static function importMap(filePath:String):Int {
@@ -459,19 +508,23 @@ class Editor {
             return -1;
         }
         
-        if (editorState == null) {
-            log("Editor: EditorState not loaded");
-            return -1;
-        }
-        
         try {
+            // Create a fresh state for this map
+            var newState = new EditorState(app);
+            editorStates.push(newState);
+            app.addState(newState);
+            app.switchToState(newState);
+            wireEditorStateCallbacks();
+
+            var stateIndex = editorStates.length - 1;
             var tileCount = editorState.importFromJSON(filePath);
             if (tileCount >= 0) {
-                log("Editor: Imported " + tileCount + " tiles from: " + filePath);
+                log("Editor: Imported " + tileCount + " tiles from: " + filePath + " into state " + stateIndex);
             } else {
                 log("Editor: Failed to import tilemap");
+                return -1;
             }
-            return tileCount;
+            return stateIndex;
         } catch (e:Dynamic) {
             log("Editor: Error importing tilemap: " + e);
             return -1;

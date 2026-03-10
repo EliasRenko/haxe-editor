@@ -87,6 +87,10 @@ extern "C" {
     __declspec(dllexport) void swapBuffers();
     __declspec(dllexport) void release();
     __declspec(dllexport) int loadState(int stateId);
+    // Switch the active editor state by its 0-based index in the editorStates array
+    __declspec(dllexport) int setActiveState(int index);
+    // Fully release and destroy the editor state at the given index
+    __declspec(dllexport) int releaseState(int index);
     __declspec(dllexport) int isRunning();
 
     // Window management functions
