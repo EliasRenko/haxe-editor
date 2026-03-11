@@ -6,7 +6,7 @@
 #include <fcntl.h>
 #include <stdio.h>
 
-typedef void (__cdecl *CustomCallback)(const char* message);
+typedef void (__cdecl *CustomCallback)(const char* priority, const char* category, const char* message);
 typedef struct EntityStruct EntityStruct; // forward declaration
 typedef void (__cdecl *EntitySelectionChangedCallback)(); // fired when selection changes
 
@@ -87,9 +87,7 @@ extern "C" {
     __declspec(dllexport) void swapBuffers();
     __declspec(dllexport) void release();
     __declspec(dllexport) int loadState(int stateId);
-    // Switch the active editor state by its 0-based index in the editorStates array
     __declspec(dllexport) int setActiveState(int index);
-    // Fully release and destroy the editor state at the given index
     __declspec(dllexport) int releaseState(int index);
     __declspec(dllexport) int isRunning();
 
@@ -106,6 +104,8 @@ extern "C" {
     __declspec(dllexport) void onMouseButtonUp(int x, int y, int button);
     __declspec(dllexport) void onKeyboardDown(int keyCode);
     __declspec(dllexport) void onKeyboardUp(int keyCode);
+
+    __declspec(dllexport) int newEditorState();
 
     // Texture data retrieval
     __declspec(dllexport) void getTextureData(const char* path, TextureDataStruct* outData);
@@ -130,13 +130,8 @@ extern "C" {
     // batch in EntityLayers that references it. Returns null on success, error string on failure.
     __declspec(dllexport) const char* deleteTileset(const char* name);
 
-    // Creates a new entity definition. Fails if a definition with the same name already exists.
     __declspec(dllexport) const char* createEntityDef(const char* entityName, EntityDataStruct* data);
-    // Updates all fields of an existing entity definition and propagates the changes to every
-    // placed entity in the scene that was created from that definition.
     __declspec(dllexport) const char* editEntityDef(const char* entityName, EntityDataStruct* data);
-    // Removes all placed entities associated with the definition from every layer, then deletes
-    // the definition itself. Returns null on success or an error string on failure.
     __declspec(dllexport) const char* deleteEntityDef(const char* entityName);
 
     __declspec(dllexport) const char* getEntityDef(const char* entityName, EntityDataStruct* outData);

@@ -188,6 +188,28 @@ class Editor {
     }
     
     /**
+     * Create a blank new EditorState, register it with the app, make it active,
+     * and return its index. Returns -1 on failure.
+     */
+    @:keep
+    public static function newEditorState():Int {
+        if (app == null || !initialized) return -1;
+        try {
+            var newState = new EditorState(app);
+            editorStates.push(newState);
+            app.addState(newState);
+            app.switchToState(newState);
+            wireEditorStateCallbacks();
+            var index = editorStates.length - 1;
+            log("Editor: Created new EditorState at index " + index);
+            return index;
+        } catch (e:Dynamic) {
+            log("Editor: newEditorState error: " + e);
+            return -1;
+        }
+    }
+
+    /**
      * Switch the active editor state by index (its position in the editorStates array).
      * @return 1 on success, 0 if index is out of range
      */
