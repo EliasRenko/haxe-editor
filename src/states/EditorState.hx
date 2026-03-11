@@ -126,7 +126,7 @@ class EditorState extends State {
     }
 
     // CHECKED!
-    public function createTileset(texturePath:String, tilesetName:String, tileSize:Int):String {
+    public function createTileset(texturePath:String, tilesetName:String):String {
         var error:String = null;
 
         if (!app.resources.cached(texturePath)) {
@@ -141,7 +141,7 @@ class EditorState extends State {
         }
         
         var tileTexture:Texture = app.renderer.uploadTexture(app.resources.getTexture(texturePath, false));
-        tilesetManager.setTileset(tileTexture, tilesetName, texturePath, tileSize);
+        tilesetManager.setTileset(tileTexture, tilesetName, texturePath);
 
         return null;
     }
@@ -190,11 +190,13 @@ class EditorState extends State {
                                     regionX, regionY, regionWidth, regionHeight,
                                     pivotX, pivotY);
         var def = entityManager.getEntityDefinition(entityName);
+        var newTileset = tilesetManager.tilesets.get(tilesetName);
+        var programInfo = app.renderer.getProgramInfo("texture");
         // Collect all EntityLayers recursively (including those nested in FolderLayers)
         var allEntityLayers:Array<EntityLayer> = [];
         collectEntityLayers(entities, allEntityLayers);
         for (entityLayer in allEntityLayers) {
-            entityLayer.applyDefinitionUpdate(def);
+            entityLayer.applyDefinitionUpdate(def, newTileset, app.renderer, programInfo);
         }
         return null;
     }
@@ -299,7 +301,7 @@ class EditorState extends State {
     
     // CHECKED!
     public function setEntityRegion(entityName:String, x:Int, y:Int, width:Int, height:Int):Void {
-        entityManager.setEntityRegion(tilesetManager, entityName, x, y, width, height);
+        entityManager.setEntityRegion(entityName, x, y, width, height, tileSizeX);
     }
 
     public function setEntityRegionPixels(entityName:String, x:Int, y:Int, width:Int, height:Int):Void {
@@ -683,7 +685,6 @@ class EditorState extends State {
         
         var tilemapLayer:TilemapLayer = cast activeLayer;
         trace("Placing tile on layer: " + tilemapLayer.id + ", tileset: " + tilemapLayer.tileset.name);
-        var layerTileset = tilemapLayer.tileset;
         
         // Snap to grid (tiles are positioned by top-left corner)
         var tileX = Std.int(Math.floor(worldX / tileSizeX) * tileSizeX);
@@ -708,7 +709,7 @@ class EditorState extends State {
         }
         
         // Add tile to batch using selected region ID
-        var tileId = tilemapLayer.managedTileBatch.addTile(tileX, tileY, layerTileset.tileSize, layerTileset.tileSize, tilemapLayer.selectedTileRegion);
+        var tileId = tilemapLayer.managedTileBatch.addTile(tileX, tileY, tilemapLayer.tileSize, tilemapLayer.tileSize, tilemapLayer.selectedTileRegion);
         
         if (tileId >= 0) {
             // Store in grid index for fast lookups
@@ -1282,7 +1283,7 @@ class EditorState extends State {
      * @param tilesetName Name of the tileset to use
      * @param index Position in the hierarchy (-1 to append at the end, 0 for first layer position)
      */
-    public function createTilemapLayer(name:String, tilesetName:String, index:Int = -1):TilemapLayer {
+    public function createTilemapLayer(name:String, tilesetName:String, index:Int = -1, tileSize:Int = 64):TilemapLayer {
         //TODO:FIX THIS
         var tileset = tilesetManager.tilesets.get(tilesetName);
         if (tileset == null) {
@@ -1299,20 +1300,24 @@ class EditorState extends State {
         batch.depthTest = false;
         batch.init(app.renderer);
         
-        // Define tile regions in the batch (same as tileset)
-        for (row in 0...tileset.tilesPerCol) {
-            for (col in 0...tileset.tilesPerRow) {
+        // Compute atlas dimensions from texture size and tileSize
+        var tilesPerRow = Std.int(tileset.textureId.width / tileSize);
+        var tilesPerCol = Std.int(tileset.textureId.height / tileSize);
+        
+        // Define tile regions in the batch
+        for (row in 0...tilesPerCol) {
+            for (col in 0...tilesPerRow) {
                 batch.defineRegion(
-                    col * tileset.tileSize,  // atlasX
-                    row * tileset.tileSize,  // atlasY
-                    tileset.tileSize,        // width
-                    tileset.tileSize         // height
+                    col * tileSize,  // atlasX
+                    row * tileSize,  // atlasY
+                    tileSize,        // width
+                    tileSize         // height
                 );
             }
         }
         
         // Create the layer with tileset reference
-        var layer = new TilemapLayer(name, tileset, batch);
+        var layer = new TilemapLayer(name, tileset, batch, tileSize, tilesPerRow, tilesPerCol);
         addLayerAtIndex(layer, index);
         
         trace("Created tilemap layer: " + name + " with tileset: " + tilesetName + " at index: " + index);
@@ -1367,8 +1372,12 @@ class EditorState extends State {
         // Update the tile batch's texture ID to match the new tileset
         tilemapLayer.managedTileBatch.setTexture(newTileset.textureId);
         
+        // Recompute atlas dimensions using the layer's existing tileSize and new texture
+        tilemapLayer.tilesPerRow = Std.int(newTileset.textureId.width / tilemapLayer.tileSize);
+        tilemapLayer.tilesPerCol = Std.int(newTileset.textureId.height / tilemapLayer.tileSize);
+        
         // Redefine tile regions in the batch based on the new tileset
-        tilemapLayer.redefineRegions(newTileset);
+        tilemapLayer.redefineRegions();
         
         // Mark buffers as needing update to reflect changes
         tilemapLayer.managedTileBatch.needsBufferUpdate = true;
@@ -1484,7 +1493,7 @@ class EditorState extends State {
         activeLayer = null;
     }
     
-    private function setCurrentTileset(name:String, size:Int):Void {
+    private function setCurrentTileset(name:String):Void {
         tilesetManager.currentTilesetName = name;
     }
     

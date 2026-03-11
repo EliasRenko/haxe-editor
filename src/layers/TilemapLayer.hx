@@ -8,16 +8,22 @@ class TilemapLayer extends Layer implements ITilesLayer {
     public var tileset:Tileset;
     public var managedTileBatch:ManagedTileBatch;
     public var selectedTileRegion:Int = 0;
+    public var tileSize:Int;
+    public var tilesPerRow:Int;
+    public var tilesPerCol:Int;
     
     // Grid-based tile storage index (faster lookups than iterating ManagedTileBatch)
     // Key format: "gridX_gridY" -> tileId in ManagedTileBatch
     public var tileGrid:Map<String, Int>;
     
-    public function new(name:String, tileset:Tileset, managedTileBatch:ManagedTileBatch) {
+    public function new(name:String, tileset:Tileset, managedTileBatch:ManagedTileBatch, tileSize:Int, tilesPerRow:Int, tilesPerCol:Int) {
         super(name);
 
         this.tileset = tileset;
         this.managedTileBatch = managedTileBatch;
+        this.tileSize = tileSize;
+        this.tilesPerRow = tilesPerRow;
+        this.tilesPerCol = tilesPerCol;
         this.tileGrid = new Map<String, Int>();
     }
     
@@ -68,15 +74,15 @@ class TilemapLayer extends Layer implements ITilesLayer {
         return count;
     }
 
-    public function redefineRegions(tileset:Tileset):Void {
+    public function redefineRegions():Void {
         managedTileBatch.clearRegions();
-        for (row in 0...tileset.tilesPerCol) {
-            for (col in 0...tileset.tilesPerRow) {
+        for (row in 0...tilesPerCol) {
+            for (col in 0...tilesPerRow) {
                 managedTileBatch.defineRegion(
-                    col * tileset.tileSize,  // atlasX
-                    row * tileset.tileSize,  // atlasY
-                    tileset.tileSize,        // width
-                    tileset.tileSize         // height
+                    col * tileSize,  // atlasX
+                    row * tileSize,  // atlasY
+                    tileSize,        // width
+                    tileSize         // height
                 );
             }
         }

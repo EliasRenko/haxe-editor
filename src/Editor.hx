@@ -387,10 +387,6 @@ class Editor {
         var ref:Reference<TilesetInfoStruct> = outInfo.ref;
         ref.name = tilesetInfo.name;
         ref.texturePath = tilesetInfo.texturePath;
-        ref.tileSize = tilesetInfo.tileSize;
-        ref.tilesPerRow = tilesetInfo.tilesPerRow;
-        ref.tilesPerCol = tilesetInfo.tilesPerCol;
-        ref.regionCount = tilesetInfo.tilesPerRow * tilesetInfo.tilesPerCol;
 
         return 1;
     }
@@ -418,20 +414,12 @@ class Editor {
             // copy values directly into the C struct via the pointer reference
             var name = tilesetInfo.name;
             var texturePath = tilesetInfo.texturePath;
-            var tileSize = tilesetInfo.tileSize;
-            var tilesPerRow = tilesetInfo.tilesPerRow;
-            var tilesPerCol = tilesetInfo.tilesPerCol;
-            var regionCount = tilesetInfo.tilesPerRow * tilesetInfo.tilesPerCol;
 
             var ref:Reference<TilesetInfoStruct> = outInfo.ref;
             ref.name = name;
             ref.texturePath = texturePath;
-            ref.tileSize = tileSize;
-            ref.tilesPerRow = tilesPerRow;
-            ref.tilesPerCol = tilesPerCol;
-            ref.regionCount = regionCount;
 
-            log("Editor: Retrieved tileset at index " + index + ": " + name + " (" + tilesPerRow + "x" + tilesPerCol + " tiles)");
+            log("Editor: Retrieved tileset at index " + index + ": " + name);
             return 1;
             
         } catch (e:Dynamic) {
@@ -553,8 +541,8 @@ class Editor {
         }
     }
     
-    @:keep public static function createTileset(texturePath:String, tilesetName:String, tileSize:Int):String { 
-        return editorState.createTileset(texturePath, tilesetName, tileSize);
+    @:keep public static function createTileset(texturePath:String, tilesetName:String):String { 
+        return editorState.createTileset(texturePath, tilesetName);
     }
 
     @:keep public static function deleteTileset(name:String):String {
@@ -718,8 +706,8 @@ class Editor {
     // ===== LAYER MANAGEMENT =====
     
     @:keep
-    public static function createTilemapLayer(layerName:String, tilesetName:String, index:Int = -1):Void {
-        editorState.createTilemapLayer(layerName, tilesetName, index);
+    public static function createTilemapLayer(layerName:String, tilesetName:String, tileSize:Int, index:Int = -1):Void {
+        editorState.createTilemapLayer(layerName, tilesetName, index, tileSize);
     }
     
     @:keep
@@ -787,6 +775,7 @@ class Editor {
 		var layer = editorState.getLayerAt(index);
         var type:Int = 0;
         var tilesetName:String = "";
+        var tileSize:Int = 0;
 
 		if (layer == null) {
 			log("Editor: Layer not found at index: " + index);
@@ -798,6 +787,7 @@ class Editor {
 			type = 0;
 			var tilemapLayer:layers.TilemapLayer = cast layer;
 			tilesetName = tilemapLayer.tileset.name;
+			tileSize = tilemapLayer.tileSize;
 		} else if (Std.isOfType(layer, layers.EntityLayer)) {
 			type = 1;
 			var entityLayer:layers.EntityLayer = cast layer;
@@ -811,6 +801,7 @@ class Editor {
         ref.name = layer.id;
         ref.type = type; // 0 = TilemapLayer, 1 = EntityLayer, 2 = FolderLayer
         ref.tilesetName = tilesetName;
+        ref.tileSize = tileSize;
         ref.visible = layer.visible ? 1 : 0;
         ref.silhouette = layer.silhouette;
         ref.silhouetteColor = layer.silhouetteColor.hexValue;
@@ -822,6 +813,7 @@ class Editor {
 		var layer = editorState.getLayerByName(layerName);
         var type:Int = 0;
         var tilesetName:String = "";
+        var tileSize:Int = 0;
 		if (layer == null) {
 			log("Editor: Layer not found: " + layerName);
 			return 0;
@@ -832,6 +824,7 @@ class Editor {
 			type = 0;
 			var tilemapLayer:layers.TilemapLayer = cast layer;
 			tilesetName = tilemapLayer.tileset.name;
+			tileSize = tilemapLayer.tileSize;
 		} else if (Std.isOfType(layer, layers.EntityLayer)) {
 			type = 1;
 			var entityLayer:layers.EntityLayer = cast layer;
@@ -845,6 +838,7 @@ class Editor {
         ref.name = layer.id;
         ref.type = type; // 0 = TilemapLayer, 1 = EntityLayer, 2 = FolderLayer
         ref.tilesetName = tilesetName;
+        ref.tileSize = tileSize;
         ref.visible = layer.visible ? 1 : 0;
         ref.silhouette = layer.silhouette;
         ref.silhouetteColor = layer.silhouetteColor.hexValue;

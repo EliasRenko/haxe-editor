@@ -15,10 +15,8 @@ typedef Entity = {
     x:Float,
     y:Float,
     width:Float,
-    height:Float,
-    /** Normalized pivot X (0 = left edge, 0.5 = center, 1 = right edge). x/y is the world position of this pivot point. */
-    pivotX:Float,
-    /** Normalized pivot Y (0 = top edge, 0.5 = center, 1 = bottom edge). x/y is the world position of this pivot point. */
+    height:Float, /** Normalized pivot X (0 = left edge, 0.5 = center, 1 = right edge). x/y is the world position of this pivot point. */
+    pivotX:Float, /** Normalized pivot Y (0 = top edge, 0.5 = center, 1 = bottom edge). x/y is the world position of this pivot point. */
     pivotY:Float
 }
 
@@ -192,47 +190,112 @@ class EntityLayer extends Layer implements ITilesLayer {
 
     /**
      * Propagate an updated EntityDefinition to every placed entity of that type.
-     * Re-registers the atlas region with the new pixel coordinates, then patches
-     * each matching tile's position, size, and regionId in-place.
+     * - If the entity's current batch already uses the correct tileset: update
+     *   the region UV and patch position/size in-place.
+     * - If the tileset changed: remove the entity tile from the old batch and
+     *   re-add it to the target batch (creating it if needed).
      * Call this after updating the definition in EntityManager (via editEntityDef).
      *
-     * @param def The already-updated definition object.
+     * @param def         The already-updated definition object.
+     * @param newTileset  The Tileset that def.tilesetName now refers to.
+     * @param renderer    Renderer used to initialise any newly-created batch.
+     * @param programInfo Program info for the texture shader.
      */
-    public function applyDefinitionUpdate(def:EntityDefinition):Void {
+    public function applyDefinitionUpdate(def:EntityDefinition, newTileset:Tileset, renderer:Dynamic, programInfo:Dynamic):Void {
         var changed = false;
+
+        // Separate entities into those that stay in their current batch vs those
+        // that need migrating to a different tileset's batch.
+        var toMigrate:Array<{entry:BatchEntry, id:Int, ent:Entity}> = [];
+
         for (entry in batches) {
-            // Skip batches that have no entities of this type
-            var hasAny = false;
-            for (ent in entry.entities) {
-                if (ent.name == def.name) { hasAny = true; break; }
-            }
-            if (!hasAny) continue;
-
-            syncRegion(entry, def);
-
+            var idsToUpdate:Array<Int> = [];
             for (id in entry.entities.keys()) {
-                var ent = entry.entities.get(id);
-                if (ent.name != def.name) continue;
+                if (entry.entities.get(id).name == def.name) idsToUpdate.push(id);
+            }
+            if (idsToUpdate.length == 0) continue;
 
+            if (entry.tileset.name == def.tilesetName) {
+                // Same tileset — update region UV and tile properties in-place.
+                syncRegion(entry, def);
+                for (id in idsToUpdate) {
+                    var ent = entry.entities.get(id);
+                    ent.width  = def.width;
+                    ent.height = def.height;
+                    ent.pivotX = def.pivotX;
+                    ent.pivotY = def.pivotY;
+                    var tile = entry.batch.getTile(ent.tileId);
+                    if (tile != null) {
+                        tile.x      = ent.x - def.pivotX * def.width;
+                        tile.y      = ent.y - def.pivotY * def.height;
+                        tile.width  = def.width;
+                        tile.height = def.height;
+                    }
+                }
+                entry.batch.needsBufferUpdate = true;
+                changed = true;
+            } else {
+                // Tileset changed — queue for migration.
+                for (id in idsToUpdate) {
+                    toMigrate.push({entry: entry, id: id, ent: entry.entities.get(id)});
+                }
+            }
+        }
+
+        if (toMigrate.length > 0) {
+            // Find or create the target batch for the new tileset.
+            var targetEntry:BatchEntry = null;
+            for (e in batches) {
+                if (e.tileset.name == def.tilesetName) { targetEntry = e; break; }
+            }
+            if (targetEntry == null) {
+                var mb = new ManagedTileBatch(programInfo, newTileset.textureId);
+                mb.init(renderer);
+                targetEntry = new BatchEntry(newTileset, mb);
+                batches.push(targetEntry);
+            }
+
+            // Ensure the region is registered in the target batch.
+            syncRegion(targetEntry, def);
+            var regionId = targetEntry.definedRegions.get(def.name);
+
+            for (item in toMigrate) {
+                var ent = item.ent;
+
+                // Remove tile from old batch.
+                item.entry.batch.removeTile(ent.tileId);
+                item.entry.entities.remove(item.id);
+                item.entry.batch.needsBufferUpdate = true;
+
+                // Update entity properties.
                 ent.width  = def.width;
                 ent.height = def.height;
                 ent.pivotX = def.pivotX;
                 ent.pivotY = def.pivotY;
 
-                var renderX = ent.x - def.pivotX * def.width;
-                var renderY = ent.y - def.pivotY * def.height;
+                // Add to new batch.
+                var newTileId = targetEntry.batch.addTile(
+                    ent.x - def.pivotX * def.width,
+                    ent.y - def.pivotY * def.height,
+                    def.width, def.height, regionId);
+                ent.tileId = newTileId;
+                targetEntry.entities.set(item.id, ent);
+            }
+            targetEntry.batch.needsBufferUpdate = true;
 
-                var tile = entry.batch.getTile(ent.tileId);
-                if (tile != null) {
-                    tile.x      = renderX;
-                    tile.y      = renderY;
-                    tile.width  = def.width;
-                    tile.height = def.height;
+            // Remove any batches that are now empty.
+            var batchesToRemove:Array<BatchEntry> = [];
+            for (entry in batches) {
+                if (!entry.entities.keys().hasNext()) {
+                    entry.batch.clear();
+                    batchesToRemove.push(entry);
                 }
             }
-            entry.batch.needsBufferUpdate = true;
+            for (entry in batchesToRemove) batches.remove(entry);
+
             changed = true;
         }
+
         if (changed) rebuildQuadtree();
     }
 
@@ -415,7 +478,7 @@ class EntityLayer extends Layer implements ITilesLayer {
         return true;
     }
 
-    public function redefineRegions(tileset:Tileset):Void {
+    public function redefineRegions():Void {
         // We should not be able to change the tileset for an EntityLayer since each entity has its own tileset.
     }
 
