@@ -145,7 +145,9 @@ class MapSerializer {
                 regionX: entityDef.regionX,
                 regionY: entityDef.regionY,
                 regionWidth: entityDef.regionWidth,
-                regionHeight: entityDef.regionHeight
+                regionHeight: entityDef.regionHeight,
+                pivotX: entityDef.pivotX,
+                pivotY: entityDef.pivotY
             });
         }
         
@@ -228,9 +230,10 @@ class MapSerializer {
                     var regionY:Int = entityData.regionY;
                     var regionWidth:Int = entityData.regionWidth;
                     var regionHeight:Int = entityData.regionHeight;
+                    var pivotX:Float = entityData.pivotX != null ? entityData.pivotX : 0.0;
+                    var pivotY:Float = entityData.pivotY != null ? entityData.pivotY : 0.0;
                     
-                    context.createEntity(name, width, height, tilesetName);
-                    context.setEntityRegionPixels(name, regionX, regionY, regionWidth, regionHeight);
+                    context.createEntityFull(name, width, height, tilesetName, regionX, regionY, regionWidth, regionHeight, pivotX, pivotY);
                     trace("Loaded entity definition from JSON: " + name);
                 }
             }

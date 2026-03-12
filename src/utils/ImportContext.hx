@@ -16,8 +16,7 @@ typedef ImportContext = {
     var entityManager:EntityManager;
     var clearLayers:Void->Void;
     var createTileset:(String, String)->Void;
-    var createEntity:(String, Int, Int, String)->String;
-    var setEntityRegionPixels:(String, Int, Int, Int, Int)->Void;
+    var createEntityFull:(String, Int, Int, String, Int, Int, Int, Int, Float, Float)->String;
     var setCurrentTileset:(String)->Void;
     var updateMapBounds:(Float, Float, Float, Float)->Void;
     var setTileSize:(Int, Int)->Void;

@@ -778,7 +778,7 @@ class Editor {
         var tileSize:Int = 0;
 
 		if (layer == null) {
-			log("Editor: Layer not found at index: " + index);
+			app.log.error(LogCategory.APP, "Editor: No layer found at index: " + index);
 			return 0;
 		}
 
@@ -815,7 +815,7 @@ class Editor {
         var tilesetName:String = "";
         var tileSize:Int = 0;
 		if (layer == null) {
-			log("Editor: Layer not found: " + layerName);
+			app.log.error(LogCategory.APP, "Editor: Layer not found: " + layerName);
 			return 0;
 		}
 
