@@ -6,10 +6,6 @@
 #include <fcntl.h>
 #include <stdio.h>
 
-typedef void (__cdecl *CustomCallback)(const char* message);
-typedef struct EntityStruct EntityStruct; // forward declaration
-typedef void (__cdecl *EntitySelectionChangedCallback)(); // fired when selection changes
-
 typedef struct {
     unsigned char* data;
     int width;
@@ -22,10 +18,6 @@ typedef struct {
 typedef struct {
     const char* name;
     const char* texturePath;
-    int tileSize;
-    int tilesPerRow;
-    int tilesPerCol;
-    int regionCount;
 } TilesetInfoStruct;
 
 typedef struct {
@@ -45,6 +37,7 @@ typedef struct {
     const char* name;
     int type;                // 0 = TilemapLayer, 1 = EntityLayer, 2 = FolderLayer
     const char* tilesetName; // For TilemapLayer only (null for others)
+    int tileSize;            // For TilemapLayer only (0 for others)
     int visible;             // 0 = hidden, 1 = visible
     bool silhouette;          // 0 = no silhouette, 1 = silhouette enabled
     int silhouetteColor;  // RGBA color for silhouette 
@@ -71,6 +64,9 @@ typedef struct {
     int gridColor;
 } MapProps;
 
+typedef void (__cdecl *CustomCallback)(const char* priority, const char* category, const char* message);
+typedef void (__cdecl *EntitySelectionChangedCallback)(); // fired when selection changes
+
 extern "C" {
     extern bool hxcpp_initialized;
     extern CustomCallback g_callback;
@@ -87,6 +83,8 @@ extern "C" {
     __declspec(dllexport) void swapBuffers();
     __declspec(dllexport) void release();
     __declspec(dllexport) int loadState(int stateId);
+    __declspec(dllexport) int setActiveState(int index);
+    __declspec(dllexport) int releaseState(int index);
     __declspec(dllexport) int isRunning();
 
     // Window management functions
@@ -103,6 +101,8 @@ extern "C" {
     __declspec(dllexport) void onKeyboardDown(int keyCode);
     __declspec(dllexport) void onKeyboardUp(int keyCode);
 
+    __declspec(dllexport) int newEditorState();
+
     // Texture data retrieval
     __declspec(dllexport) void getTextureData(const char* path, TextureDataStruct* outData);
     
@@ -111,7 +111,7 @@ extern "C" {
     __declspec(dllexport) int importMap(const char* filePath);
     
     // Tileset management
-    __declspec(dllexport) const char* createTileset(const char* texturePath, const char* tilesetName, int tileSize);
+    __declspec(dllexport) const char* createTileset(const char* texturePath, const char* tilesetName);
 
     __declspec(dllexport) int getTileset(const char* tilesetName, TilesetInfoStruct* outInfo);
     __declspec(dllexport) int getTilesetAt(int index, TilesetInfoStruct* outInfo);
@@ -126,13 +126,8 @@ extern "C" {
     // batch in EntityLayers that references it. Returns null on success, error string on failure.
     __declspec(dllexport) const char* deleteTileset(const char* name);
 
-    // Creates a new entity definition. Fails if a definition with the same name already exists.
     __declspec(dllexport) const char* createEntityDef(const char* entityName, EntityDataStruct* data);
-    // Updates all fields of an existing entity definition and propagates the changes to every
-    // placed entity in the scene that was created from that definition.
     __declspec(dllexport) const char* editEntityDef(const char* entityName, EntityDataStruct* data);
-    // Removes all placed entities associated with the definition from every layer, then deletes
-    // the definition itself. Returns null on success or an error string on failure.
     __declspec(dllexport) const char* deleteEntityDef(const char* entityName);
 
     __declspec(dllexport) const char* getEntityDef(const char* entityName, EntityDataStruct* outData);
@@ -142,7 +137,7 @@ extern "C" {
     __declspec(dllexport) int setActiveEntityDef(const char* entityName);
 
     // Layer management
-    __declspec(dllexport) void createTilemapLayer(const char* layerName, const char* tilesetName, int index);
+    __declspec(dllexport) void createTilemapLayer(const char* layerName, const char* tilesetName, int tileSize, int index);
     __declspec(dllexport) void createEntityLayer(const char* layerName);
     __declspec(dllexport) void createFolderLayer(const char* layerName);
 

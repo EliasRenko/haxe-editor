@@ -75,6 +75,7 @@ class MapSerializer {
                         type: "tilemap",
                         name: tilemapLayer.id,
                         tilesetName: tilemapLayer.tileset.name,
+                        tileSize: tilemapLayer.tileSize,
                         visible: tilemapLayer.visible,
                         tiles: layerTiles,
                         tileCount: layerTiles.length
@@ -128,8 +129,7 @@ class MapSerializer {
             var tileset = tilesetManager.tilesets.get(tilesetName);
             tilesetsArray.push({
                 name: tileset.name,
-                texturePath: tileset.texturePath,
-                tileSize: tileset.tileSize
+                texturePath: tileset.texturePath
             });
         }
         
@@ -145,7 +145,9 @@ class MapSerializer {
                 regionX: entityDef.regionX,
                 regionY: entityDef.regionY,
                 regionWidth: entityDef.regionWidth,
-                regionHeight: entityDef.regionHeight
+                regionHeight: entityDef.regionHeight,
+                pivotX: entityDef.pivotX,
+                pivotY: entityDef.pivotY
             });
         }
         
@@ -190,6 +192,7 @@ class MapSerializer {
      * @return Number of tiles/entities imported, or -1 on error
      */
     public static function importFromJSON(filePath:String, context:ImportContext):Int {
+        var tileSizeMap:Map<String, Int> = new Map();
         try {
             // Read JSON file
             var jsonString = sys.io.File.getContent(filePath);
@@ -204,11 +207,12 @@ class MapSerializer {
                 for (tilesetData in tilesetsArray) {
                     var name:String = tilesetData.name;
                     var path:String = tilesetData.texturePath;
-                    var size:Int = tilesetData.tileSize;
+                    // Old-format files stored tileSize on the tileset; keep as fallback
+                    if (tilesetData.tileSize != null) tileSizeMap.set(name, Std.int(tilesetData.tileSize));
                     
                     // Only load if not already loaded
                     if (!context.tilesetManager.exists(name)) {
-                        context.createTileset(path, name, size);
+                        context.createTileset(path, name);
                         trace("Loaded tileset from JSON: " + name);
                     }
                 }
@@ -226,9 +230,10 @@ class MapSerializer {
                     var regionY:Int = entityData.regionY;
                     var regionWidth:Int = entityData.regionWidth;
                     var regionHeight:Int = entityData.regionHeight;
+                    var pivotX:Float = entityData.pivotX != null ? entityData.pivotX : 0.0;
+                    var pivotY:Float = entityData.pivotY != null ? entityData.pivotY : 0.0;
                     
-                    context.createEntity(name, width, height, tilesetName);
-                    context.setEntityRegionPixels(name, regionX, regionY, regionWidth, regionHeight);
+                    context.createEntityFull(name, width, height, tilesetName, regionX, regionY, regionWidth, regionHeight, pivotX, pivotY);
                     trace("Loaded entity definition from JSON: " + name);
                 }
             }
@@ -236,9 +241,8 @@ class MapSerializer {
             // Set current tileset
             if (data.currentTileset != null) {
                 var currentName:String = data.currentTileset;
-                var tileset = context.tilesetManager.tilesets.get(currentName);
-                if (tileset != null) {
-                    context.setCurrentTileset(currentName, tileset.tileSize);
+                if (context.tilesetManager.exists(currentName)) {
+                    context.setCurrentTileset(currentName);
                 }
             }
             
@@ -277,7 +281,10 @@ class MapSerializer {
                         }
                         
                         // Create a new tilemap layer via callback
-                        var tilemapLayer = context.createTilemapLayer(layerName, tilesetName, -1);
+                        // New format: tileSize is on the layer; old format: fall back to tileSizeMap (stored on tileset)
+                        var layerTileSize:Int = layerData.tileSize != null ? Std.int(layerData.tileSize)
+                            : tileSizeMap.exists(tilesetName) ? tileSizeMap.get(tilesetName) : 64;
+                        var tilemapLayer = context.createTilemapLayer(layerName, tilesetName, -1, layerTileSize);
                         
                         if (tilemapLayer != null) {
                             // Set visibility
@@ -300,7 +307,7 @@ class MapSerializer {
                                     var y:Float = gridY * tsy;
                                     
                                     // Add tile using the layer's batch
-                                    var tileId = tilemapLayer.managedTileBatch.addTile(x, y, tileset.tileSize, tileset.tileSize, region);
+                                    var tileId = tilemapLayer.managedTileBatch.addTile(x, y, tilemapLayer.tileSize, tilemapLayer.tileSize, region);
                                     
                                     if (tileId >= 0) {
                                         tilemapLayer.tileGrid.set(gridKey, tileId);

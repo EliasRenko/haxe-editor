@@ -15,13 +15,12 @@ typedef ImportContext = {
     var tilesetManager:TilesetManager;
     var entityManager:EntityManager;
     var clearLayers:Void->Void;
-    var createTileset:(String, String, Int)->Void;
-    var createEntity:(String, Int, Int, String)->String;
-    var setEntityRegionPixels:(String, Int, Int, Int, Int)->Void;
-    var setCurrentTileset:(String, Int)->Void;
+    var createTileset:(String, String)->Void;
+    var createEntityFull:(String, Int, Int, String, Int, Int, Int, Int, Float, Float)->String;
+    var setCurrentTileset:(String)->Void;
     var updateMapBounds:(Float, Float, Float, Float)->Void;
     var setTileSize:(Int, Int)->Void;
-    var createTilemapLayer:(String, String, Int)->TilemapLayer;
+    var createTilemapLayer:(String, String, Int, Int)->TilemapLayer;
     // now only name is required; tilesets are handled per-entity during placement
     var createEntityLayer:(String)->EntityLayer;
 }

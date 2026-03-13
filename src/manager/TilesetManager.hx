@@ -5,7 +5,6 @@ class TilesetManager {
 
     public var tilesets:Map<String, Tileset>;
     public var currentTilesetName:String = "devTiles"; // Currently active tileset
-    private var tileSize:Int = 32; // Size of each tile in pixels
     
     public function new() {
         this.tilesets = new Map<String, Tileset>();
@@ -84,7 +83,6 @@ class TilesetManager {
         
         // Update current tileset drawing context
         currentTilesetName = tilesetName;
-        tileSize = tileset.tileSize;
         
         //app.logDebug(LogCategory.APP,"Active tileset context set to: " + tilesetName);
         return true;
@@ -110,32 +108,17 @@ class TilesetManager {
         return true;
     }
     
-    public function setTileset(tileTexture:Texture, tilesetName:String, texturePath:String, tileSize:Int):Void {
-        
-        
-        // Calculate atlas dimensions
-        var tilesPerRow = Std.int(tileTexture.width / tileSize);
-        var tilesPerCol = Std.int(tileTexture.height / tileSize);
-        
+    public function setTileset(tileTexture:Texture, tilesetName:String, texturePath:String):Void {
         // Create tileset metadata structure (no batch - layers create their own)
         var tileset:Tileset = {
             name: tilesetName,
             texturePath: texturePath,
-            textureId: tileTexture,
-            tileSize: tileSize,
-            tilesPerRow: tilesPerRow,
-            tilesPerCol: tilesPerCol
+            textureId: tileTexture
         };
         
         // Store in collection
         tilesets.set(tilesetName, tileset);
         
-        // Update current tileset references (for backward compatibility)
-        if (tilesetName == currentTilesetName) {
-            currentTilesetName = tilesetName;
-            this.tileSize = tileSize;
-        }
-        
-        trace("Loaded tileset: " + tilesetName + " (" + tilesPerRow + "x" + tilesPerCol + " tiles)");
+        trace("Loaded tileset: " + tilesetName);
     }
 }

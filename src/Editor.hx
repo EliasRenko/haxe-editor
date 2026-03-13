@@ -21,7 +21,14 @@ class Editor {
 
     private static var app:App = null;
     private static var initialized:Bool = false;
-    private static var editorState:states.EditorState = null; // Store reference to editor state
+    // All editor states created via loadState()
+    private static var editorStates:Array<states.EditorState> = [];
+    // Convenience accessor — always mirrors app.currentState
+    private static var editorState(get, never):states.EditorState;
+    private static inline function get_editorState():states.EditorState {
+        return (app != null && Std.isOfType(app.currentState, states.EditorState))
+            ? cast app.currentState : null;
+    }
     
     public static function main():Void {
     }
@@ -60,9 +67,10 @@ class Editor {
                 return 0;
             }
             
-            // Load the font baker state
-            editorState = new EditorState(app);
-            app.addState(editorState);
+            // Create and register the first editor state
+            var initialState = new EditorState(app);
+            editorStates.push(initialState);
+            app.addState(initialState);
             wireEditorStateCallbacks();
             app.log.info(1, "EditorState loaded");
             
@@ -162,10 +170,12 @@ class Editor {
             log("Editor: Loading state " + stateId);
             switch (stateId) {
                 case 0: 
-                    editorState = new EditorState(app);
-                    app.addState(editorState);
+                    var newState = new EditorState(app);
+                    editorStates.push(newState);
+                    app.addState(newState);
+                    app.switchToState(newState);
                     wireEditorStateCallbacks();
-                    log("Editor: EditorState loaded");
+                    log("Editor: EditorState loaded (index " + (editorStates.length - 1) + ")");
                 default: 
                     log("Editor: Unknown state ID: " + stateId);
                     return 0;
@@ -177,6 +187,66 @@ class Editor {
         }
     }
     
+    /**
+     * Create a blank new EditorState, register it with the app, make it active,
+     * and return its index. Returns -1 on failure.
+     */
+    @:keep
+    public static function newEditorState():Int {
+        if (app == null || !initialized) return -1;
+        try {
+            var newState = new EditorState(app);
+            editorStates.push(newState);
+            app.addState(newState);
+            app.switchToState(newState);
+            wireEditorStateCallbacks();
+            var index = editorStates.length - 1;
+            log("Editor: Created new EditorState at index " + index);
+            return index;
+        } catch (e:Dynamic) {
+            log("Editor: newEditorState error: " + e);
+            return -1;
+        }
+    }
+
+    /**
+     * Switch the active editor state by index (its position in the editorStates array).
+     * @return 1 on success, 0 if index is out of range
+     */
+    @:keep
+    public static function setActiveState(index:Int):Int {
+        if (app == null || !initialized) return 0;
+        if (index < 0 || index >= editorStates.length) {
+            log("Editor: setActiveState — index " + index + " out of range (" + editorStates.length + " states)");
+            return 0;
+        }
+        var success = app.switchToState(editorStates[index]);
+        if (success) wireEditorStateCallbacks();
+        return success ? 1 : 0;
+    }
+
+    /**
+     * Fully release and destroy the editor state at the given index.
+     * Removes it from both the app and the editorStates array.
+     * If it was the active state the app will switch to the next available one.
+     * @return 1 on success, 0 if index is out of range
+     */
+    @:keep
+    public static function releaseState(index:Int):Int {
+        if (app == null || !initialized) return 0;
+        if (index < 0 || index >= editorStates.length) {
+            log("Editor: releaseState — index " + index + " out of range (" + editorStates.length + " states)");
+            return 0;
+        }
+        var state = editorStates[index];
+        editorStates.splice(index, 1);
+        app.removeState(state);
+        // Re-wire callbacks to whichever state is now active (if any)
+        if (editorState != null) wireEditorStateCallbacks();
+        log("Editor: Released state " + index + " (" + editorStates.length + " remaining)");
+        return 1;
+    }
+
     /**
      * Check if engine is running
      * @return 1 if running, 0 if stopped
@@ -317,10 +387,6 @@ class Editor {
         var ref:Reference<TilesetInfoStruct> = outInfo.ref;
         ref.name = tilesetInfo.name;
         ref.texturePath = tilesetInfo.texturePath;
-        ref.tileSize = tilesetInfo.tileSize;
-        ref.tilesPerRow = tilesetInfo.tilesPerRow;
-        ref.tilesPerCol = tilesetInfo.tilesPerCol;
-        ref.regionCount = tilesetInfo.tilesPerRow * tilesetInfo.tilesPerCol;
 
         return 1;
     }
@@ -348,20 +414,12 @@ class Editor {
             // copy values directly into the C struct via the pointer reference
             var name = tilesetInfo.name;
             var texturePath = tilesetInfo.texturePath;
-            var tileSize = tilesetInfo.tileSize;
-            var tilesPerRow = tilesetInfo.tilesPerRow;
-            var tilesPerCol = tilesetInfo.tilesPerCol;
-            var regionCount = tilesetInfo.tilesPerRow * tilesetInfo.tilesPerCol;
 
             var ref:Reference<TilesetInfoStruct> = outInfo.ref;
             ref.name = name;
             ref.texturePath = texturePath;
-            ref.tileSize = tileSize;
-            ref.tilesPerRow = tilesPerRow;
-            ref.tilesPerCol = tilesPerCol;
-            ref.regionCount = regionCount;
 
-            log("Editor: Retrieved tileset at index " + index + ": " + name + " (" + tilesPerRow + "x" + tilesPerCol + " tiles)");
+            log("Editor: Retrieved tileset at index " + index + ": " + name);
             return 1;
             
         } catch (e:Dynamic) {
@@ -448,9 +506,10 @@ class Editor {
     }
     
     /**
-     * Import tilemap from a JSON file
+     * Import tilemap from a JSON file into a brand-new EditorState.
+     * The new state is pushed onto editorStates and made active.
      * @param filePath Absolute path to the JSON file
-     * @return Number of tiles imported, or -1 on error
+     * @return The index of the newly created state, or -1 on error
      */
     @:keep
     public static function importMap(filePath:String):Int {
@@ -459,27 +518,31 @@ class Editor {
             return -1;
         }
         
-        if (editorState == null) {
-            log("Editor: EditorState not loaded");
-            return -1;
-        }
-        
         try {
+            // Create a fresh state for this map
+            var newState = new EditorState(app);
+            editorStates.push(newState);
+            app.addState(newState);
+            app.switchToState(newState);
+            wireEditorStateCallbacks();
+
+            var stateIndex = editorStates.length - 1;
             var tileCount = editorState.importFromJSON(filePath);
             if (tileCount >= 0) {
-                log("Editor: Imported " + tileCount + " tiles from: " + filePath);
+                log("Editor: Imported " + tileCount + " tiles from: " + filePath + " into state " + stateIndex);
             } else {
                 log("Editor: Failed to import tilemap");
+                return -1;
             }
-            return tileCount;
+            return stateIndex;
         } catch (e:Dynamic) {
             log("Editor: Error importing tilemap: " + e);
             return -1;
         }
     }
     
-    @:keep public static function createTileset(texturePath:String, tilesetName:String, tileSize:Int):String { 
-        return editorState.createTileset(texturePath, tilesetName, tileSize);
+    @:keep public static function createTileset(texturePath:String, tilesetName:String):String { 
+        return editorState.createTileset(texturePath, tilesetName);
     }
 
     @:keep public static function deleteTileset(name:String):String {
@@ -643,8 +706,8 @@ class Editor {
     // ===== LAYER MANAGEMENT =====
     
     @:keep
-    public static function createTilemapLayer(layerName:String, tilesetName:String, index:Int = -1):Void {
-        editorState.createTilemapLayer(layerName, tilesetName, index);
+    public static function createTilemapLayer(layerName:String, tilesetName:String, tileSize:Int, index:Int = -1):Void {
+        editorState.createTilemapLayer(layerName, tilesetName, index, tileSize);
     }
     
     @:keep
@@ -712,9 +775,10 @@ class Editor {
 		var layer = editorState.getLayerAt(index);
         var type:Int = 0;
         var tilesetName:String = "";
+        var tileSize:Int = 0;
 
 		if (layer == null) {
-			log("Editor: Layer not found at index: " + index);
+			app.log.error(LogCategory.APP, "Editor: No layer found at index: " + index);
 			return 0;
 		}
 
@@ -723,6 +787,7 @@ class Editor {
 			type = 0;
 			var tilemapLayer:layers.TilemapLayer = cast layer;
 			tilesetName = tilemapLayer.tileset.name;
+			tileSize = tilemapLayer.tileSize;
 		} else if (Std.isOfType(layer, layers.EntityLayer)) {
 			type = 1;
 			var entityLayer:layers.EntityLayer = cast layer;
@@ -736,6 +801,7 @@ class Editor {
         ref.name = layer.id;
         ref.type = type; // 0 = TilemapLayer, 1 = EntityLayer, 2 = FolderLayer
         ref.tilesetName = tilesetName;
+        ref.tileSize = tileSize;
         ref.visible = layer.visible ? 1 : 0;
         ref.silhouette = layer.silhouette;
         ref.silhouetteColor = layer.silhouetteColor.hexValue;
@@ -747,8 +813,9 @@ class Editor {
 		var layer = editorState.getLayerByName(layerName);
         var type:Int = 0;
         var tilesetName:String = "";
+        var tileSize:Int = 0;
 		if (layer == null) {
-			log("Editor: Layer not found: " + layerName);
+			app.log.error(LogCategory.APP, "Editor: Layer not found: " + layerName);
 			return 0;
 		}
 
@@ -757,6 +824,7 @@ class Editor {
 			type = 0;
 			var tilemapLayer:layers.TilemapLayer = cast layer;
 			tilesetName = tilemapLayer.tileset.name;
+			tileSize = tilemapLayer.tileSize;
 		} else if (Std.isOfType(layer, layers.EntityLayer)) {
 			type = 1;
 			var entityLayer:layers.EntityLayer = cast layer;
@@ -770,6 +838,7 @@ class Editor {
         ref.name = layer.id;
         ref.type = type; // 0 = TilemapLayer, 1 = EntityLayer, 2 = FolderLayer
         ref.tilesetName = tilesetName;
+        ref.tileSize = tileSize;
         ref.visible = layer.visible ? 1 : 0;
         ref.silhouette = layer.silhouette;
         ref.silhouetteColor = layer.silhouetteColor.hexValue;

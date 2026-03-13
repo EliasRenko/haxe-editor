@@ -107,20 +107,15 @@ class EntityManager {
         return true;
     }
 
-    public function setEntityRegion(tilesetManager:TilesetManager, entityName:String, x:Int, y:Int, width:Int, height:Int):Void {
+    public function setEntityRegion(entityName:String, x:Int, y:Int, width:Int, height:Int, tileSize:Int):Void {
         var entityDef = getEntityDefinition(entityName);
         if (entityDef == null) {
             return;
         }
-        
-        var tileset = tilesetManager.tilesets.get(entityDef.tilesetName);
-        if (tileset == null) {
-            return;
-        }
 
-        entityDef.regionX = x * tileset.tileSize;
-        entityDef.regionY = y * tileset.tileSize;
-        entityDef.regionWidth = width * tileset.tileSize;
-        entityDef.regionHeight = height * tileset.tileSize;
+        entityDef.regionX = x * tileSize;
+        entityDef.regionY = y * tileSize;
+        entityDef.regionWidth = width * tileSize;
+        entityDef.regionHeight = height * tileSize;
     }
 }
