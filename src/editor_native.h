@@ -44,6 +44,7 @@ typedef struct {
 } LayerInfoStruct;
 
 typedef struct EntityStruct {
+    const char* uid;
     const char* name;
     int width;
     int height;
@@ -189,6 +190,8 @@ extern "C" {
     __declspec(dllexport) void setEntitySelectionChangedCallback(EntitySelectionChangedCallback callback);
     __declspec(dllexport) int getEntitySelectionCount();
     __declspec(dllexport) int getEntitySelectionInfo(int index, EntityStruct* outData);
+    __declspec(dllexport) int selectEntityByUID(const char* uid);
+    __declspec(dllexport) int selectEntityInLayerByUID(const char* layerName, const char* uid);
 }
 
 #endif // EDITOR_NATIVE_H

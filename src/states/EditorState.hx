@@ -64,7 +64,7 @@ class EditorState extends State {
     public var toolType:ToolType = ToolType.TILE_DRAW;
 
     // Selected entity list (supports future multi-select)
-    public var selectedEntities:Array<{id:Int, name:String, x:Float, y:Float, width:Float, height:Float, pivotX:Float, pivotY:Float}> = [];
+    public var selectedEntities:Array<{id:String, name:String, x:Float, y:Float, width:Float, height:Float, pivotX:Float, pivotY:Float}> = [];
 
     // Fired whenever the selection changes (added, cleared, etc.)
     public var onEntitySelectionChanged:()->Void = null;
@@ -616,7 +616,7 @@ class EditorState extends State {
         var entityLayer:EntityLayer = cast activeLayer;
         var entityId = entityLayer.pickEntityAt(worldX, worldY);
 
-        if (entityId >= 0) {
+        if (entityId != null) {
             entityLayer.removeEntity(entityId);
             trace("Removed entity ID=" + entityId + " at (" + worldX + ", " + worldY + ")");
         }
@@ -625,15 +625,15 @@ class EditorState extends State {
     /**
      * Select (pick) an entity at world position using the quadtree + SAT and trace its data
      */
-    public function selectEntityAt(worldX:Float, worldY:Float):Int {
-        if (activeLayer == null || !Std.isOfType(activeLayer, EntityLayer)) return -1;
+    public function selectEntityAt(worldX:Float, worldY:Float):String {
+        if (activeLayer == null || !Std.isOfType(activeLayer, EntityLayer)) return null;
 
         var entityLayer:EntityLayer = cast activeLayer;
-        var entityId = entityLayer.pickEntityAt(worldX, worldY);
+        var entityId:String = entityLayer.pickEntityAt(worldX, worldY);
 
         selectedEntities = [];
 
-        if (entityId >= 0) {
+        if (entityId != null) {
             for (entry in entityLayer.batches) {
                 if (entry.entities.exists(entityId)) {
                     var ent = entry.entities.get(entityId);
@@ -656,6 +656,78 @@ class EditorState extends State {
             onEntitySelectionChanged();
 
         return entityId;
+    }
+
+    /**
+     * Select an entity by its UID, searching across all EntityLayers.
+     * Updates selectedEntities and fires onEntitySelectionChanged.
+     * @return true if found, false otherwise.
+     */
+    public function selectEntityByUID(uid:String):Bool {
+        selectedEntities = [];
+
+        var allEntityLayers:Array<EntityLayer> = [];
+        collectEntityLayers(entities, allEntityLayers);
+
+        for (entityLayer in allEntityLayers) {
+            for (entry in entityLayer.batches) {
+                if (entry.entities.exists(uid)) {
+                    var ent = entry.entities.get(uid);
+                    app.log.debug(LogCategory.APP, "Selected entity by UID=" + uid
+                        + " name=" + ent.name
+                        + " pos=(" + ent.x + ", " + ent.y + ")"
+                        + " size=(" + ent.width + "x" + ent.height + ")"
+                        + " tileset=" + entry.tileset.name);
+                    selectedEntities.push({ id: uid, name: ent.name, x: ent.x, y: ent.y, width: ent.width, height: ent.height, pivotX: ent.pivotX, pivotY: ent.pivotY });
+                    if (selection != null) selection.setSelections(selectedEntities);
+                    if (onEntitySelectionChanged != null) onEntitySelectionChanged();
+                    return true;
+                }
+            }
+        }
+
+        app.log.debug(LogCategory.APP, "selectEntityByUID: no entity with UID '" + uid + "' found");
+        if (selection != null) selection.clear();
+        if (onEntitySelectionChanged != null) onEntitySelectionChanged();
+        return false;
+    }
+
+    /**
+     * Select an entity by its UID, searching only within the named EntityLayer.
+     * Updates selectedEntities and fires onEntitySelectionChanged.
+     * @return true if found, false otherwise.
+     */
+    public function selectEntityInLayerByUID(layerName:String, uid:String):Bool {
+        selectedEntities = [];
+
+        var layer = getLayerByName(layerName);
+        if (layer == null || !Std.isOfType(layer, EntityLayer)) {
+            app.log.debug(LogCategory.APP, "selectEntityInLayerByUID: layer '" + layerName + "' not found or not an entity layer");
+            if (selection != null) selection.clear();
+            if (onEntitySelectionChanged != null) onEntitySelectionChanged();
+            return false;
+        }
+
+        var entityLayer:EntityLayer = cast layer;
+        for (entry in entityLayer.batches) {
+            if (entry.entities.exists(uid)) {
+                var ent = entry.entities.get(uid);
+                app.log.debug(LogCategory.APP, "Selected entity in layer '" + layerName + "' by UID=" + uid
+                    + " name=" + ent.name
+                    + " pos=(" + ent.x + ", " + ent.y + ")"
+                    + " size=(" + ent.width + "x" + ent.height + ")"
+                    + " tileset=" + entry.tileset.name);
+                selectedEntities.push({ id: uid, name: ent.name, x: ent.x, y: ent.y, width: ent.width, height: ent.height, pivotX: ent.pivotX, pivotY: ent.pivotY });
+                if (selection != null) selection.setSelections(selectedEntities);
+                if (onEntitySelectionChanged != null) onEntitySelectionChanged();
+                return true;
+            }
+        }
+
+        app.log.debug(LogCategory.APP, "selectEntityInLayerByUID: no entity with UID '" + uid + "' in layer '" + layerName + "'");
+        if (selection != null) selection.clear();
+        if (onEntitySelectionChanged != null) onEntitySelectionChanged();
+        return false;
     }
 
     public function getActiveTile():Int {

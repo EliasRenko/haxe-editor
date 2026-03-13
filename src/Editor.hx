@@ -429,6 +429,16 @@ class Editor {
     }
 
     @:keep
+    public static function selectEntityByUID(uid:String):Bool {
+        return editorState.selectEntityByUID(uid);
+    }
+
+    @:keep
+    public static function selectEntityInLayerByUID(layerName:String, uid:String):Bool {
+        return editorState.selectEntityInLayerByUID(layerName, uid);
+    }
+
+    @:keep
     public static function getActiveTile():Int {
         return editorState.getActiveTile();
     }
@@ -465,6 +475,8 @@ class Editor {
         if (index < 0 || index >= editorState.selectedEntities.length) return 0;
         var ent = editorState.selectedEntities[index];
         var ref:cpp.Reference<EntityStruct> = outData.ref;
+        var entUid:String = ent.id;
+        untyped __cpp__("{0}.uid = {1}.__s", ref, entUid);
         var entName:String = ent.name;
         untyped __cpp__("{0}.name = {1}.__s", ref, entName);
         ref.x = Std.int(ent.x);
@@ -926,6 +938,8 @@ class Editor {
 
         if (found == null) return 0;
         var ref:cpp.Reference<EntityStruct> = outData.ref;
+        var entUid:String = found.uid;
+        untyped __cpp__("{0}.uid = {1}.__s", ref, entUid);
         var entName:String = found.name;
         untyped __cpp__("{0}.name = {1}.__s", ref, entName);
         ref.x = Std.int(found.x);

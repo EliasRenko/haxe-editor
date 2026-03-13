@@ -9,7 +9,10 @@ import Map;
 import utils.EntityQuadtree;
 import utils.EntityQuadtree.EntityBounds;
 
+import utils.UIDGenerator;
+
 typedef Entity = {
+    uid:String,
     name:String,
     tileId:Int,
     x:Float,
@@ -24,12 +27,12 @@ typedef Entity = {
 class BatchEntry {
     public var tileset:Tileset;
     public var batch:ManagedTileBatch;
-    public var entities:Map<Int, Entity>;
+    public var entities:Map<String, Entity>;
     public var definedRegions:Map<String,Int>;
     public function new(tileset:Tileset, batch:ManagedTileBatch) {
         this.tileset = tileset;
         this.batch = batch;
-        this.entities = new Map<Int, Entity>();
+        this.entities = new Map<String, Entity>();
         this.definedRegions = new Map<String,Int>();
     }
 }
@@ -37,8 +40,6 @@ class BatchEntry {
 class EntityLayer extends Layer implements ITilesLayer {
     // list of all batches, one per tileset used by entities in this layer
     public var batches:Array<BatchEntry>;
-
-    private var nextEntityId:Int = 0;
 
     /**
      * Spatial quadtree for broad-phase entity picking and collision queries.
@@ -131,7 +132,7 @@ class EntityLayer extends Layer implements ITilesLayer {
      * When pivotX / pivotY are omitted (or Math.NaN), the entity definition's
      * own default pivot (def.pivotX / def.pivotY) is used instead.
      */
-    public function placeEntity(def:EntityDefinition, tileset:Tileset, x:Float, y:Float, renderer:Dynamic, programInfo:Dynamic, ?pivotX:Null<Float>, ?pivotY:Null<Float>):Int {
+    public function placeEntity(def:EntityDefinition, tileset:Tileset, x:Float, y:Float, renderer:Dynamic, programInfo:Dynamic, ?pivotX:Null<Float>, ?pivotY:Null<Float>, ?uid:String):String {
         // Resolve pivot: explicit override > definition default
         var px:Float = (pivotX != null) ? pivotX : def.pivotX;
         var py:Float = (pivotY != null) ? pivotY : def.pivotY;
@@ -160,7 +161,7 @@ class EntityLayer extends Layer implements ITilesLayer {
                                                 def.regionWidth, def.regionHeight);
             if (regionId < 0) {
                 trace("EntityLayer.placeEntity: defineRegion failed");
-                return -1;
+                return null;
             }
             entry.definedRegions.set(def.name, regionId);
         }
@@ -172,12 +173,12 @@ class EntityLayer extends Layer implements ITilesLayer {
         var tileId = entry.batch.addTile(renderX, renderY, def.width, def.height, regionId);
         if (tileId < 0) {
             trace("EntityLayer.placeEntity: addTile failed");
-            return -1;
+            return null;
         }
         entry.batch.needsBufferUpdate = true;
 
-        var entityId = nextEntityId++;
-        entry.entities.set(entityId, {name:def.name, tileId:tileId, x:x, y:y, width:def.width, height:def.height, pivotX:px, pivotY:py});
+        var entityId:String = (uid != null && uid != "") ? uid : UIDGenerator.generate();
+        entry.entities.set(entityId, {uid:entityId, name:def.name, tileId:tileId, x:x, y:y, width:def.width, height:def.height, pivotX:px, pivotY:py});
 
         // Insert into the spatial quadtree for future queries (quadtree uses center coords)
         // Center = pivot world pos + offset from pivot to center
@@ -206,10 +207,10 @@ class EntityLayer extends Layer implements ITilesLayer {
 
         // Separate entities into those that stay in their current batch vs those
         // that need migrating to a different tileset's batch.
-        var toMigrate:Array<{entry:BatchEntry, id:Int, ent:Entity}> = [];
+        var toMigrate:Array<{entry:BatchEntry, id:String, ent:Entity}> = [];
 
         for (entry in batches) {
-            var idsToUpdate:Array<Int> = [];
+            var idsToUpdate:Array<String> = [];
             for (id in entry.entities.keys()) {
                 if (entry.entities.get(id).name == def.name) idsToUpdate.push(id);
             }
@@ -354,7 +355,7 @@ class EntityLayer extends Layer implements ITilesLayer {
         var count = 0;
         var batchesToRemove:Array<BatchEntry> = [];
         for (entry in batches) {
-            var idsToRemove:Array<Int> = [];
+            var idsToRemove:Array<String> = [];
             for (id in entry.entities.keys()) {
                 if (entry.entities.get(id).name == defName) idsToRemove.push(id);
             }
@@ -380,7 +381,7 @@ class EntityLayer extends Layer implements ITilesLayer {
     /**
      * Remove an entity by ID, searching all batches
      */
-    public function removeEntity(entityId:Int):Bool {
+    public function removeEntity(entityId:String):Bool {
         for (entry in batches) {
             if (entry.entities.exists(entityId)) {
                 var ent = entry.entities.get(entityId);
@@ -419,7 +420,7 @@ class EntityLayer extends Layer implements ITilesLayer {
         if (batchesToRemove.length > 0) rebuildQuadtree();
     }
 
-    public function getEntityAt(worldX:Float, worldY:Float, tolerance:Float = 5.0):Int {
+    public function getEntityAt(worldX:Float, worldY:Float, tolerance:Float = 5.0):String {
         for (entry in batches) {
             for (id in entry.entities.keys()) {
                 var ent = entry.entities.get(id);
@@ -429,7 +430,7 @@ class EntityLayer extends Layer implements ITilesLayer {
                 }
             }
         }
-        return -1;
+        return null;
     }
 
     public function getEntityCount():Int {
@@ -445,7 +446,6 @@ class EntityLayer extends Layer implements ITilesLayer {
             if (entry.definedRegions != null) entry.definedRegions.clear();
         }
         batches = [];
-        nextEntityId = 0;
         if (quadtree != null) quadtree.clear();
     }
 
@@ -522,8 +522,8 @@ class EntityLayer extends Layer implements ITilesLayer {
      * Build a flat map of every entity's bounding box, keyed by entity ID.
      * Pass this to EntityQuadtree.pickEntity() for narrow-phase SAT tests.
      */
-    public function getAllEntityBounds():Map<Int, EntityBounds> {
-        var map = new Map<Int, EntityBounds>();
+    public function getAllEntityBounds():Map<String, EntityBounds> {
+        var map = new Map<String, EntityBounds>();
         for (entry in batches) {
             for (id in entry.entities.keys()) {
                 var e = entry.entities.get(id);
@@ -543,7 +543,7 @@ class EntityLayer extends Layer implements ITilesLayer {
      *
      * @return Entity ID or -1 if nothing is hit.
      */
-    public function pickEntityAt(px:Float, py:Float):Int {
+    public function pickEntityAt(px:Float, py:Float):String {
         if (quadtree == null) return getEntityAt(px, py, 5.0);
         return quadtree.pickEntity(px, py, getAllEntityBounds());
     }

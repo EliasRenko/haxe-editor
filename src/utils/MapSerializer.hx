@@ -93,6 +93,7 @@ class MapSerializer {
                     for (entityId in entry.entities.keys()) {
                         var entityData = entry.entities.get(entityId);
                         batchEntities.push({
+                            uid: entityData.uid,
                             name: entityData.name,
                             x: entityData.x,
                             y: entityData.y,
@@ -350,9 +351,10 @@ class MapSerializer {
                                         var y:Float = entityData.y;
                                         var pivotX:Float = entityData.pivotX != null ? entityData.pivotX : 0.0;
                                         var pivotY:Float = entityData.pivotY != null ? entityData.pivotY : 0.0;
+                                        var uid:String = entityData.uid;
                                         var entityDef = context.entityManager.getEntityDefinition(entityName);
                                         if (entityDef == null) continue;
-                                        entityLayer.placeEntity(entityDef, tileset, x, y, context.renderer, programInfo, pivotX, pivotY);
+                                        entityLayer.placeEntity(entityDef, tileset, x, y, context.renderer, programInfo, pivotX, pivotY, uid);
                                         importedCount++;
                                     }
                                 }
@@ -366,13 +368,14 @@ class MapSerializer {
                                     var y:Float = entityData.y;
                                     var pivotX:Float = entityData.pivotX != null ? entityData.pivotX : 0.0;
                                     var pivotY:Float = entityData.pivotY != null ? entityData.pivotY : 0.0;
+                                    var uid:String = entityData.uid;
                                     var tsName:String = Std.is(entityData.tilesetName,String) ? entityData.tilesetName : null;
                                     var entityDef = context.entityManager.getEntityDefinition(entityName);
                                     if (entityDef == null) continue;
                                     var lookupName = tsName != null ? tsName : entityDef.tilesetName;
                                     var tileset:Tileset = context.tilesetManager.tilesets.get(lookupName);
                                     if (tileset == null) continue;
-                                    entityLayer.placeEntity(entityDef, tileset, x, y, context.renderer, programInfo, pivotX, pivotY);
+                                    entityLayer.placeEntity(entityDef, tileset, x, y, context.renderer, programInfo, pivotX, pivotY, uid);
                                     importedCount++;
                                 }
                             }

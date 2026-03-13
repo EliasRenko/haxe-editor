@@ -10,7 +10,7 @@ import display.LineBatch;
  * (x, y) is the CENTER of the entity in world space.
  */
 typedef EntityBounds = {
-    var id:Int;
+    var id:String;
     var x:Float;
     var y:Float;
     var width:Float;
@@ -87,7 +87,7 @@ class EntityQuadtree {
      * @param ew  Width  of the entity AABB
      * @param eh  Height of the entity AABB
      */
-    public function insert(id:Int, ex:Float, ey:Float, ew:Float, eh:Float):Void {
+    public function insert(id:String, ex:Float, ey:Float, ew:Float, eh:Float):Void {
         // If already split, try to delegate to a single child
         if (nodes != null) {
             var idx = _getQuadrant(ex, ey, ew, eh);
@@ -120,7 +120,7 @@ class EntityQuadtree {
      * the supplied query rectangle (qx, qy, qw, qh — center + size).
      * Does NOT deduplicate; callers should use a Set if needed.
      */
-    public function query(qx:Float, qy:Float, qw:Float, qh:Float, result:Array<Int>):Void {
+    public function query(qx:Float, qy:Float, qw:Float, qh:Float, result:Array<String>):Void {
         var qL = qx - qw * 0.5;  var qR = qx + qw * 0.5;
         var qT = qy - qh * 0.5;  var qB = qy + qh * 0.5;
 
@@ -146,7 +146,7 @@ class EntityQuadtree {
      * Convenience wrapper: collects candidate entity IDs near world point (px, py).
      * Uses a 1×1 query box — use pickEntity() or pickEntityAABB() for the exact test.
      */
-    public function queryPoint(px:Float, py:Float, result:Array<Int>):Void {
+    public function queryPoint(px:Float, py:Float, result:Array<String>):Void {
         query(px, py, 1.0, 1.0, result);
     }
 
@@ -159,10 +159,10 @@ class EntityQuadtree {
      * @param bounds  Map from entity ID → EntityBounds (call EntityLayer.getAllEntityBounds())
      * @return        ID of the first entity that contains (px, py), or -1 if none.
      */
-    public function pickEntity(px:Float, py:Float, bounds:Map<Int, EntityBounds>):Int {
-        var candidates:Array<Int> = [];
+    public function pickEntity(px:Float, py:Float, bounds:Map<String, EntityBounds>):String {
+        var candidates:Array<String> = [];
         queryPoint(px, py, candidates);
-        if (candidates.length == 0) return -1;
+        if (candidates.length == 0) return null;
 
         // Tiny circle probe at the cursor position
         var probe = new Circle(px, py, 0.5);
@@ -172,7 +172,7 @@ class EntityQuadtree {
             var rect = Polygon.rectangle(b.x, b.y, b.width, b.height, true);
             if (Collision.shapeWithShape(probe, rect) != null) return id;
         }
-        return -1;
+        return null;
     }
 
     /**
@@ -182,8 +182,8 @@ class EntityQuadtree {
      * Prefer pickEntity() when you need exact SAT accuracy (e.g. rotated shapes).
      * Use this for simple rectangular entities where AABB is exact enough.
      */
-    public function pickEntityAABB(px:Float, py:Float, bounds:Map<Int, EntityBounds>):Int {
-        var candidates:Array<Int> = [];
+    public function pickEntityAABB(px:Float, py:Float, bounds:Map<String, EntityBounds>):String {
+        var candidates:Array<String> = [];
         queryPoint(px, py, candidates);
         for (id in candidates) {
             var b = bounds.get(id);
@@ -192,7 +192,7 @@ class EntityQuadtree {
             var t = b.y - b.height * 0.5;  var bm = b.y + b.height * 0.5;
             if (px >= l && px <= r && py >= t && py <= bm) return id;
         }
-        return -1;
+        return null;
     }
 
     /**

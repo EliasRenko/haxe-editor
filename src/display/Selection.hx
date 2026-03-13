@@ -35,7 +35,7 @@ class Selection {
      * @param entities Array of entries with x/y (pivot world position),
      *                 width, height, pivotX, pivotY (all normalised 0–1).
      */
-    public function setSelections(entities:Array<{x:Float, y:Float, width:Float, height:Float, pivotX:Float, pivotY:Float}>):Void {
+    public function setSelections(entities:Array<Dynamic>):Void {
         lineBatch.clear();
         for (ent in entities) {
             var x1 = ent.x - ent.pivotX * ent.width;
