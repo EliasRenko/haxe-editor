@@ -452,6 +452,8 @@ class EditorState extends State {
                 case ToolType.TILE_DRAW:
                     if (Std.isOfType(activeLayer, TilemapLayer) && mouse.check(1))
                         placeTileAt(worldPos.x, worldPos.y);
+                    if (Std.isOfType(activeLayer, EntityLayer) && mouse.pressed(3))
+                        removeTileAt(worldPos.x, worldPos.y);
                 case ToolType.TILE_ERASE:
                     if (Std.isOfType(activeLayer, TilemapLayer) && mouse.check(1))
                         removeTileAt(worldPos.x, worldPos.y);
