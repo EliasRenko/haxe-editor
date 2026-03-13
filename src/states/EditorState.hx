@@ -9,6 +9,7 @@ import display.Grid;
 import display.ManagedTileBatch;
 import display.MapFrame;
 import display.LineBatch;
+import display.Selection;
 import layers.Layer;
 import layers.TilemapLayer;
 import layers.EntityLayer;
@@ -25,6 +26,7 @@ class EditorState extends State {
     private var mapFrame:MapFrame;
     private var worldAxes:LineBatch;
     private var quadtreeDebug:LineBatch;
+    private var selection:Selection;
 
     // Options
     public var showWorldAxes:Bool = true; // Show X/Y axes at origin (0,0)
@@ -62,7 +64,7 @@ class EditorState extends State {
     public var toolType:ToolType = ToolType.TILE_DRAW;
 
     // Selected entity list (supports future multi-select)
-    public var selectedEntities:Array<{id:Int, name:String, x:Float, y:Float, width:Float, height:Float}> = [];
+    public var selectedEntities:Array<{id:Int, name:String, x:Float, y:Float, width:Float, height:Float, pivotX:Float, pivotY:Float}> = [];
 
     // Fired whenever the selection changes (added, cleared, etc.)
     public var onEntitySelectionChanged:()->Void = null;
@@ -117,6 +119,9 @@ class EditorState extends State {
             quadtreeDebug = new LineBatch(lineProgramInfo, false);
             quadtreeDebug.depthTest = false;
             quadtreeDebug.init(app.renderer);
+
+            selection = new Selection(lineProgramInfo);
+            selection.init(app.renderer);
         }
 
         // Create default programInfo
@@ -637,13 +642,15 @@ class EditorState extends State {
                         + " pos=(" + ent.x + ", " + ent.y + ")"
                         + " size=(" + ent.width + "x" + ent.height + ")"
                         + " tileset=" + entry.tileset.name);
-                    selectedEntities.push({ id: entityId, name: ent.name, x: ent.x, y: ent.y, width: ent.width, height: ent.height });
+                    selectedEntities.push({ id: entityId, name: ent.name, x: ent.x, y: ent.y, width: ent.width, height: ent.height, pivotX: ent.pivotX, pivotY: ent.pivotY });
                     break;
                 }
             }
         } else {
             app.log.debug(LogCategory.APP, "No entity at (" + worldX + ", " + worldY + ")");
         }
+
+        if (selection != null) selection.setSelections(selectedEntities);
 
         if (onEntitySelectionChanged != null)
             onEntitySelectionChanged();
@@ -1610,6 +1617,11 @@ class EditorState extends State {
                 entity.render(renderer, viewProjectionMatrix);
             }
             i--;
+        }
+
+        // Draw selection outline on top of everything
+        if (selection != null) {
+            renderDisplayObject(renderer, viewProjectionMatrix, selection.getLineBatch());
         }
     }
     
