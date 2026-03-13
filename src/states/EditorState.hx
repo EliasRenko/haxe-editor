@@ -13,6 +13,7 @@ import display.Selection;
 import layers.Layer;
 import layers.TilemapLayer;
 import layers.EntityLayer;
+import layers.EntityLayer.Entity;
 import Tileset;
 import layers.FolderLayer;
 import manager.TilesetManager;
@@ -64,7 +65,7 @@ class EditorState extends State {
     public var toolType:ToolType = ToolType.TILE_DRAW;
 
     // Selected entity list (supports future multi-select)
-    public var selectedEntities:Array<{id:String, name:String, x:Float, y:Float, width:Float, height:Float, pivotX:Float, pivotY:Float}> = [];
+    public var selectedEntities:Array<Entity> = [];
 
     // Fired whenever the selection changes (added, cleared, etc.)
     public var onEntitySelectionChanged:()->Void = null;
@@ -642,7 +643,7 @@ class EditorState extends State {
                         + " pos=(" + ent.x + ", " + ent.y + ")"
                         + " size=(" + ent.width + "x" + ent.height + ")"
                         + " tileset=" + entry.tileset.name);
-                    selectedEntities.push({ id: entityId, name: ent.name, x: ent.x, y: ent.y, width: ent.width, height: ent.height, pivotX: ent.pivotX, pivotY: ent.pivotY });
+                    selectedEntities.push(ent);
                     break;
                 }
             }
@@ -678,7 +679,7 @@ class EditorState extends State {
                         + " pos=(" + ent.x + ", " + ent.y + ")"
                         + " size=(" + ent.width + "x" + ent.height + ")"
                         + " tileset=" + entry.tileset.name);
-                    selectedEntities.push({ id: uid, name: ent.name, x: ent.x, y: ent.y, width: ent.width, height: ent.height, pivotX: ent.pivotX, pivotY: ent.pivotY });
+                    selectedEntities.push(ent);
                     if (selection != null) selection.setSelections(selectedEntities);
                     if (onEntitySelectionChanged != null) onEntitySelectionChanged();
                     return true;
@@ -717,7 +718,7 @@ class EditorState extends State {
                     + " pos=(" + ent.x + ", " + ent.y + ")"
                     + " size=(" + ent.width + "x" + ent.height + ")"
                     + " tileset=" + entry.tileset.name);
-                selectedEntities.push({ id: uid, name: ent.name, x: ent.x, y: ent.y, width: ent.width, height: ent.height, pivotX: ent.pivotX, pivotY: ent.pivotY });
+                selectedEntities.push(ent);
                 if (selection != null) selection.setSelections(selectedEntities);
                 if (onEntitySelectionChanged != null) onEntitySelectionChanged();
                 return true;
@@ -728,6 +729,16 @@ class EditorState extends State {
         if (selection != null) selection.clear();
         if (onEntitySelectionChanged != null) onEntitySelectionChanged();
         return false;
+    }
+
+    /**
+     * Clear the current entity selection.
+     * Updates the selection overlay and fires onEntitySelectionChanged.
+     */
+    public function deselectEntity():Void {
+        selectedEntities = [];
+        if (selection != null) selection.clear();
+        if (onEntitySelectionChanged != null) onEntitySelectionChanged();
     }
 
     public function getActiveTile():Int {

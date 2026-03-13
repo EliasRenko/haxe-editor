@@ -439,6 +439,11 @@ class Editor {
     }
 
     @:keep
+    public static function deselectEntity():Void {
+        editorState.deselectEntity();
+    }
+
+    @:keep
     public static function getActiveTile():Int {
         return editorState.getActiveTile();
     }
@@ -475,7 +480,7 @@ class Editor {
         if (index < 0 || index >= editorState.selectedEntities.length) return 0;
         var ent = editorState.selectedEntities[index];
         var ref:cpp.Reference<EntityStruct> = outData.ref;
-        var entUid:String = ent.id;
+        var entUid:String = ent.uid;
         untyped __cpp__("{0}.uid = {1}.__s", ref, entUid);
         var entName:String = ent.name;
         untyped __cpp__("{0}.name = {1}.__s", ref, entName);

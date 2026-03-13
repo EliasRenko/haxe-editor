@@ -192,6 +192,8 @@ extern "C" {
     __declspec(dllexport) int getEntitySelectionInfo(int index, EntityStruct* outData);
     __declspec(dllexport) int selectEntityByUID(const char* uid);
     __declspec(dllexport) int selectEntityInLayerByUID(const char* layerName, const char* uid);
+    __declspec(dllexport) void deselectEntity();
+    
 }
 
 #endif // EDITOR_NATIVE_H
