@@ -14,6 +14,7 @@ import layers.Layer;
 import layers.TilemapLayer;
 import layers.EntityLayer;
 import layers.EntityLayer.Entity;
+import display.BitmapFont;
 import Tileset;
 import layers.FolderLayer;
 import manager.TilesetManager;
@@ -28,6 +29,9 @@ class EditorState extends State {
     private var worldAxes:LineBatch;
     private var quadtreeDebug:LineBatch;
     private var selection:Selection;
+    /** Shared BitmapFont for entity name labels. */
+    private var entityLabelFont:BitmapFont = null;
+    private var _labelDebugFrames:Int = 0;
 
     // Options
     public var showWorldAxes:Bool = true; // Show X/Y axes at origin (0,0)
@@ -129,6 +133,35 @@ class EditorState extends State {
         var textureVertShader = app.resources.getText("shaders/texture.vert");
         var textureFragShader = app.resources.getText("shaders/texture.frag");
         app.renderer.createProgramInfo("texture", textureVertShader, textureFragShader);
+
+        // Load pre-baked entity label font (gohufont) for entity name labels
+        app.log.info(LogCategory.APP, "[LabelFont] Loading entity label font...");
+        try {
+            var fontJson = app.resources.getText("fonts/gohufont.json");
+            app.log.info(LogCategory.APP, "[LabelFont] JSON loaded, length=" + fontJson.length);
+            var fontData = loaders.FontLoader.load(fontJson);
+            app.log.info(LogCategory.APP, "[LabelFont] FontData parsed: " + Lambda.count(fontData.chars) + " chars, lineHeight=" + fontData.lineHeight);
+            var fontTextureData = app.resources.getTexture("textures/gohufont.tga");
+            app.log.info(LogCategory.APP, "[LabelFont] Texture data: " + fontTextureData.width + "x" + fontTextureData.height);
+            var fontTexture = app.renderer.uploadTexture(fontTextureData);
+            app.log.info(LogCategory.APP, "[LabelFont] Texture uploaded, id=" + fontTexture.id);
+            var textProgramInfo = app.renderer.getProgramInfo("text");
+            if (textProgramInfo == null) {
+                var tv = app.resources.getText("shaders/text.vert");
+                var tf = app.resources.getText("shaders/text.frag");
+                textProgramInfo = app.renderer.createProgramInfo("text", tv, tf);
+                app.log.info(LogCategory.APP, "[LabelFont] text program created");
+            } else {
+                app.log.info(LogCategory.APP, "[LabelFont] text program reused");
+            }
+            entityLabelFont = new BitmapFont(textProgramInfo, fontTexture, fontData);
+            entityLabelFont.depthTest = false;
+            entityLabelFont.uniforms.set("uColor", [1.0, 1.0, 1.0, 1.0]);
+            entityLabelFont.init(app.renderer);
+            app.log.info(LogCategory.APP, "[LabelFont] BitmapFont ready, regions=" + Lambda.count(entityLabelFont.atlasRegions));
+        } catch(e:Dynamic) {
+            app.log.info(LogCategory.APP, "[LabelFont] FAILED at init: " + e);
+        }
     }
 
     // CHECKED!
@@ -452,10 +485,7 @@ class EditorState extends State {
                 case ToolType.TILE_DRAW:
                     if (Std.isOfType(activeLayer, TilemapLayer) && mouse.check(1))
                         placeTileAt(worldPos.x, worldPos.y);
-                    if (Std.isOfType(activeLayer, EntityLayer) && mouse.pressed(3))
-                        removeTileAt(worldPos.x, worldPos.y);
-                case ToolType.TILE_ERASE:
-                    if (Std.isOfType(activeLayer, TilemapLayer) && mouse.check(1))
+                    if (Std.isOfType(activeLayer, TilemapLayer) && mouse.pressed(3))
                         removeTileAt(worldPos.x, worldPos.y);
                 case ToolType.ENTITY_ADD:
                     if (Std.isOfType(activeLayer, EntityLayer) && mouse.pressed(1))
@@ -607,7 +637,7 @@ class EditorState extends State {
         var tileset:Tileset = tilesetManager.tilesets.get(entityDef.tilesetName);
         if (tileset == null) return;
         var entityId = entityLayer.placeEntity(entityDef, tileset, worldX, worldY, app.renderer, textureProgramInfo);
-
+        app.log.info(LogCategory.APP, "[LabelFont] placeEntityAt: layerLabelFont=" + (entityLayer.labelFont != null) + " totalTiles=" + (entityLabelFont != null ? entityLabelFont.getTileCount() : -1));
     }
     
     /**
@@ -903,7 +933,11 @@ class EditorState extends State {
 
             // Initialise quadtree bounds for any new entity layer
             var el = Std.downcast(layer, EntityLayer);
-            if (el != null) el.setWorldBounds(mapX + mapWidth * 0.5, mapY + mapHeight * 0.5, mapWidth, mapHeight);
+            if (el != null) {
+                el.setWorldBounds(mapX + mapWidth * 0.5, mapY + mapHeight * 0.5, mapWidth, mapHeight);
+                el.labelFont = entityLabelFont;
+                app.log.info(LogCategory.APP, "[LabelFont] addLayer '" + el.id + "': labelFont set, isNull=" + (entityLabelFont == null));
+            }
 
             // If this is the first layer, make it active
             if (activeLayer == null) {
@@ -957,7 +991,10 @@ class EditorState extends State {
 
         // Initialise quadtree bounds for entity layers added at an index
         var elIdx = Std.downcast(layer, EntityLayer);
-        if (elIdx != null) elIdx.setWorldBounds(mapX + mapWidth * 0.5, mapY + mapHeight * 0.5, mapWidth, mapHeight);
+        if (elIdx != null) {
+            elIdx.setWorldBounds(mapX + mapWidth * 0.5, mapY + mapHeight * 0.5, mapWidth, mapHeight);
+            elIdx.labelFont = entityLabelFont;
+        }
 
         // Auto-switch tileset if it's a tilemap layer and this is the first/active layer
         if (activeLayer == layer && Std.isOfType(layer, TilemapLayer)) {
@@ -1550,7 +1587,22 @@ class EditorState extends State {
             createEntityLayer: createEntityLayer
         };
         
-        return MapSerializer.importFromJSON(filePath, context);
+        var result = MapSerializer.importFromJSON(filePath, context);
+
+        // Rebuild entity name labels for all imported entities.
+        // Labels may not have been created during import if labelFont was not yet assigned
+        // to a layer when placeEntity was called (e.g. timing / ordering issues).
+        if (entityLabelFont != null) {
+            for (entity in entities) {
+                var el = Std.downcast(entity, EntityLayer);
+                if (el != null) {
+                    el.labelFont = entityLabelFont;
+                    el.rebuildLabels();
+                }
+            }
+        }
+
+        return result;
     }
     
     // Helper functions for import context
@@ -1575,7 +1627,12 @@ class EditorState extends State {
                 // clear all batches within the entity layer
                 for (entry in el.batches) {
                     if (entry.batch != null) entry.batch.clear();
-                    if (entry.entities != null) entry.entities.clear();
+                    if (entry.entities != null) {
+                        for (ent in entry.entities) {
+                            if (ent.text != null) ent.text.remove();
+                        }
+                        entry.entities.clear();
+                    }
                     if (entry.definedRegions != null) entry.definedRegions.clear();
                 }
             }
@@ -1704,12 +1761,68 @@ class EditorState extends State {
             i--;
         }
 
+        // Draw entity name labels on top of all entity sprites.
+        // Tiles are rebuilt fresh every frame so they always reflect current entity positions
+        // regardless of whether entities came from JSON import or interactive placement.
+        if (entityLabelFont != null) {
+            buildEntityLabels();
+            renderer.renderDisplayObject(entityLabelFont, viewProjectionMatrix);
+        }
+
         // Draw selection outline on top of everything
         if (selection != null) {
             renderDisplayObject(renderer, viewProjectionMatrix, selection.getLineBatch());
         }
     }
     
+    /**
+     * Rebuild all entity label font tiles fresh each frame.
+     * This approach is immune to timing issues (JSON import vs. interactive placement)
+     * because tiles are never stored persistently — they are regenerated every render frame
+     * directly from the current entity data in all visible entity layers.
+     */
+    private function buildEntityLabels():Void {
+        // Remove all tiles from previous frame
+        entityLabelFont.clear();
+
+        for (entity in entities) {
+            var el = Std.downcast(entity, EntityLayer);
+            if (el == null || !el.visible) continue;
+
+            for (entry in el.batches) {
+                for (ent in entry.entities) {
+                    var renderX = ent.x - ent.pivotX * ent.width;
+                    var renderY = ent.y - ent.pivotY * ent.height;
+                    var cursorX:Float = Math.round(renderX);
+                    var cursorY:Float = Math.round(renderY - entityLabelFont.fontData.lineHeight - 2);
+
+                    for (i in 0...ent.name.length) {
+                        var charCode = ent.name.charCodeAt(i);
+                        var fontChar = entityLabelFont.getCharData(charCode);
+                        if (fontChar == null) {
+                            cursorX += entityLabelFont.fontData.lineHeight * 0.5;
+                            continue;
+                        }
+                        var regionId = entityLabelFont.getRegionForChar(charCode);
+                        if (regionId == -1) {
+                            cursorX += fontChar.xadvance;
+                            continue;
+                        }
+                        entityLabelFont.addTile(
+                            cursorX + fontChar.xoffset,
+                            cursorY + fontChar.yoffset,
+                            fontChar.width, fontChar.height,
+                            regionId
+                        );
+                        cursorX += fontChar.xadvance;
+                    }
+                }
+            }
+        }
+
+        entityLabelFont.needsBufferUpdate = true;
+    }
+
     override public function release():Void {
         // Layers are entities and will be cleaned up by super.release()
         activeLayer = null;

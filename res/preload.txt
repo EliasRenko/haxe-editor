@@ -1,3 +1,6 @@
+#font
+fonts/gohufont.json
+
 # Shaders
 shaders/text.vert
 shaders/text.frag
@@ -11,3 +14,4 @@ shaders/line.frag
 #textures
 textures/sky.tga
 textures/devTiles.tga
+textures/gohufont.tga

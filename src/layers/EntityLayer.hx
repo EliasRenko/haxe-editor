@@ -10,6 +10,8 @@ import utils.EntityQuadtree;
 import utils.EntityQuadtree.EntityBounds;
 
 import utils.UIDGenerator;
+import display.BitmapFont;
+import display.Text;
 
 typedef Entity = {
     uid:String,
@@ -20,7 +22,9 @@ typedef Entity = {
     width:Float,
     height:Float, /** Normalized pivot X (0 = left edge, 0.5 = center, 1 = right edge). x/y is the world position of this pivot point. */
     pivotX:Float, /** Normalized pivot Y (0 = top edge, 0.5 = center, 1 = bottom edge). x/y is the world position of this pivot point. */
-    pivotY:Float
+    pivotY:Float,
+    /** Text label for this entity instance. Null when no labelFont was set. */
+    ?text:Text
 }
 
 // helper used only by EntityLayer - combines tileset and its batch plus bookkeeping
@@ -52,6 +56,9 @@ class EntityLayer extends Layer implements ITilesLayer {
     private var _qtY:Float = 0;
     private var _qtW:Float = 4096;
     private var _qtH:Float = 4096;
+
+    /** Shared BitmapFont used to render entity name labels. Assign from EditorState after init. */
+    public var labelFont:BitmapFont = null;
 
     public function new(name:String) {
         super(name);
@@ -107,6 +114,12 @@ class EntityLayer extends Layer implements ITilesLayer {
     override public function cleanup(renderer:Dynamic):Void {
         if (batches != null) {
             for (entry in batches) {
+                if (entry.entities != null) {
+                    for (id in entry.entities.keys()) {
+                        var ent = entry.entities.get(id);
+                        if (ent.text != null) ent.text.remove();
+                    }
+                }
                 if (entry.batch != null) entry.batch.clear();
                 if (entry.entities != null) entry.entities.clear();
                 if (entry.definedRegions != null) entry.definedRegions.clear();
@@ -178,7 +191,17 @@ class EntityLayer extends Layer implements ITilesLayer {
         entry.batch.needsBufferUpdate = true;
 
         var entityId:String = (uid != null && uid != "") ? uid : UIDGenerator.generate();
-        entry.entities.set(entityId, {uid:entityId, name:def.name, tileId:tileId, x:x, y:y, width:def.width, height:def.height, pivotX:px, pivotY:py});
+
+        var labelText:Null<Text> = null;
+        if (labelFont != null) {
+            var labelX = Math.round(renderX);
+            var labelY = Math.round(renderY - labelFont.fontData.lineHeight - 2);
+            labelText = new Text(labelFont, def.name, labelX, labelY);
+            trace("[LabelFont] Text created for '" + def.name + "' at (" + labelX + "," + labelY + ") tiles=" + labelFont.getTileCount());
+        } else {
+            trace("[LabelFont] labelFont is null for entity '" + def.name + "' - no label created");
+        }
+        entry.entities.set(entityId, {uid:entityId, name:def.name, tileId:tileId, x:x, y:y, width:def.width, height:def.height, pivotX:px, pivotY:py, text:labelText});
 
         // Insert into the spatial quadtree for future queries (quadtree uses center coords)
         // Center = pivot world pos + offset from pivot to center
@@ -187,6 +210,25 @@ class EntityLayer extends Layer implements ITilesLayer {
         if (quadtree != null) quadtree.insert(entityId, cx, cy, def.width, def.height);
 
         return entityId;
+    }
+
+    /**
+     * Rebuild text labels for all already-placed entities.
+     * Call this after bulk-importing entities (e.g. from JSON) to ensure labels are created
+     * even when labelFont was null at the time placeEntity was called.
+     */
+    public function rebuildLabels():Void {
+        if (labelFont == null) return;
+        for (entry in batches) {
+            for (ent in entry.entities) {
+                if (ent.text != null) ent.text.remove();
+                var renderX = ent.x - ent.pivotX * ent.width;
+                var renderY = ent.y - ent.pivotY * ent.height;
+                ent.text = new Text(labelFont, ent.name,
+                    Math.round(renderX),
+                    Math.round(renderY - labelFont.fontData.lineHeight - 2));
+            }
+        }
     }
 
     /**
@@ -231,6 +273,13 @@ class EntityLayer extends Layer implements ITilesLayer {
                         tile.y      = ent.y - def.pivotY * def.height;
                         tile.width  = def.width;
                         tile.height = def.height;
+                    }
+                    // Rebuild text label at updated position
+                    if (ent.text != null && labelFont != null) {
+                        ent.text.remove();
+                        ent.text = new Text(labelFont, ent.name,
+                            Math.round(ent.x - ent.pivotX * ent.width),
+                            Math.round(ent.y - ent.pivotY * ent.height - labelFont.fontData.lineHeight - 2));
                     }
                 }
                 entry.batch.needsBufferUpdate = true;
@@ -280,6 +329,13 @@ class EntityLayer extends Layer implements ITilesLayer {
                     ent.y - def.pivotY * def.height,
                     def.width, def.height, regionId);
                 ent.tileId = newTileId;
+                // Rebuild text label at updated position
+                if (ent.text != null && labelFont != null) {
+                    ent.text.remove();
+                    ent.text = new Text(labelFont, ent.name,
+                        Math.round(ent.x - ent.pivotX * ent.width),
+                        Math.round(ent.y - ent.pivotY * ent.height - labelFont.fontData.lineHeight - 2));
+                }
                 targetEntry.entities.set(item.id, ent);
             }
             targetEntry.batch.needsBufferUpdate = true;
@@ -361,6 +417,7 @@ class EntityLayer extends Layer implements ITilesLayer {
             }
             for (id in idsToRemove) {
                 var ent = entry.entities.get(id);
+                if (ent.text != null) ent.text.remove();
                 if (entry.batch != null) entry.batch.removeTile(ent.tileId);
                 entry.entities.remove(id);
                 count++;
@@ -385,6 +442,7 @@ class EntityLayer extends Layer implements ITilesLayer {
         for (entry in batches) {
             if (entry.entities.exists(entityId)) {
                 var ent = entry.entities.get(entityId);
+                if (ent.text != null) ent.text.remove();
                 if (entry.batch != null) entry.batch.removeTile(ent.tileId);
                 entry.entities.remove(entityId);
                 // If this was the last entity in the batch, remove the batch entirely
@@ -412,6 +470,10 @@ class EntityLayer extends Layer implements ITilesLayer {
                 batchesToRemove.push(entry);
         }
         for (entry in batchesToRemove) {
+            for (id in entry.entities.keys()) {
+                var ent = entry.entities.get(id);
+                if (ent.text != null) ent.text.remove();
+            }
             if (entry.batch != null) entry.batch.clear();
             entry.entities.clear();
             entry.definedRegions.clear();
@@ -441,8 +503,14 @@ class EntityLayer extends Layer implements ITilesLayer {
 
     public function clear():Void {
         for (entry in batches) {
+            if (entry.entities != null) {
+                for (id in entry.entities.keys()) {
+                    var ent = entry.entities.get(id);
+                    if (ent.text != null) ent.text.remove();
+                }
+                entry.entities.clear();
+            }
             if (entry.batch != null) entry.batch.clear();
-            if (entry.entities != null) entry.entities.clear();
             if (entry.definedRegions != null) entry.definedRegions.clear();
         }
         batches = [];
