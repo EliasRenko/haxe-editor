@@ -936,6 +936,7 @@ class EditorState extends State {
             if (el != null) {
                 el.setWorldBounds(mapX + mapWidth * 0.5, mapY + mapHeight * 0.5, mapWidth, mapHeight);
                 el.labelFont = entityLabelFont;
+                el.log = app.log;
                 app.log.info(LogCategory.APP, "[LabelFont] addLayer '" + el.id + "': labelFont set, isNull=" + (entityLabelFont == null));
             }
 
@@ -994,6 +995,7 @@ class EditorState extends State {
         if (elIdx != null) {
             elIdx.setWorldBounds(mapX + mapWidth * 0.5, mapY + mapHeight * 0.5, mapWidth, mapHeight);
             elIdx.labelFont = entityLabelFont;
+            elIdx.log = app.log;
         }
 
         // Auto-switch tileset if it's a tilemap layer and this is the first/active layer
@@ -1793,7 +1795,8 @@ class EditorState extends State {
                 for (ent in entry.entities) {
                     var renderX = ent.x - ent.pivotX * ent.width;
                     var renderY = ent.y - ent.pivotY * ent.height;
-                    var cursorX:Float = Math.round(renderX);
+                    var textWidth = entityLabelFont.measureTextWidth(ent.name);
+                    var cursorX:Float = Math.round(renderX + ent.width * 0.5 - textWidth * 0.5);
                     var cursorY:Float = Math.round(renderY - entityLabelFont.fontData.lineHeight - 2);
 
                     for (i in 0...ent.name.length) {

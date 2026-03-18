@@ -60,6 +60,9 @@ class EntityLayer extends Layer implements ITilesLayer {
     /** Shared BitmapFont used to render entity name labels. Assign from EditorState after init. */
     public var labelFont:BitmapFont = null;
 
+    /** Logger assigned from EditorState. When null, logging is skipped. */
+    public var log:Dynamic = null;
+
     public function new(name:String) {
         super(name);
         batches   = [];
@@ -194,12 +197,20 @@ class EntityLayer extends Layer implements ITilesLayer {
 
         var labelText:Null<Text> = null;
         if (labelFont != null) {
-            var labelX = Math.round(renderX);
+            var textWidth = labelFont.measureTextWidth(def.name);
+            var labelX = Math.round(renderX + def.width * 0.5 - textWidth * 0.5);
             var labelY = Math.round(renderY - labelFont.fontData.lineHeight - 2);
             labelText = new Text(labelFont, def.name, labelX, labelY);
-            trace("[LabelFont] Text created for '" + def.name + "' at (" + labelX + "," + labelY + ") tiles=" + labelFont.getTileCount());
+            if (log != null) log.debug(0, "[LabelFont] placeEntity '" + def.name + "'"
+                + " | entity world=(" + x + "," + y + ")"
+                + " | pivot=(" + px + "," + py + ")"
+                + " | size=(" + def.width + "x" + def.height + ")"
+                + " | renderXY=(" + renderX + "," + renderY + ")"
+                + " | textWidth=" + textWidth
+                + " | labelXY=(" + labelX + "," + labelY + ")"
+                + " | tileCount=" + labelFont.getTileCount());
         } else {
-            trace("[LabelFont] labelFont is null for entity '" + def.name + "' - no label created");
+            if (log != null) log.debug(0, "[LabelFont] labelFont is null for entity '" + def.name + "' - no label created");
         }
         entry.entities.set(entityId, {uid:entityId, name:def.name, tileId:tileId, x:x, y:y, width:def.width, height:def.height, pivotX:px, pivotY:py, text:labelText});
 
@@ -225,7 +236,7 @@ class EntityLayer extends Layer implements ITilesLayer {
                 var renderX = ent.x - ent.pivotX * ent.width;
                 var renderY = ent.y - ent.pivotY * ent.height;
                 ent.text = new Text(labelFont, ent.name,
-                    Math.round(renderX),
+                    Math.round(renderX + ent.width * 0.5 - labelFont.measureTextWidth(ent.name) * 0.5),
                     Math.round(renderY - labelFont.fontData.lineHeight - 2));
             }
         }
@@ -278,7 +289,7 @@ class EntityLayer extends Layer implements ITilesLayer {
                     if (ent.text != null && labelFont != null) {
                         ent.text.remove();
                         ent.text = new Text(labelFont, ent.name,
-                            Math.round(ent.x - ent.pivotX * ent.width),
+                            Math.round(ent.x - ent.pivotX * ent.width + ent.width * 0.5 - labelFont.measureTextWidth(ent.name) * 0.5),
                             Math.round(ent.y - ent.pivotY * ent.height - labelFont.fontData.lineHeight - 2));
                     }
                 }
@@ -333,7 +344,7 @@ class EntityLayer extends Layer implements ITilesLayer {
                 if (ent.text != null && labelFont != null) {
                     ent.text.remove();
                     ent.text = new Text(labelFont, ent.name,
-                        Math.round(ent.x - ent.pivotX * ent.width),
+                        Math.round(ent.x - ent.pivotX * ent.width + ent.width * 0.5 - labelFont.measureTextWidth(ent.name) * 0.5),
                         Math.round(ent.y - ent.pivotY * ent.height - labelFont.fontData.lineHeight - 2));
                 }
                 targetEntry.entities.set(item.id, ent);
