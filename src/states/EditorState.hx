@@ -130,9 +130,9 @@ class EditorState extends State {
         }
 
         // Create default programInfo
-        var textureVertShader = app.resources.getText("shaders/texture.vert");
+        //var textureVertShader = app.resources.getText("shaders/texture.vert");
         var textureFragShader = app.resources.getText("shaders/texture.frag");
-        app.renderer.createProgramInfo("texture", textureVertShader, textureFragShader);
+        app.renderer.createProgramInfo("texture", null, textureFragShader);
 
         // Load pre-baked entity label font (gohufont) for entity name labels
         app.log.info(LogCategory.APP, "[LabelFont] Loading entity label font...");
@@ -147,9 +147,9 @@ class EditorState extends State {
             app.log.info(LogCategory.APP, "[LabelFont] Texture uploaded, id=" + fontTexture.id);
             var textProgramInfo = app.renderer.getProgramInfo("text");
             if (textProgramInfo == null) {
-                var tv = app.resources.getText("shaders/text.vert");
+                //var tv = app.resources.getText("shaders/text.vert");
                 var tf = app.resources.getText("shaders/text.frag");
-                textProgramInfo = app.renderer.createProgramInfo("text", tv, tf);
+                textProgramInfo = app.renderer.createProgramInfo("text", null, tf);
                 app.log.info(LogCategory.APP, "[LabelFont] text program created");
             } else {
                 app.log.info(LogCategory.APP, "[LabelFont] text program reused");
@@ -378,10 +378,10 @@ class EditorState extends State {
      */
     private function setupMapFrame(renderer:Renderer):Void {
         // Load line shader for frame rendering
-        var lineVertShader = app.resources.getText("shaders/line.vert");
+        //var lineVertShader = app.resources.getText("shaders/line.vert");
         var lineFragShader = app.resources.getText("shaders/line.frag");
         
-        var lineProgramInfo = renderer.createProgramInfo("line", lineVertShader, lineFragShader);
+        var lineProgramInfo = renderer.createProgramInfo("line", null, lineFragShader);
         
         mapFrame = new MapFrame(lineProgramInfo, mapX, mapY, mapWidth, mapHeight);
         mapFrame.init(renderer);
