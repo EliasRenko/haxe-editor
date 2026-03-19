@@ -324,6 +324,17 @@ class Editor {
     public static function onKeyboardUp(scancode:Int):Void {
         @:privateAccess app.onKeyUp(scancode, scancode, false, 0, 1);
     }
+
+    /**
+     * Forward a mouse-wheel event to the active editor state.
+     * @param x      Cursor X in screen pixels at the time of the scroll
+     * @param y      Cursor Y in screen pixels at the time of the scroll
+     * @param delta  Wheel delta: positive = scroll up (zoom in), negative = scroll down (zoom out)
+     */
+    @:keep
+    public static function onMouseWheel(x:Float, y:Float, delta:Float):Void {
+        if (editorState != null) editorState.onMouseWheel(x, y, delta);
+    }
     
     /**
      * Get texture data by resource path

@@ -66,6 +66,16 @@ class EditorState extends State {
     private var resizeOriginalBounds:{x:Float, y:Float, width:Float, height:Float} = null;
     private var minMapSize:Float = 320.0; // 10 tiles minimum (10 * 32px)
 
+    // Pan state (space or middle-mouse drag — Photoshop-style)
+    private var _isPanning:Bool = false;
+    private var _panLastX:Float = 0;
+    private var _panLastY:Float = 0;
+
+    // Zoom limits
+    private static inline var ZOOM_MIN:Float = 0.1;
+    private static inline var ZOOM_MAX:Float = 10.0;
+    private static inline var ZOOM_STEP:Float = 0.1; // multiplier increment per wheel tick
+
     public var toolType:ToolType = ToolType.TILE_DRAW;
 
     // Selected entity list (supports future multi-select)
@@ -378,7 +388,6 @@ class EditorState extends State {
      */
     private function setupMapFrame(renderer:Renderer):Void {
         // Load line shader for frame rendering
-        //var lineVertShader = app.resources.getText("shaders/line.vert");
         var lineFragShader = app.resources.getText("shaders/line.frag");
         
         var lineProgramInfo = renderer.createProgramInfo("line", null, lineFragShader);
@@ -428,6 +437,33 @@ class EditorState extends State {
         //addEntity(worldAxesEntity);
     }
     
+    /**
+     * Zoom the camera centred on the given screen-space cursor position.
+     * @param mouseX  Cursor X in screen pixels
+     * @param mouseY  Cursor Y in screen pixels
+     * @param delta   Wheel delta: positive = zoom in, negative = zoom out
+     */
+    public function onMouseWheel(mouseX:Float, mouseY:Float, delta:Float):Void {
+        var oldZoom = camera.zoom;
+        var factor = 1.0 + ZOOM_STEP * Math.abs(delta);
+        var newZoom = delta > 0 ? oldZoom * factor : oldZoom / factor;
+        newZoom = Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, newZoom));
+
+        // Pin the world point under the cursor so it stays fixed on screen.
+        // World point before zoom:
+        //   wx = (mouseX - zoomCX) / oldZoom + zoomCX + camera.x
+        // We want the same wx after zoom:
+        //   wx = (mouseX - zoomCX) / newZoom + zoomCX + newCamX
+        // Solving for newCamX:
+        var zoomCX = camera.zoomCenterX != null ? camera.zoomCenterX : app.window.size.x * 0.5;
+        var zoomCY = camera.zoomCenterY != null ? camera.zoomCenterY : app.window.size.y * 0.5;
+        var wx = (mouseX - zoomCX) / oldZoom + zoomCX + camera.x;
+        var wy = (mouseY - zoomCY) / oldZoom + zoomCY + camera.y;
+        camera.zoom = newZoom;
+        camera.x = wx - (mouseX - zoomCX) / newZoom - zoomCX;
+        camera.y = wy - (mouseY - zoomCY) / newZoom - zoomCY;
+    }
+
     override public function update(deltaTime:Float):Void {
         super.update(deltaTime);
         
@@ -440,10 +476,28 @@ class EditorState extends State {
      */
     private function handleInput():Void {
         var mouse = app.input.mouse;
+        var keyboard = app.input.keyboard;
 
         // Get mouse screen position from C# (assumed to be in screen coordinates)
         var screenX = mouse.x;
         var screenY = mouse.y;
+
+        // ── Photoshop-style pan: Space held OR middle mouse held ──────────────
+        var panActive = keyboard.check(32) || mouse.check(2); // 32 = SPACE, 2 = middle button
+        if (panActive) {
+            if (_isPanning) {
+                var dx = screenX - _panLastX;
+                var dy = screenY - _panLastY;
+                camera.x -= dx / camera.zoom;
+                camera.y -= dy / camera.zoom;
+            }
+            _isPanning = true;
+            _panLastX = screenX;
+            _panLastY = screenY;
+            return; // suppress all other interactions while panning
+        } else {
+            _isPanning = false;
+        }
 
         // Convert screen position to world position using camera
         var worldPos = screenToWorld(screenX, screenY);

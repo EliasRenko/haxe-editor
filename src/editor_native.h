@@ -101,6 +101,7 @@ extern "C" {
     __declspec(dllexport) void onMouseButtonUp(int x, int y, int button);
     __declspec(dllexport) void onKeyboardDown(int keyCode);
     __declspec(dllexport) void onKeyboardUp(int keyCode);
+    __declspec(dllexport) void onMouseWheel(float x, float y, float delta);
 
     __declspec(dllexport) int newEditorState();
 
