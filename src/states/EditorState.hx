@@ -15,7 +15,7 @@ import layers.TilemapLayer;
 import layers.EntityLayer;
 import layers.EntityLayer.Entity;
 import display.BitmapFont;
-import Tileset;
+import EditorTexture;
 import layers.FolderLayer;
 import manager.TilesetManager;
 import manager.EntityManager;
@@ -286,7 +286,7 @@ class EditorState extends State {
         for (entity in source) {
             if (Std.isOfType(entity, TilemapLayer)) {
                 var tl:TilemapLayer = cast entity;
-                if (tl.tileset != null && tl.tileset.name == tilesetName) result.push(tl.id);
+                if (tl.editorTexture != null && tl.editorTexture.name == tilesetName) result.push(tl.id);
             } else if (Std.isOfType(entity, FolderLayer)) {
                 var folder:FolderLayer = cast entity;
                 if (folder.children != null) collectTilemapLayerNamesByTileset(cast folder.children, tilesetName, result);
@@ -688,9 +688,9 @@ class EditorState extends State {
         var textureProgramInfo = app.renderer.getProgramInfo("texture");
         if (textureProgramInfo == null) return;
         // lookup tileset instance for this entity
-        var tileset:Tileset = tilesetManager.tilesets.get(entityDef.tilesetName);
-        if (tileset == null) return;
-        var entityId = entityLayer.placeEntity(entityDef, tileset, worldX, worldY, app.renderer, textureProgramInfo);
+        var editorTexture:EditorTexture = tilesetManager.tilesets.get(entityDef.tilesetName);
+        if (editorTexture == null) return;
+        var entityId = entityLayer.placeEntity(entityDef, editorTexture, worldX, worldY, app.renderer, textureProgramInfo);
         app.log.info(LogCategory.APP, "[LabelFont] placeEntityAt: layerLabelFont=" + (entityLayer.labelFont != null) + " totalTiles=" + (entityLabelFont != null ? entityLabelFont.getTileCount() : -1));
     }
     
@@ -728,7 +728,7 @@ class EditorState extends State {
                         + " name=" + ent.name
                         + " pos=(" + ent.x + ", " + ent.y + ")"
                         + " size=(" + ent.width + "x" + ent.height + ")"
-                        + " tileset=" + entry.tileset.name);
+                        + " tileset=" + entry.editorTexture.name);
                     selectedEntities.push(ent);
                     break;
                 }
@@ -764,7 +764,7 @@ class EditorState extends State {
                         + " name=" + ent.name
                         + " pos=(" + ent.x + ", " + ent.y + ")"
                         + " size=(" + ent.width + "x" + ent.height + ")"
-                        + " tileset=" + entry.tileset.name);
+                        + " tileset=" + entry.editorTexture.name);
                     selectedEntities.push(ent);
                     if (selection != null) selection.setSelections(selectedEntities);
                     if (onEntitySelectionChanged != null) onEntitySelectionChanged();
@@ -803,7 +803,7 @@ class EditorState extends State {
                     + " name=" + ent.name
                     + " pos=(" + ent.x + ", " + ent.y + ")"
                     + " size=(" + ent.width + "x" + ent.height + ")"
-                    + " tileset=" + entry.tileset.name);
+                    + " tileset=" + entry.editorTexture.name);
                 selectedEntities.push(ent);
                 if (selection != null) selection.setSelections(selectedEntities);
                 if (onEntitySelectionChanged != null) onEntitySelectionChanged();
@@ -860,7 +860,7 @@ class EditorState extends State {
         }
         
         var tilemapLayer:TilemapLayer = cast activeLayer;
-        trace("Placing tile on layer: " + tilemapLayer.id + ", tileset: " + tilemapLayer.tileset.name);
+        trace("Placing tile on layer: " + tilemapLayer.id + ", tileset: " + tilemapLayer.editorTexture.name);
         
         // Snap to grid (tiles are positioned by top-left corner)
         var tileX = Std.int(Math.floor(worldX / tileSizeX) * tileSizeX);
@@ -1001,7 +1001,7 @@ class EditorState extends State {
                 // Auto-switch tileset if it's a tilemap layer
                 if (Std.isOfType(layer, TilemapLayer)) {
                     var tilemapLayer:TilemapLayer = cast layer;
-                    tilesetManager.setActiveTileset(tilemapLayer.tileset.name);
+                    tilesetManager.setActiveTileset(tilemapLayer.editorTexture.name);
                 }
             }
         }
@@ -1055,7 +1055,7 @@ class EditorState extends State {
         // Auto-switch tileset if it's a tilemap layer and this is the first/active layer
         if (activeLayer == layer && Std.isOfType(layer, TilemapLayer)) {
             var tilemapLayer:TilemapLayer = cast layer;
-            tilesetManager.setActiveTileset(tilemapLayer.tileset.name);
+            tilesetManager.setActiveTileset(tilemapLayer.editorTexture.name);
         }
     }
     
@@ -1081,7 +1081,7 @@ class EditorState extends State {
             // Update tileset if new active layer is a tilemap
             if (activeLayer != null && Std.isOfType(activeLayer, TilemapLayer)) {
                 var tilemapLayer:TilemapLayer = cast activeLayer;
-                tilesetManager.setActiveTileset(tilemapLayer.tileset.name);
+                tilesetManager.setActiveTileset(tilemapLayer.editorTexture.name);
             }
         }
         
@@ -1110,7 +1110,7 @@ class EditorState extends State {
             // Update tileset if new active layer is a tilemap
             if (activeLayer != null && Std.isOfType(activeLayer, TilemapLayer)) {
                 var tilemapLayer:TilemapLayer = cast activeLayer;
-                tilesetManager.setActiveTileset(tilemapLayer.tileset.name);
+                tilesetManager.setActiveTileset(tilemapLayer.editorTexture.name);
             }
         }
         
@@ -1135,7 +1135,7 @@ class EditorState extends State {
         // If it's a tilemap layer, automatically switch to its tileset
         if (Std.isOfType(layer, TilemapLayer)) {
             var tilemapLayer:TilemapLayer = cast layer;
-            return tilesetManager.setActiveTileset(tilemapLayer.tileset.name);
+            return tilesetManager.setActiveTileset(tilemapLayer.editorTexture.name);
         }
         
         return true;
@@ -1158,7 +1158,7 @@ class EditorState extends State {
         // If it's a tilemap layer, automatically switch to its tileset
         if (Std.isOfType(layer, TilemapLayer)) {
             var tilemapLayer:TilemapLayer = cast layer;
-            return tilesetManager.setActiveTileset(tilemapLayer.tileset.name);
+            return tilesetManager.setActiveTileset(tilemapLayer.editorTexture.name);
         }
         
         return true;
@@ -1552,7 +1552,7 @@ class EditorState extends State {
         }
         
         // Update the layer's tileset reference
-        tilemapLayer.tileset = newTileset;
+        tilemapLayer.editorTexture = newTileset;
         
         // Update the tile batch's texture ID to match the new tileset
         tilemapLayer.managedTileBatch.setTexture(newTileset.textureId);

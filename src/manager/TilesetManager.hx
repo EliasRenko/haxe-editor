@@ -1,13 +1,13 @@
 package manager;
-import Tileset;
+import EditorTexture;
 
 class TilesetManager {
 
-    public var tilesets:Map<String, Tileset>;
+    public var tilesets:Map<String, EditorTexture>;
     public var currentTilesetName:String = "devTiles"; // Currently active tileset
     
     public function new() {
-        this.tilesets = new Map<String, Tileset>();
+        this.tilesets = new Map<String, EditorTexture>();
     }
 
     // public function setActiveTileRegion(regionId:Int):Void {
@@ -20,8 +20,8 @@ class TilesetManager {
         return tilesets.exists(tilesetName);
     }
 
-    public function getTilesetInfo(tilesetName:String):Tileset {
-        var tileset:Tileset = tilesets.get(tilesetName);
+    public function getTilesetInfo(tilesetName:String):EditorTexture {
+        var tileset:EditorTexture = tilesets.get(tilesetName);
         if (tileset == null) {
             return null;
         }
@@ -29,7 +29,7 @@ class TilesetManager {
         return tileset;
     }
 
-    public function getTilesetInfoAt(index:Int):Tileset {
+    public function getTilesetInfoAt(index:Int):EditorTexture {
         var tilesetName = getTilesetNameAt(index);
         if (tilesetName == "") {
             return null;
@@ -108,17 +108,15 @@ class TilesetManager {
         return true;
     }
     
-    public function setTileset(tileTexture:Texture, tilesetName:String, texturePath:String):Void {
+    public function setTileset(tileTexture:Texture, editorTextureName:String, texturePath:String):Void {
         // Create tileset metadata structure (no batch - layers create their own)
-        var tileset:Tileset = {
-            name: tilesetName,
+        var tileset:EditorTexture = {
+            name: editorTextureName,
             texturePath: texturePath,
             textureId: tileTexture
         };
         
         // Store in collection
-        tilesets.set(tilesetName, tileset);
-        
-        trace("Loaded tileset: " + tilesetName);
+        tilesets.set(editorTextureName, tileset);
     }
 }

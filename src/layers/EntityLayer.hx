@@ -2,7 +2,7 @@ package layers;
 
 import display.ManagedTileBatch;
 import display.LineBatch;
-import Tileset;
+import EditorTexture;
 import EntityDefinition;
 import Lambda;
 import Map;
@@ -29,12 +29,12 @@ typedef Entity = {
 
 // helper used only by EntityLayer - combines tileset and its batch plus bookkeeping
 class BatchEntry {
-    public var tileset:Tileset;
+    public var editorTexture:EditorTexture;
     public var batch:ManagedTileBatch;
     public var entities:Map<String, Entity>;
     public var definedRegions:Map<String,Int>;
-    public function new(tileset:Tileset, batch:ManagedTileBatch) {
-        this.tileset = tileset;
+    public function new(editorTexture:EditorTexture, batch:ManagedTileBatch) {
+        this.editorTexture = editorTexture;
         this.batch = batch;
         this.entities = new Map<String, Entity>();
         this.definedRegions = new Map<String,Int>();
@@ -73,8 +73,8 @@ class EntityLayer extends Layer implements ITilesLayer {
      * helper to add an existing batch entry (used by callers that create a batch
      * ahead of time, e.g. when the layer is first created)
      */
-    public function addBatch(tileset:Tileset, batch:ManagedTileBatch):Void {
-        batches.push(new BatchEntry(tileset, batch));
+    public function addBatch(editorTexture:EditorTexture, batch:ManagedTileBatch):Void {
+        batches.push(new BatchEntry(editorTexture, batch));
     }
     
     override public function getType():String {
@@ -148,23 +148,23 @@ class EntityLayer extends Layer implements ITilesLayer {
      * When pivotX / pivotY are omitted (or Math.NaN), the entity definition's
      * own default pivot (def.pivotX / def.pivotY) is used instead.
      */
-    public function placeEntity(def:EntityDefinition, tileset:Tileset, x:Float, y:Float, renderer:Dynamic, programInfo:Dynamic, ?pivotX:Null<Float>, ?pivotY:Null<Float>, ?uid:String):String {
+    public function placeEntity(def:EntityDefinition, editorTexture:EditorTexture, x:Float, y:Float, renderer:Dynamic, programInfo:Dynamic, ?pivotX:Null<Float>, ?pivotY:Null<Float>, ?uid:String):String {
         // Resolve pivot: explicit override > definition default
         var px:Float = (pivotX != null) ? pivotX : def.pivotX;
         var py:Float = (pivotY != null) ? pivotY : def.pivotY;
         // find or create batch entry for the provided tileset
         var entry:BatchEntry = null;
         for (e in batches) {
-            if (e.tileset == tileset) {
+            if (e.editorTexture == editorTexture) {
                 entry = e;
                 break;
             }
         }
         if (entry == null) {
             // create a new batch for this tileset
-            var mb = new ManagedTileBatch(programInfo, tileset.textureId);
+            var mb = new ManagedTileBatch(programInfo, editorTexture.textureId);
             mb.init(renderer);
-            entry = new BatchEntry(tileset, mb);
+            entry = new BatchEntry(editorTexture, mb);
             batches.push(entry);
         }
 
@@ -251,11 +251,11 @@ class EntityLayer extends Layer implements ITilesLayer {
      * Call this after updating the definition in EntityManager (via editEntityDef).
      *
      * @param def         The already-updated definition object.
-     * @param newTileset  The Tileset that def.tilesetName now refers to.
+     * @param newEditorTexture  The EditorTexture that def.tilesetName now refers to.
      * @param renderer    Renderer used to initialise any newly-created batch.
      * @param programInfo Program info for the texture shader.
      */
-    public function applyDefinitionUpdate(def:EntityDefinition, newTileset:Tileset, renderer:Dynamic, programInfo:Dynamic):Void {
+    public function applyDefinitionUpdate(def:EntityDefinition, newEditorTexture:EditorTexture, renderer:Dynamic, programInfo:Dynamic):Void {
         var changed = false;
 
         // Separate entities into those that stay in their current batch vs those
@@ -269,7 +269,7 @@ class EntityLayer extends Layer implements ITilesLayer {
             }
             if (idsToUpdate.length == 0) continue;
 
-            if (entry.tileset.name == def.tilesetName) {
+            if (entry.editorTexture.name == def.tilesetName) {
                 // Same tileset — update region UV and tile properties in-place.
                 syncRegion(entry, def);
                 for (id in idsToUpdate) {
@@ -307,12 +307,12 @@ class EntityLayer extends Layer implements ITilesLayer {
             // Find or create the target batch for the new tileset.
             var targetEntry:BatchEntry = null;
             for (e in batches) {
-                if (e.tileset.name == def.tilesetName) { targetEntry = e; break; }
+                if (e.editorTexture.name == def.tilesetName) { targetEntry = e; break; }
             }
             if (targetEntry == null) {
-                var mb = new ManagedTileBatch(programInfo, newTileset.textureId);
+                var mb = new ManagedTileBatch(programInfo, newEditorTexture.textureId);
                 mb.init(renderer);
-                targetEntry = new BatchEntry(newTileset, mb);
+                targetEntry = new BatchEntry(newEditorTexture, mb);
                 batches.push(targetEntry);
             }
 
@@ -477,7 +477,7 @@ class EntityLayer extends Layer implements ITilesLayer {
     public function removeEntitiesByTileset(tilesetName:String):Void {
         var batchesToRemove:Array<BatchEntry> = [];
         for (entry in batches) {
-            if (entry.tileset != null && entry.tileset.name == tilesetName)
+            if (entry.editorTexture != null && entry.editorTexture.name == tilesetName)
                 batchesToRemove.push(entry);
         }
         for (entry in batchesToRemove) {

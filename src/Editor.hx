@@ -40,12 +40,12 @@ class Editor {
 
     // Redirect haxe.Log.trace → OutputDebugString so traces appear in the
     // Visual Studio Output (Debug) panel even when running as a DLL.
-    private static function redirectTraceToDebugOutput():Void {
-        haxe.Log.trace = function(v:Dynamic, ?pos:haxe.PosInfos):Void {
-            var msg = (pos != null ? pos.fileName + ":" + pos.lineNumber + ": " : "") + Std.string(v);
-            untyped __cpp__("OutputDebugStringA({0})", msg + "\n");
-        };
-    }
+    // private static function redirectTraceToDebugOutput():Void {
+    //     haxe.Log.trace = function(v:Dynamic, ?pos:haxe.PosInfos):Void {
+    //         var msg = (pos != null ? pos.fileName + ":" + pos.lineNumber + ": " : "") + Std.string(v);
+    //         untyped __cpp__("OutputDebugStringA({0})", msg + "\n");
+    //     };
+    // }
     
     /**
      * Initialize the engine
@@ -53,7 +53,7 @@ class Editor {
      */
     @:keep @:noExport
     public static function init():Int {
-        redirectTraceToDebugOutput();
+        //redirectTraceToDebugOutput();
         if (initialized) {
             log("Engine already initialized");
             return 1;
@@ -386,9 +386,9 @@ class Editor {
     @:keep
     public static function getTileset(tilesetName:String, outInfo:Pointer<TilesetInfoStruct>):Int {
 
-        var tilesetInfo:Tileset = editorState.tilesetManager.getTilesetInfo(tilesetName);
+        var editorTexture:EditorTexture = editorState.tilesetManager.getTilesetInfo(tilesetName);
             
-        if (tilesetInfo == null) {
+        if (editorTexture == null) {
             log("Editor: Tileset not found: " + tilesetName);
             return 0;
         }
@@ -396,8 +396,8 @@ class Editor {
         // copy values directly into the C struct via the pointer reference
 
         var ref:Reference<TilesetInfoStruct> = outInfo.ref;
-        ref.name = tilesetInfo.name;
-        ref.texturePath = tilesetInfo.texturePath;
+        ref.name = editorTexture.name;
+        ref.texturePath = editorTexture.texturePath;
 
         return 1;
     }
@@ -415,16 +415,16 @@ class Editor {
         }
         
         try {
-            var tilesetInfo:Tileset = editorState.tilesetManager.getTilesetInfoAt(index);
+            var editorTexture:EditorTexture = editorState.tilesetManager.getTilesetInfoAt(index);
             
-            if (tilesetInfo == null) {
+            if (editorTexture == null) {
                 log("Editor: Tileset not found at index: " + index);
                 return 0;
             }
             
             // copy values directly into the C struct via the pointer reference
-            var name = tilesetInfo.name;
-            var texturePath = tilesetInfo.texturePath;
+            var name = editorTexture.name;
+            var texturePath = editorTexture.texturePath;
 
             var ref:Reference<TilesetInfoStruct> = outInfo.ref;
             ref.name = name;
@@ -814,13 +814,13 @@ class Editor {
 		if (Std.isOfType(layer, layers.TilemapLayer)) {
 			type = 0;
 			var tilemapLayer:layers.TilemapLayer = cast layer;
-			tilesetName = tilemapLayer.tileset.name;
+			tilesetName = tilemapLayer.editorTexture.name;
 			tileSize = tilemapLayer.tileSize;
 		} else if (Std.isOfType(layer, layers.EntityLayer)) {
 			type = 1;
 			var entityLayer:layers.EntityLayer = cast layer;
             if (entityLayer.batches != null && entityLayer.batches.length > 0) {
-                tilesetName = entityLayer.batches[0].tileset.name;
+                tilesetName = entityLayer.batches[0].editorTexture.name;
             }
         }
 
@@ -851,13 +851,13 @@ class Editor {
 		if (Std.isOfType(layer, layers.TilemapLayer)) {
 			type = 0;
 			var tilemapLayer:layers.TilemapLayer = cast layer;
-			tilesetName = tilemapLayer.tileset.name;
+			tilesetName = tilemapLayer.editorTexture.name;
 			tileSize = tilemapLayer.tileSize;
 		} else if (Std.isOfType(layer, layers.EntityLayer)) {
 			type = 1;
 			var entityLayer:layers.EntityLayer = cast layer;
             if (entityLayer.batches != null && entityLayer.batches.length > 0) {
-                tilesetName = entityLayer.batches[0].tileset.name;
+                tilesetName = entityLayer.batches[0].editorTexture.name;
             }
         }
 
@@ -911,7 +911,7 @@ class Editor {
         if (layer == null || !Std.isOfType(layer, layers.EntityLayer)) return "";
         var entry = (cast layer:layers.EntityLayer).getBatchEntryAt(batchIndex);
         if (entry == null) return "";
-        return entry.tileset != null ? entry.tileset.name : "";
+        return entry.editorTexture != null ? entry.editorTexture.name : "";
     }
 
     @:keep

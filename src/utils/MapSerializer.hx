@@ -3,7 +3,7 @@ package utils;
 import layers.Layer;
 import layers.TilemapLayer;
 import layers.EntityLayer;
-import Tileset;
+import EditorTexture;
 import manager.TilesetManager;
 import manager.EntityManager;
 import utils.ImportContext;
@@ -43,7 +43,7 @@ class MapSerializer {
             
             if (Std.isOfType(layer, TilemapLayer)) {
                 var tilemapLayer:TilemapLayer = cast layer;
-                var tileset = tilesetManager.tilesets.get(tilemapLayer.tileset.name);
+                var tileset = tilesetManager.tilesets.get(tilemapLayer.editorTexture.name);
                 
                 if (tileset == null) continue;
                 
@@ -74,7 +74,7 @@ class MapSerializer {
                     layersData.push({
                         type: "tilemap",
                         name: tilemapLayer.id,
-                        tilesetName: tilemapLayer.tileset.name,
+                        tilesetName: tilemapLayer.editorTexture.name,
                         tileSize: tilemapLayer.tileSize,
                         visible: tilemapLayer.visible,
                         tiles: layerTiles,
@@ -103,7 +103,7 @@ class MapSerializer {
                     }
                     if (batchEntities.length > 0) {
                         batchesData.push({
-                            tilesetName: entry.tileset.name,
+                            tilesetName: entry.editorTexture.name,
                             entities: batchEntities,
                             count: batchEntities.length
                         });
@@ -274,9 +274,9 @@ class MapSerializer {
                     
                     if (layerType == "tilemap") {
                         var tilesetName:String = layerData.tilesetName;
-                        var tileset:Tileset = context.tilesetManager.tilesets.get(tilesetName);
+                        var editorTexture:EditorTexture = context.tilesetManager.tilesets.get(tilesetName);
                         
-                        if (tileset == null) {
+                        if (editorTexture == null) {
                             trace("Skipping layer with unknown tileset: " + tilesetName);
                             continue;
                         }
@@ -338,7 +338,7 @@ class MapSerializer {
                                 
                                 for (batchData in batches) {
                                     var tsName:String = batchData.tilesetName;
-                                    var tileset:Tileset = context.tilesetManager.tilesets.get(tsName);
+                                    var tileset:EditorTexture = context.tilesetManager.tilesets.get(tsName);
                                     if (tileset == null) continue;
 
                                     var programInfo = context.renderer.getProgramInfo("texture");
@@ -373,7 +373,7 @@ class MapSerializer {
                                     var entityDef = context.entityManager.getEntityDefinition(entityName);
                                     if (entityDef == null) continue;
                                     var lookupName = tsName != null ? tsName : entityDef.tilesetName;
-                                    var tileset:Tileset = context.tilesetManager.tilesets.get(lookupName);
+                                    var tileset:EditorTexture = context.tilesetManager.tilesets.get(lookupName);
                                     if (tileset == null) continue;
                                     entityLayer.placeEntity(entityDef, tileset, x, y, context.renderer, programInfo, pivotX, pivotY, uid);
                                     importedCount++;

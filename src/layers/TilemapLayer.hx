@@ -1,11 +1,11 @@
 package layers;
 
 import display.ManagedTileBatch;
-import Tileset;
+import EditorTexture;
 
 class TilemapLayer extends Layer implements ITilesLayer {
 
-    public var tileset:Tileset;
+    public var editorTexture:EditorTexture;
     public var managedTileBatch:ManagedTileBatch;
     public var selectedTileRegion:Int = 0;
     public var tileSize:Int;
@@ -16,10 +16,10 @@ class TilemapLayer extends Layer implements ITilesLayer {
     // Key format: "gridX_gridY" -> tileId in ManagedTileBatch
     public var tileGrid:Map<String, Int>;
     
-    public function new(name:String, tileset:Tileset, managedTileBatch:ManagedTileBatch, tileSize:Int, tilesPerRow:Int, tilesPerCol:Int) {
+    public function new(name:String, editorTexture:EditorTexture, managedTileBatch:ManagedTileBatch, tileSize:Int, tilesPerRow:Int, tilesPerCol:Int) {
         super(name);
 
-        this.tileset = tileset;
+        this.editorTexture = editorTexture;
         this.managedTileBatch = managedTileBatch;
         this.tileSize = tileSize;
         this.tilesPerRow = tilesPerRow;
