@@ -117,7 +117,7 @@ class Editor {
         }
         
         try {
-            app.renderFrame();
+            @:privateAccess app.render();
         } catch (e:Dynamic) {
             log("Editor: Render error: " + e);
             #if cpp
