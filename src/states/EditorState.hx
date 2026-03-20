@@ -19,7 +19,6 @@ import EditorTexture;
 import layers.FolderLayer;
 import manager.TilesetManager;
 import manager.EntityManager;
-import utils.MapSerializer;
 
 class EditorState extends State {
 
@@ -32,6 +31,11 @@ class EditorState extends State {
     /** Shared BitmapFont for entity name labels. */
     private var entityLabelFont:BitmapFont = null;
     private var _labelDebugFrames:Int = 0;
+    private var _mapSerializer:MapSerializer;
+    private var _projectSerializer:ProjectSerializer;
+
+    /** Absolute path to the currently loaded/saved project file, or null if none. */
+    public var projectFilePath:Null<String> = null;
 
     // Options
     public var showWorldAxes:Bool = true; // Show X/Y axes at origin (0,0)
@@ -86,6 +90,8 @@ class EditorState extends State {
     
     public function new(app:App) {
         super("EditorState", app);
+        _mapSerializer = new MapSerializer(this);
+        _projectSerializer = new ProjectSerializer(this);
     }
     
     override public function init():Void {
@@ -1582,22 +1588,32 @@ class EditorState extends State {
      * @return Number of tiles exported
      */
     public function exportToJSON(filePath:String):Int {
-        var mapBounds = {
-            x: mapX,
-            y: mapY,
-            width: mapWidth,
-            height: mapHeight
-        };
-        
-        return MapSerializer.exportToJSON(
-            this.entities,
-            tilesetManager,
-            entityManager,
-            mapBounds,
-            tileSizeX,
-            tileSizeY,
-            filePath
-        );
+        return _mapSerializer.exportToJSON(filePath);
+    }
+
+    /**
+     * Save entity definitions and tilesets to a project file.
+     * Also updates `projectFilePath` so subsequent map exports reference it.
+     * @param filePath  Absolute path for the .hxproject JSON file.
+     * @param projectName  Optional human-readable name stored inside the file.
+     * @return  Number of entity definitions written, or -1 on error.
+     */
+    public function exportProject(filePath:String, projectName:String = ""):Int {
+        var result = _projectSerializer.exportToJSON(filePath, projectName);
+        if (result >= 0) projectFilePath = filePath;
+        return result;
+    }
+
+    /**
+     * Load entity definitions and tilesets from a project file.
+     * Also updates `projectFilePath` so subsequent map exports reference it.
+     * @param filePath  Absolute path to the .hxproject JSON file.
+     * @return  Number of entity definitions loaded, or -1 on error.
+     */
+    public function importProject(filePath:String):Int {
+        var result = _projectSerializer.importFromJSON(filePath);
+        if (result >= 0) projectFilePath = filePath;
+        return result;
     }
 
     public function setLayerProperties(layerName:String, name:String, type:Int, tilesetName:String, visible:Bool, silhouette:Bool, silhouetteColor:Int):Void {
@@ -1628,22 +1644,7 @@ class EditorState extends State {
      * @return Number of tiles imported, or -1 on error
      */
     public function importFromJSON(filePath:String):Int {
-        // Create import context with all necessary callbacks
-        var context:utils.ImportContext = {
-            renderer: app.renderer,
-            tilesetManager: tilesetManager,
-            entityManager: entityManager,
-            clearLayers: clearLayers,
-            createTileset: createTileset,
-            createEntityFull: createEntityFull,
-            setCurrentTileset: setCurrentTileset,
-            updateMapBounds: updateMapBounds,
-            setTileSize: setTileSize,
-            createTilemapLayer: createTilemapLayer,
-            createEntityLayer: createEntityLayer
-        };
-        
-        var result = MapSerializer.importFromJSON(filePath, context);
+        var result = _mapSerializer.importFromJSON(filePath);
 
         // Rebuild entity name labels for all imported entities.
         // Labels may not have been created during import if labelFont was not yet assigned
@@ -1884,5 +1885,332 @@ class EditorState extends State {
         // Layers are entities and will be cleaned up by super.release()
         activeLayer = null;
         super.release();
+    }
+}
+
+// ---------------------------------------------------------------------------
+// MapSerializer — private to this file, accesses EditorState directly
+// ---------------------------------------------------------------------------
+
+@:access(states.EditorState)
+private class MapSerializer {
+
+    private var state:EditorState;
+
+    public function new(state:EditorState) {
+        this.state = state;
+    }
+
+    // -----------------------------------------------------------------------
+    // Export
+    // -----------------------------------------------------------------------
+
+    /**
+     * Export map data to JSON format.
+     * @param filePath Absolute path to save the JSON file
+     * @return Number of tiles exported, or -1 on error
+     */
+    public function exportToJSON(filePath:String):Int {
+        var layersData:Array<Dynamic> = [];
+        var totalTileCount = 0;
+
+        for (entity in state.entities) {
+            if (!Std.isOfType(entity, Layer)) continue;
+            var layer:Layer = cast entity;
+
+            if (Std.isOfType(layer, TilemapLayer)) {
+                var tilemapLayer:TilemapLayer = cast layer;
+                var tileset = state.tilesetManager.tilesets.get(tilemapLayer.editorTexture.name);
+                if (tileset == null) continue;
+
+                var layerTiles:Array<Dynamic> = [];
+                for (tileId in 0...1000) {
+                    var tile = tilemapLayer.managedTileBatch.getTile(tileId);
+                    if (tile != null) {
+                        layerTiles.push({
+                            gridX: Std.int(tile.x / state.tileSizeX),
+                            gridY: Std.int(tile.y / state.tileSizeY),
+                            region: tile.regionId
+                        });
+                    }
+                }
+
+                if (layerTiles.length > 0) {
+                    layersData.push({
+                        type: "tilemap",
+                        name: tilemapLayer.id,
+                        tilesetName: tilemapLayer.editorTexture.name,
+                        tileSize: tilemapLayer.tileSize,
+                        visible: tilemapLayer.visible,
+                        tiles: layerTiles,
+                        tileCount: layerTiles.length
+                    });
+                    totalTileCount += layerTiles.length;
+                }
+
+            } else if (Std.isOfType(layer, EntityLayer)) {
+                var entityLayer:EntityLayer = cast layer;
+                var batchesData:Array<Dynamic> = [];
+                var totalEntities = 0;
+
+                for (entry in entityLayer.batches) {
+                    var batchEntities:Array<Dynamic> = [];
+                    for (entityId in entry.entities.keys()) {
+                        var ed = entry.entities.get(entityId);
+                        batchEntities.push({
+                            uid: ed.uid,
+                            name: ed.name,
+                            x: ed.x,
+                            y: ed.y,
+                            pivotX: ed.pivotX,
+                            pivotY: ed.pivotY
+                        });
+                    }
+                    if (batchEntities.length > 0) {
+                        batchesData.push({
+                            tilesetName: entry.editorTexture.name,
+                            entities: batchEntities,
+                            count: batchEntities.length
+                        });
+                        totalEntities += batchEntities.length;
+                    }
+                }
+
+                if (batchesData.length > 0) {
+                    layersData.push({
+                        type: "entity",
+                        name: entityLayer.id,
+                        visible: entityLayer.visible,
+                        batches: batchesData,
+                        entityCount: totalEntities
+                    });
+                }
+            }
+        }
+
+        // Entity definitions always live in the project file — never embed them in the map.
+        // Textures are optional: embed them for standalone maps (no project attached) so
+        // the file remains self-contained.  When a project is attached, only store the
+        // projectFile path; the loader will pull textures from the project instead.
+        var hasProject = state.projectFilePath != null;
+
+        var data:Dynamic = {
+            version: "1.5",
+            currentTileset: state.tilesetManager.currentTilesetName,
+            mapBounds: {
+                x: state.mapX,
+                y: state.mapY,
+                width: state.mapWidth,
+                height: state.mapHeight,
+                tileSizeX: state.tileSizeX,
+                tileSizeY: state.tileSizeY,
+                gridWidth: Std.int(state.mapWidth / state.tileSizeX),
+                gridHeight: Std.int(state.mapHeight / state.tileSizeY)
+            },
+            layers: layersData,
+            tileCount: totalTileCount
+        };
+
+        if (hasProject) {
+            // Project-backed map: store the project path, skip redundant texture list.
+            Reflect.setField(data, "projectFile", state.projectFilePath);
+        } else {
+            // Standalone map: embed texture declarations so the file is self-contained.
+            var texturesArray:Array<Dynamic> = [];
+            for (tilesetName in state.tilesetManager.tilesets.keys()) {
+                var ts = state.tilesetManager.tilesets.get(tilesetName);
+                texturesArray.push({ name: ts.name, texturePath: ts.texturePath });
+            }
+            Reflect.setField(data, "textures", texturesArray);
+        }
+
+        var jsonString = haxe.Json.stringify(data, null, "  ");
+        try {
+            sys.io.File.saveContent(filePath, jsonString);
+            trace("Exported " + totalTileCount + " tiles in " + layersData.length + " layers to: " + filePath);
+            return totalTileCount;
+        } catch (e:Dynamic) {
+            trace("Error exporting JSON: " + e);
+            return -1;
+        }
+    }
+
+    // -----------------------------------------------------------------------
+    // Import
+    // -----------------------------------------------------------------------
+
+    /**
+     * Import map data from JSON format.
+     * @param filePath Absolute path to the JSON file
+     * @return Number of tiles/entities imported, or -1 on error
+     */
+    public function importFromJSON(filePath:String):Int {
+        var tileSizeMap:Map<String, Int> = new Map();
+        try {
+            var jsonString = sys.io.File.getContent(filePath);
+            var data:Dynamic = haxe.Json.parse(jsonString);
+
+            state.clearLayers();
+
+            // If the map references a project file, load it first so that
+            // entity definitions and tilesets are available before layers are
+            // reconstructed.  Inline tilesets/entityDefinitions are still
+            // honoured as a fallback for standalone (project-less) maps.
+            if (data.projectFile != null) {
+                var projectPath:String = data.projectFile;
+                var projectResult = state._projectSerializer.importFromJSON(projectPath);
+                if (projectResult >= 0) state.projectFilePath = projectPath;
+            }
+
+            // Load textures — new key is "textures", fall back to legacy "tilesets" key.
+            var rawTextures:Null<Array<Dynamic>> = data.textures != null ? data.textures : data.tilesets;
+            if (rawTextures != null) {
+                for (texData in rawTextures) {
+                    var name:String = texData.name;
+                    var path:String = texData.texturePath;
+                    if (texData.tileSize != null) tileSizeMap.set(name, Std.int(texData.tileSize));
+                    if (!state.tilesetManager.exists(name)) {
+                        state.createTileset(path, name);
+                        trace("Loaded texture from map JSON: " + name);
+                    }
+                }
+            }
+
+            // Legacy: load entity definitions embedded in old map files.
+            // New maps never contain this block — definitions live in the project file.
+            if (data.entityDefinitions != null) {
+                var entitiesArray:Array<Dynamic> = data.entityDefinitions;
+                for (entityData in entitiesArray) {
+                    var pivotX:Float = entityData.pivotX != null ? entityData.pivotX : 0.0;
+                    var pivotY:Float = entityData.pivotY != null ? entityData.pivotY : 0.0;
+                    state.createEntityFull(
+                        entityData.name, entityData.width, entityData.height,
+                        entityData.tilesetName,
+                        entityData.regionX, entityData.regionY,
+                        entityData.regionWidth, entityData.regionHeight,
+                        pivotX, pivotY
+                    );
+                    trace("[legacy] Loaded entity definition from map JSON: " + entityData.name);
+                }
+            }
+
+            // Set current tileset
+            if (data.currentTileset != null) {
+                var currentName:String = data.currentTileset;
+                if (state.tilesetManager.exists(currentName))
+                    state.setCurrentTileset(currentName);
+            }
+
+            // Restore map bounds and tile size
+            var tsx:Int = (data.mapBounds != null && data.mapBounds.tileSizeX != null) ? Std.int(data.mapBounds.tileSizeX) : 64;
+            var tsy:Int = (data.mapBounds != null && data.mapBounds.tileSizeY != null) ? Std.int(data.mapBounds.tileSizeY) : 64;
+            if (data.mapBounds != null) {
+                state.updateMapBounds(data.mapBounds.x, data.mapBounds.y, data.mapBounds.width, data.mapBounds.height);
+                state.setTileSize(tsx, tsy);
+            }
+
+            // Recreate layers
+            var importedCount = 0;
+            var layersData:Array<Dynamic> = data.layers;
+
+            if (layersData != null) {
+                for (layerData in layersData) {
+                    var layerType:String = layerData.type != null ? layerData.type : "tilemap";
+                    var layerName:String = layerData.name != null ? layerData.name : "Layer_" + layerData.tilesetName;
+
+                    if (layerType == "tilemap") {
+                        var tilesetName:String = layerData.tilesetName;
+                        var editorTexture:EditorTexture = state.tilesetManager.tilesets.get(tilesetName);
+                        if (editorTexture == null) {
+                            trace("Skipping layer with unknown tileset: " + tilesetName);
+                            continue;
+                        }
+
+                        var layerTileSize:Int = layerData.tileSize != null ? Std.int(layerData.tileSize)
+                            : tileSizeMap.exists(tilesetName) ? tileSizeMap.get(tilesetName) : 64;
+                        var tilemapLayer = state.createTilemapLayer(layerName, tilesetName, -1, layerTileSize);
+
+                        if (tilemapLayer != null) {
+                            if (layerData.visible != null) tilemapLayer.visible = layerData.visible;
+
+                            if (layerData.tiles != null) {
+                                var tiles:Array<Dynamic> = layerData.tiles;
+                                for (tileData in tiles) {
+                                    var gridX:Int = tileData.gridX;
+                                    var gridY:Int = tileData.gridY;
+                                    var tileId = tilemapLayer.managedTileBatch.addTile(
+                                        gridX * tsx, gridY * tsy,
+                                        tilemapLayer.tileSize, tilemapLayer.tileSize,
+                                        tileData.region
+                                    );
+                                    if (tileId >= 0) {
+                                        tilemapLayer.tileGrid.set(gridX + "_" + gridY, tileId);
+                                        importedCount++;
+                                    }
+                                }
+                                if (tilemapLayer.managedTileBatch.needsBufferUpdate)
+                                    tilemapLayer.managedTileBatch.updateBuffers(state.app.renderer);
+                            }
+                        }
+
+                    } else if (layerType == "entity") {
+                        var entityLayer = state.createEntityLayer(layerName);
+
+                        if (entityLayer != null) {
+                            if (layerData.visible != null) entityLayer.visible = layerData.visible;
+
+                            if (layerData.batches != null) {
+                                // Current batched format
+                                var batches:Array<Dynamic> = layerData.batches;
+                                for (batchData in batches) {
+                                    var tileset:EditorTexture = state.tilesetManager.tilesets.get(batchData.tilesetName);
+                                    if (tileset == null) continue;
+                                    var programInfo = state.app.renderer.getProgramInfo("texture");
+                                    var batchEntities:Array<Dynamic> = batchData.entities;
+                                    for (entityData in batchEntities) {
+                                        var def = state.entityManager.getEntityDefinition(entityData.name);
+                                        if (def == null) continue;
+                                        var pivotX:Float = entityData.pivotX != null ? entityData.pivotX : 0.0;
+                                        var pivotY:Float = entityData.pivotY != null ? entityData.pivotY : 0.0;
+                                        entityLayer.placeEntity(def, tileset, entityData.x, entityData.y,
+                                            state.app.renderer, programInfo, pivotX, pivotY, entityData.uid);
+                                        importedCount++;
+                                    }
+                                }
+                            } else if (layerData.entities != null) {
+                                // Legacy flat-list format
+                                var legacyEntities:Array<Dynamic> = layerData.entities;
+                                var programInfo = state.app.renderer.getProgramInfo("texture");
+                                for (entityData in legacyEntities) {
+                                    var def = state.entityManager.getEntityDefinition(entityData.name);
+                                    if (def == null) continue;
+                                    var tsName:String = Std.is(entityData.tilesetName, String) ? entityData.tilesetName : null;
+                                    var lookupName = tsName != null ? tsName : def.tilesetName;
+                                    var tileset:EditorTexture = state.tilesetManager.tilesets.get(lookupName);
+                                    if (tileset == null) continue;
+                                    var pivotX:Float = entityData.pivotX != null ? entityData.pivotX : 0.0;
+                                    var pivotY:Float = entityData.pivotY != null ? entityData.pivotY : 0.0;
+                                    entityLayer.placeEntity(def, tileset, entityData.x, entityData.y,
+                                        state.app.renderer, programInfo, pivotX, pivotY, entityData.uid);
+                                    importedCount++;
+                                }
+                            }
+
+                            // Upload all entity batches to GPU
+                            for (eentry in entityLayer.batches) {
+                                if (eentry.batch.needsBufferUpdate)
+                                    eentry.batch.updateBuffers(state.app.renderer);
+                            }
+                        }
+                    }
+                }
+            }
+
+            return importedCount;
+
+        } catch (e:Dynamic) {
+            trace("Error importing JSON: " + e);
+            return -1;
+        }
     }
 }

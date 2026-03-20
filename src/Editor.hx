@@ -569,6 +569,95 @@ class Editor {
         }
     }
     
+    /**
+     * Save entity definitions and tilesets to a project file (.hxproject).
+     * After a successful save the active state's projectFilePath is updated so
+     * subsequent map exports reference this file instead of embedding entity data.
+     * @param filePath     Absolute path for the output .hxproject JSON file.
+     * @param projectName  Human-readable name stored inside the file.
+     * @return Number of entity definitions written, or -1 on error.
+     */
+    @:keep
+    public static function exportProject(filePath:String, projectName:String):Int {
+        if (app == null || !initialized) {
+            log("Editor: Cannot export project - engine not initialized");
+            return -1;
+        }
+        if (editorState == null) {
+            log("Editor: EditorState not loaded");
+            return -1;
+        }
+        try {
+            var count = editorState.exportProject(filePath, projectName);
+            if (count >= 0)
+                log("Editor: Exported project '" + projectName + "' with " + count + " entity definitions to: " + filePath);
+            else
+                log("Editor: Failed to export project");
+            return count;
+        } catch (e:Dynamic) {
+            log("Editor: Error exporting project: " + e);
+            return -1;
+        }
+    }
+
+    /**
+     * Load entity definitions and tilesets from a project file (.hxproject).
+     * After a successful load the active state's projectFilePath is updated so
+     * subsequent map exports reference this file.
+     * @param filePath  Absolute path to the .hxproject JSON file.
+     * @return Number of entity definitions loaded, or -1 on error.
+     */
+    @:keep
+    public static function importProject(filePath:String):Int {
+        if (app == null || !initialized) {
+            log("Editor: Cannot import project - engine not initialized");
+            return -1;
+        }
+        if (editorState == null) {
+            log("Editor: EditorState not loaded");
+            return -1;
+        }
+        try {
+            var count = editorState.importProject(filePath);
+            if (count >= 0)
+                log("Editor: Imported project with " + count + " entity definitions from: " + filePath);
+            else
+                log("Editor: Failed to import project");
+            return count;
+        } catch (e:Dynamic) {
+            log("Editor: Error importing project: " + e);
+            return -1;
+        }
+    }
+
+    /**
+     * Read only the projectName field from a .hxproject file without loading
+     * any data into the editor state.  Useful for displaying recent-files lists.
+     * @param filePath  Absolute path to the .hxproject JSON file.
+     * @return The project name string, or an empty string on error.
+     */
+    @:keep
+    public static function getProjectName(filePath:String):String {
+        try {
+            var name = ProjectSerializer.readProjectName(filePath);
+            return name != null ? name : "";
+        } catch (e:Dynamic) {
+            log("Editor: Error reading project name: " + e);
+            return "";
+        }
+    }
+
+    /**
+     * Return the absolute path of the project file currently attached to the
+     * active editor state, or an empty string if no project is loaded.
+     */
+    @:keep
+    public static function getActiveProjectPath():String {
+        if (editorState == null) return "";
+        var p = editorState.projectFilePath;
+        return p != null ? p : "";
+    }
+
     @:keep public static function createTileset(texturePath:String, tilesetName:String):String { 
         return editorState.createTileset(texturePath, tilesetName);
     }

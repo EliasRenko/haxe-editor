@@ -111,6 +111,12 @@ extern "C" {
     // Tilemap import/export
     __declspec(dllexport) int exportMap(const char* filePath);
     __declspec(dllexport) int importMap(const char* filePath);
+
+    // Project import/export
+    __declspec(dllexport) int exportProject(const char* filePath, const char* projectName);
+    __declspec(dllexport) int importProject(const char* filePath);
+    __declspec(dllexport) const char* getProjectName(const char* filePath);
+    __declspec(dllexport) const char* getActiveProjectPath();
     
     // Tileset management
     __declspec(dllexport) const char* createTileset(const char* texturePath, const char* tilesetName);
