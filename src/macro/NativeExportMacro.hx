@@ -43,7 +43,7 @@ class NativeExportMacro {
                     case "Void":    "void";
                     case "Int":     "int";
                     case "Float":   "float";
-                    case "Bool":    "int";
+                    case "Bool":    "bool";
                     case "String":  "const char*";
                     case "Pointer" | "RawPointer":
                         var inner = firstParamType(p.params);
@@ -177,17 +177,17 @@ class NativeExportMacro {
         sb.add('        return err;\n');
         sb.add('    }\n');
         sb.add('\n');
-        sb.add('    __declspec(dllexport) int init() {\n');
+        sb.add('    __declspec(dllexport) bool init() {\n');
         sb.add('        if (!hxcpp_initialized) {\n');
         sb.add('            const char* err = hx::Init();\n');
-        sb.add('            if (err != NULL) return 0;\n');
+        sb.add('            if (err != NULL) return false;\n');
         sb.add('            hxcpp_initialized = true;\n');
         sb.add('        }\n');
         sb.add('        hx::NativeAttach attach;\n');
         sb.add('        return ::$obj::init();\n');
         sb.add('    }\n');
         sb.add('\n');
-        sb.add('    __declspec(dllexport) int initWithCallback(CustomCallback callback) {\n');
+        sb.add('    __declspec(dllexport) bool initWithCallback(CustomCallback callback) {\n');
         sb.add('        if (callback != nullptr) {\n');
         sb.add('            g_callback = callback;\n');
         sb.add('            SDL_SetLogOutputFunction(CustomLogOutput, (void*)callback);\n');

@@ -6,6 +6,7 @@ import states.EditorState;
 import math.Vec2;
 import layers.TilemapLayer;
 import struct.MapProps;
+import struct.ProjectProps;
 import struct.EntityDataStruct;
 import struct.EntityStruct;
 import struct.TextureDataStruct;
@@ -13,6 +14,17 @@ import struct.TilesetInfoStruct;
 import struct.LayerInfoStruct;
 import cpp.Pointer;
 import cpp.Reference;
+import manager.TilesetManager;
+import manager.EntityManager;
+
+/** Project-level metadata shared across all maps.
+ *  Tileset and entity-definition data live in the shared managers, not here. */
+typedef ProjectData = {
+    var projectFilePath:Null<String>;
+    var projectName:String;
+    var defaultTileSizeX:Int;
+    var defaultTileSizeY:Int;
+};
 
 @:headerCode('#include "editor_native.h"')
 @:build(macro.NativeExportMacro.build())
@@ -21,18 +33,21 @@ class Editor {
 
     private static var app:App = null;
     private static var initialized:Bool = false;
-    // All editor states created via loadState()
-    private static var editorStates:Array<states.EditorState> = [];
+    // Project-level metadata
+    private static var _projectData:ProjectData = null;
+    // Shared managers — owned here, referenced by every EditorState
+    private static var tilesetManager:TilesetManager = null;
+    private static var entityManager:EntityManager = null;
     // Convenience accessor — always mirrors app.currentState
     private static var editorState(get, never):states.EditorState;
     private static inline function get_editorState():states.EditorState {
         return (app != null && Std.isOfType(app.currentState, states.EditorState))
             ? cast app.currentState : null;
     }
-    
+
     public static function main():Void {
     }
-    
+
     // Custom log function that uses SDL logging (forwarded to C# via CustomLogOutput)
     private static function log(msg:String):Void {
         untyped __cpp__("SDL_LogInfo(SDL_LOG_CATEGORY_APPLICATION, \"%s\", {0})", msg);
@@ -46,147 +61,74 @@ class Editor {
     //         untyped __cpp__("OutputDebugStringA({0})", msg + "\n");
     //     };
     // }
-    
-    /**
-     * Initialize the engine
-     * @return 1 on success, 0 on failure
-     */
-    @:keep @:noExport
-    public static function init():Int {
+
+    // ===== ENGINE LIFECYCLE =====
+
+    @:keep
+    public static function init():Bool {
         //redirectTraceToDebugOutput();
         if (initialized) {
             log("Engine already initialized");
-            return 1;
+            return true;
         }
-        
-        try {
-            log("Editor: Initializing engine...");
-            app = new App();
-            if (!app.init()) {
-                log("Editor: App.init() failed");
-                return 0;
-            }
-            
-            // Create and register the first editor state
-            var initialState = new EditorState(app);
-            editorStates.push(initialState);
-            app.addState(initialState);
-            wireEditorStateCallbacks();
-            app.log.info(1, "EditorState loaded");
-            
-            initialized = true;
-            log("Engine initialized successfully");
 
-            return 1;
+        tilesetManager = new TilesetManager();
+        entityManager = new EntityManager();
+
+        try {
+            app = new App();
+            app.init();
+            
+            var initialState = new EditorState(app, tilesetManager, entityManager);
+            app.addState(initialState);
+
+            // TODO: Refine later
+            wireEditorStateCallbacks();
+
+            initialized = true;
+            app.log.info(Log.LogCategory.SYSTEM, "Editor init successfully.");
+
+            return true;
         } catch (e:Dynamic) {
-            //log("Editor: Init error: " + e);
-            // TODO: Better error handling to C# on exceptions
             app.log.error(Log.LogCategory.SYSTEM, "Editor: Init error: " + e);
-            return 0;
+            return false;
         }
     }
-    
-    /**
-     * Run one frame update
-     * @param deltaTime Time since last frame in seconds
-     */
-    @:keep
-    public static function updateFrame(deltaTime:Float):Void {
-        if (app == null || !initialized) {
-            log("Editor: Cannot update - engine not initialized");
-            return;
-        }
-        
-        try {
-            // Process events and update frame
-            app.processEvents();
-            app.updateFrame(deltaTime);
-        } catch (e:Dynamic) {
-            log("Editor: Update error: " + e);
-        }
-    }
-    
-    /**
-     * Render one frame
-     */
-    @:keep
-    public static function render():Void {
-        if (app == null || !initialized) {
-            log("Editor: Cannot render - engine not initialized");
-            return;
-        }
-        
-        try {
-            @:privateAccess app.render();
-        } catch (e:Dynamic) {
-            log("Editor: Render error: " + e);
-            #if cpp
-            var stack = haxe.CallStack.exceptionStack();
-            log("Stack trace:");
-            for (item in stack) {
-                log("  " + haxe.CallStack.toString([item]));
-            }
-            #end
-        }
-    }
-    
-    /**
-     * Swap window buffers (present frame)
-     */
-    @:keep
-    public static function swapBuffers():Void {
-        if (app != null && initialized) {
-            app.swapBuffers();
-        }
-    }
-    
-    /**
-     * Release/cleanup engine resources
-     */
+
     @:keep
     public static function release():Void {
-        log("Editor: Releasing engine resources...");
-        if (app != null) {
-            app.release();
-            log("Editor: Engine resources released");
-            app = null;
-            initialized = false;
-        }
+        app.log.info(Log.LogCategory.SYSTEM, "Releasing editor resources...");
+        app.release();
+        app = null;
+        initialized = false;
+        tilesetManager = null;
+        entityManager = null;
+        _projectData = null;
     }
-    
-    /**
-     * Load a game state by ID
-     * @param stateId State identifier (0 = FontBakerState)
-     * @return 1 on success, 0 on failure
-     */
+
     @:keep
-    public static function loadState(stateId:Int):Int {
-        if (app == null || !initialized) {
-            log("Editor: Engine not initialized");
-            return 0;
-        }
-        
-        try {
-            log("Editor: Loading state " + stateId);
-            switch (stateId) {
-                case 0: 
-                    var newState = new EditorState(app);
-                    editorStates.push(newState);
-                    app.addState(newState);
-                    app.switchToState(newState);
-                    wireEditorStateCallbacks();
-                    log("Editor: EditorState loaded (index " + (editorStates.length - 1) + ")");
-                default: 
-                    log("Editor: Unknown state ID: " + stateId);
-                    return 0;
-            }
-            return 1;
-        } catch (e:Dynamic) {
-            log("Editor: LoadState error: " + e);
-            return 0;
-        }
+    public static function isRunning():Bool {
+        return app.active ? true : false;
     }
-    
+
+    @:keep
+    public static function updateFrame(deltaTime:Float):Void {
+        app.processEvents();
+        app.updateFrame(deltaTime);
+    }
+
+    @:keep
+    public static function render():Void {
+        app.render();
+    }
+
+    @:keep
+    public static function swapBuffers():Void {
+        app.swapBuffers();
+    }
+
+    // ===== STATE MANAGEMENT =====
+
     /**
      * Create a blank new EditorState, register it with the app, make it active,
      * and return its index. Returns -1 on failure.
@@ -195,94 +137,90 @@ class Editor {
     public static function newEditorState():Int {
         if (app == null || !initialized) return -1;
         try {
-            var newState = new EditorState(app);
-            editorStates.push(newState);
-            app.addState(newState);
+            var newState = new EditorState(app, tilesetManager, entityManager);
+            var index = app.addState(newState);
             app.switchToState(newState);
+
+            applyProjectToState(newState);
+
             wireEditorStateCallbacks();
-            var index = editorStates.length - 1;
-            log("Editor: Created new EditorState at index " + index);
+            app.log.info(Log.LogCategory.SYSTEM, "Editor: Created new EditorState at index " + index);
             return index;
         } catch (e:Dynamic) {
-            log("Editor: newEditorState error: " + e);
+            app.log.error(Log.LogCategory.SYSTEM, "Editor: newEditorState error: " + e);
             return -1;
         }
     }
 
     /**
-     * Switch the active editor state by index (its position in the editorStates array).
-     * @return 1 on success, 0 if index is out of range
+     * Switch the active editor state by index.
+     * @return true on success, false if index is out of range
      */
     @:keep
-    public static function setActiveState(index:Int):Int {
-        if (app == null || !initialized) return 0;
-        if (index < 0 || index >= editorStates.length) {
-            log("Editor: setActiveState — index " + index + " out of range (" + editorStates.length + " states)");
-            return 0;
+    public static function setActiveState(index:Int):Bool {
+        if (app == null || !initialized) return false;
+        if (!app.states.isValid(index)) {
+            app.log.warn(Log.LogCategory.SYSTEM, "Editor: setActiveState — index " + index + " is not a valid state");
+            return false;
         }
-        var success = app.switchToState(editorStates[index]);
+        var success = app.switchToState(app.states.get(index));
         if (success) wireEditorStateCallbacks();
-        return success ? 1 : 0;
+        return success;
     }
 
     /**
      * Fully release and destroy the editor state at the given index.
-     * Removes it from both the app and the editorStates array.
      * If it was the active state the app will switch to the next available one.
-     * @return 1 on success, 0 if index is out of range
+     * @return true on success, false if index is out of range
      */
     @:keep
-    public static function releaseState(index:Int):Int {
-        if (app == null || !initialized) return 0;
-        if (index < 0 || index >= editorStates.length) {
-            log("Editor: releaseState — index " + index + " out of range (" + editorStates.length + " states)");
-            return 0;
+    public static function releaseState(index:Int):Bool {
+        if (app == null || !initialized) return false;
+        if (!app.states.isValid(index)) {
+            app.log.warn(Log.LogCategory.SYSTEM, "Editor: releaseState — index " + index + " is not a valid state");
+            return false;
         }
-        var state = editorStates[index];
-        editorStates.splice(index, 1);
-        app.removeState(state);
+        app.removeState(index);
         // Re-wire callbacks to whichever state is now active (if any)
         if (editorState != null) wireEditorStateCallbacks();
-        log("Editor: Released state " + index + " (" + editorStates.length + " remaining)");
-        return 1;
+        app.log.info(Log.LogCategory.SYSTEM, "Editor: Released state " + index + " (" + app.states.count + " remaining)");
+        return true;
     }
 
-    /**
-     * Check if engine is running
-     * @return 1 if running, 0 if stopped
-     */
-    @:keep
-    public static function isRunning():Int {
-        if (app != null && initialized) {
-            return app.active ? 1 : 0;
+    /** Release and destroy every registered EditorState.
+     *  After this call app.states.count == 0 and app.currentState == null. */
+    private static function releaseAllStates():Void {
+        if (app == null || app.states.count == 0) return;
+        // Collect all valid slot IDs first — must not modify the collection while iterating.
+        // Slot IDs are small non-negative integers; bound the search conservatively.
+        var ids:Array<Int> = [];
+        var maxId = app.states.count * 2 + 16;
+        for (i in 0...maxId) {
+            if (app.states.isValid(i)) ids.push(i);
         }
-        return 0;
+        for (id in ids) app.removeState(id);
+        app.log.info(Log.LogCategory.SYSTEM, "Editor: Released " + ids.length + " state(s) for project switch");
     }
-    
-    /**
-     * Get window width
-     */
-    @:keep
-    public static function getWindowWidth():Int {
-        return app.WINDOW_WIDTH;
+
+    /** Apply project-level defaults (tile size) to a state.
+     *  Does NOT touch state.projectFilePath / projectName — those track map-to-project
+     *  association and are only set when a map is explicitly loaded from / saved to a
+     *  project-backed file. */
+    @:noExport @:keep
+    private static function applyProjectToState(state:EditorState):Void {
+        if (_projectData == null || state == null) return;
+        @:privateAccess state.setTileSize(_projectData.defaultTileSizeX, _projectData.defaultTileSizeY);
     }
-    
-    /**
-     * Get window height
-     */
-    @:keep
-    public static function getWindowHeight():Int {
-        return app.WINDOW_HEIGHT;
+
+    @:noExport @:keep
+    public static function wireEditorStateCallbacks():Void {
+        editorState.onEntitySelectionChanged = function() {
+            untyped __cpp__("if (g_entitySelectionChangedCallback) g_entitySelectionChangedCallback()");
+        };
     }
-    
-    /**
-     * Set window size
-     */
-    @:keep
-    public static function setWindowSize(width:Int, height:Int):Void {
-        app.window.size = new Vec2(width, height);
-    }
-    
+
+    // ===== WINDOW =====
+
     /**
      * Get native window handle (HWND on Windows)
      * Returns void* which can be cast to IntPtr in C#
@@ -294,17 +232,43 @@ class Editor {
         }
         return null;
     }
-    
+
+    /**
+     * Get window width
+     */
+    @:keep
+    public static function getWindowWidth():Int {
+        return app.WINDOW_WIDTH;
+    }
+
+    /**
+     * Get window height
+     */
+    @:keep
+    public static function getWindowHeight():Int {
+        return app.WINDOW_HEIGHT;
+    }
+
     @:keep
     public static function setWindowPosition(x:Int, y:Int):Void {
         app.window.setPosition(x, y);
     }
 
+    /**
+     * Set window size
+     */
+    @:keep
+    public static function setWindowSize(width:Int, height:Int):Void {
+        app.window.size = new Vec2(width, height);
+    }
+
+    // ===== INPUT =====
+
     @:keep
     public static function onMouseMotion(x:Int, y:Int):Void {
         @:privateAccess app.onMouseMotion(x, y, 0, 0, 1);
     }
-    
+
     @:keep
     public static function onMouseButtonDown(x:Int, y:Int, button:Int):Void {
         @:privateAccess app.onMouseButtonDown(x, y, button, 1);
@@ -335,7 +299,375 @@ class Editor {
     public static function onMouseWheel(x:Float, y:Float, delta:Float):Void {
         if (editorState != null) editorState.onMouseWheel(x, y, delta);
     }
-    
+
+    // ===== PROJECT SERIALIZATION =====
+
+    /**
+     * Save entity definitions and tilesets to a project file (.hxproject).
+     * After a successful save the active state's projectFilePath is updated so
+     * subsequent map exports reference this file instead of embedding entity data.
+     * @param filePath     Absolute path for the output .hxproject JSON file.
+     * @param projectName  Human-readable name stored inside the file.
+     * @return Number of entity definitions written, or -1 on error.
+     */
+    @:keep
+    public static function exportProject(filePath:String, projectName:String):Bool {
+        if (editorState == null) {
+            app.log.error(LogCategory.APP, "Editor: EditorState not loaded");
+            return false;
+        }
+        try {
+            // Tilesets
+            var tilesetsArray:Array<Dynamic> = [];
+            for (name in tilesetManager.tilesets.keys()) {
+                var ts = tilesetManager.tilesets.get(name);
+                tilesetsArray.push({ name: ts.name, texturePath: ts.texturePath });
+            }
+
+            // Entity definitions
+            var entitiesArray:Array<Dynamic> = [];
+            for (name in entityManager.entityDefinitions.keys()) {
+                var def = entityManager.getEntityDefinition(name);
+                entitiesArray.push({
+                    name:         def.name,
+                    width:        def.width,
+                    height:       def.height,
+                    tilesetName:  def.tilesetName,
+                    regionX:      def.regionX,
+                    regionY:      def.regionY,
+                    regionWidth:  def.regionWidth,
+                    regionHeight: def.regionHeight,
+                    pivotX:       def.pivotX,
+                    pivotY:       def.pivotY
+                });
+            }
+
+            var data = {
+                version:          "1.0",
+                projectName:      projectName != "" ? projectName : "Untitled",
+                defaultTileSizeX: editorState.tileSizeX,
+                defaultTileSizeY: editorState.tileSizeY,
+                tilesets:         tilesetsArray,
+                entityDefinitions: entitiesArray
+            };
+
+            sys.io.File.saveContent(filePath, haxe.Json.stringify(data, null, "  "));
+
+            // Update editor-level project metadata only.
+            // state.projectFilePath is map-level — not touched here.
+            if (_projectData == null) {
+                _projectData = {
+                    projectFilePath:  filePath,
+                    projectName:      projectName,
+                    defaultTileSizeX: editorState.tileSizeX,
+                    defaultTileSizeY: editorState.tileSizeY
+                };
+            } else {
+                _projectData.projectFilePath = filePath;
+                _projectData.projectName     = projectName;
+            }
+
+            app.log.info(LogCategory.APP, "Editor: Exported project '" + projectName + "' with " + entitiesArray.length + " entity definitions to: " + filePath);
+            return true;
+        } catch (e:Dynamic) {
+            app.log.error(LogCategory.APP, "Editor: Error exporting project: " + e);
+            return false;
+        }
+    }
+
+    /**
+     * Load entity definitions and tilesets from a project file (.hxproject).
+     * Only one project may be active at a time: all existing EditorStates are
+     * shut down before the new project is applied.  A single fresh blank state
+     * is created so the renderer stays operational; maps are opened separately
+     * via importMap / newEditorState, both of which inherit the project context
+     * through applyProjectToState.
+     * @param filePath  Absolute path to the .hxproject JSON file.
+     * @return true on success, false on IO / parse error.
+     */
+    @:keep
+    public static function importProject(filePath:String):Bool {
+        if (app == null || !initialized) {
+            log("Editor: App not initialized");
+            return false;
+        }
+        try {
+            // Parse first — leave existing state untouched if the file is unreadable.
+            var jsonString = sys.io.File.getContent(filePath);
+            var data:Dynamic = haxe.Json.parse(jsonString);
+
+            // Shut down every state that belongs to the previous project (if any).
+            releaseAllStates();
+
+            // Fresh managers so no old project data leaks into the new one.
+            tilesetManager = new TilesetManager();
+            entityManager  = new EntityManager();
+
+            // One blank state wired to the new managers — keeps the renderer alive.
+            var blankState = new EditorState(app, tilesetManager, entityManager);
+            app.addState(blankState);
+            wireEditorStateCallbacks();
+
+            // Global tile size
+            var tileSizeX = 16;
+            var tileSizeY = 16;
+            if (data.defaultTileSizeX != null && data.defaultTileSizeY != null) {
+                tileSizeX = Std.int(data.defaultTileSizeX);
+                tileSizeY = Std.int(data.defaultTileSizeY);
+            }
+
+            // Tilesets — one bad path must not abort the rest
+            if (data.tilesets != null) {
+                var tilesetsArray:Array<Dynamic> = data.tilesets;
+                for (tilesetData in tilesetsArray) {
+                    var name:String = tilesetData.name;
+                    var path:String = tilesetData.texturePath;
+                    if (!tilesetManager.exists(name)) {
+                        var err = editorState.createTileset(path, name);
+                        if (err != null)
+                            app.log.error(LogCategory.APP, "Editor: Warning — could not load tileset '" + name + "': " + err);
+                    }
+                }
+            }
+
+            // Entity definitions — written directly to shared EntityManager
+            var entitiesLoaded = 0;
+            if (data.entityDefinitions != null) {
+                var entitiesArray:Array<Dynamic> = data.entityDefinitions;
+                for (entityData in entitiesArray) {
+                    var pivotX:Float = entityData.pivotX != null ? entityData.pivotX : 0.0;
+                    var pivotY:Float = entityData.pivotY != null ? entityData.pivotY : 0.0;
+                    entityManager.setEntityFull(
+                        entityData.name,
+                        entityData.width,       entityData.height,
+                        entityData.tilesetName,
+                        entityData.regionX,     entityData.regionY,
+                        entityData.regionWidth, entityData.regionHeight,
+                        pivotX, pivotY
+                    );
+                    entitiesLoaded++;
+                }
+            }
+
+            // Persist project metadata and apply to the single blank state.
+            _projectData = {
+                projectFilePath:  filePath,
+                projectName:      data.projectName != null ? data.projectName : "",
+                defaultTileSizeX: tileSizeX,
+                defaultTileSizeY: tileSizeY
+            };
+            applyProjectToState(blankState);
+
+            app.log.info(LogCategory.APP, "Editor: Imported project '" + _projectData.projectName + "' with " + entitiesLoaded + " entity definitions from: " + filePath);
+            return true;
+        } catch (e:Dynamic) {
+            app.log.error(LogCategory.APP, "Editor: Error importing project: " + e);
+            return false;
+        }
+    }
+
+    /**
+     * Returns true if a project has been loaded into the editor (via importProject).
+     * This is an editor-level flag and is independent of whether any map state has
+     * a projectFilePath set (which only indicates the map's own association).
+     */
+    @:keep
+    public static function isProjectLoaded():Bool {
+        return _projectData != null;
+    }
+
+    /**
+     * Fill a ProjectProps struct with the current editor-level project metadata.
+     * @return 1 if a project is loaded, 0 if not.
+     */
+    @:keep
+    public static function getProjectProps(outProps:Pointer<ProjectProps>):Bool {
+        if (_projectData == null) return false;
+        var ref:Reference<ProjectProps> = outProps.ref;
+        var fp:String = _projectData.projectFilePath != null ? _projectData.projectFilePath : "";
+        var pn:String = _projectData.projectName;
+        ref.filePath         = fp;
+        ref.projectName      = pn;
+        ref.defaultTileSizeX = _projectData.defaultTileSizeX;
+        ref.defaultTileSizeY = _projectData.defaultTileSizeY;
+        return true;
+    }
+
+    /**
+     * Update the editor-level project metadata from a ProjectProps struct.
+     * Applies the new values to _projectData and re-applies project defaults
+     * (e.g. tile size) to every currently active EditorState.
+     * @return false if no project is loaded.
+     */
+    @:keep
+    public static function editProject(inProps:Pointer<ProjectProps>):Bool {
+        if (_projectData == null) return false;
+        var ref:Reference<ProjectProps> = inProps.ref;
+        var fp:String = ref.filePath;
+        var pn:String = ref.projectName;
+        _projectData.projectFilePath  = fp != null && fp != "" ? fp : _projectData.projectFilePath;
+        _projectData.projectName      = pn;
+        _projectData.defaultTileSizeX = ref.defaultTileSizeX;
+        _projectData.defaultTileSizeY = ref.defaultTileSizeY;
+        // Re-apply project defaults to all active states.
+        for (state in app.states) {
+            applyProjectToState(cast state);
+        }
+        return true;
+    }
+
+    /**
+     * Export the current tilemap to a JSON file
+     * @param filePath Absolute path where to save the JSON file
+     * @return Number of tiles exported, or -1 on error
+     */
+    @:keep
+    public static function exportMap(filePath:String):Int {
+        if (app == null || !initialized) {
+            log("Editor: Cannot export tilemap - engine not initialized");
+            return -1;
+        }
+
+        if (editorState == null) {
+            log("Editor: EditorState not loaded");
+            return -1;
+        }
+
+        try {
+            var tileCount = editorState.exportToJSON(filePath);
+            if (tileCount >= 0) {
+                log("Editor: Exported " + tileCount + " tiles to: " + filePath);
+            } else {
+                log("Editor: Failed to export tilemap");
+            }
+            return tileCount;
+        } catch (e:Dynamic) {
+            log("Editor: Error exporting tilemap: " + e);
+            return -1;
+        }
+    }
+
+    /**
+     * Import tilemap from a JSON file into a brand-new EditorState.
+     * The new state is registered with the app and made active.
+     * @param filePath Absolute path to the JSON file
+     * @return The index of the newly created state, or -1 on error
+     */
+    @:keep
+    public static function importMap(filePath:String):Int {
+        if (app == null || !initialized) {
+            log("Editor: Cannot import tilemap - engine not initialized");
+            return -1;
+        }
+
+        try {
+            // Create a fresh state for this map
+            var newState = new EditorState(app, tilesetManager, entityManager);
+            var stateIndex = app.addState(newState);
+            app.switchToState(newState);
+            applyProjectToState(newState);
+            wireEditorStateCallbacks();
+
+            var tileCount = editorState.importFromJSON(filePath);
+            if (tileCount >= 0) {
+                log("Editor: Imported " + tileCount + " tiles from: " + filePath + " into state " + stateIndex);
+            } else {
+                log("Editor: Failed to import tilemap");
+                return -1;
+            }
+            return stateIndex;
+        } catch (e:Dynamic) {
+            log("Editor: Error importing tilemap: " + e);
+            return -1;
+        }
+    }
+
+    // ===== TILESET MANAGEMENT =====
+
+    @:keep public static function createTileset(texturePath:String, tilesetName:String):String {
+        // Delegate: state loads texture + uploads to GPU, writing into shared tilesetManager
+        return editorState.createTileset(texturePath, tilesetName);
+    }
+
+    @:keep public static function deleteTileset(name:String):String {
+        if (!tilesetManager.exists(name))
+            return "Cannot delete tileset '" + name + "': does not exist";
+        // Remove from shared manager, then mark entity batches as missing in all states.
+        // Entity definitions are intentionally kept so instances can be seen in the editor
+        // as red silhouettes, and the definitions remain available for re-linking later.
+        tilesetManager.deleteTileset(name);
+        for (s in app.states) (cast s:EditorState).removeTilesetReferences(name);
+        return null;
+    }
+
+    /**
+     * Get the count of loaded tilesets
+     * @return Number of tilesets loaded
+     */
+    @:keep
+    public static function getTilesetCount():Int {
+        return tilesetManager != null ? tilesetManager.getTilesetCount() : 0;
+    }
+
+    /**
+     * Get tileset information by name
+     * @param tilesetName Name of the tileset (e.g., "devTiles")
+     * @param outInfo Pointer to TilesetInfoStruct to fill
+     * @return 1 if successful, 0 if tileset not found
+     */
+    @:keep
+    public static function getTileset(tilesetName:String, outInfo:Pointer<TilesetInfoStruct>):Int {
+        if (tilesetManager == null) return 0;
+        var et = tilesetManager.getTilesetInfo(tilesetName);
+        if (et == null) { log("Editor: Tileset not found: " + tilesetName); return 0; }
+        var ref:Reference<TilesetInfoStruct> = outInfo.ref;
+        ref.name = et.name;
+        ref.texturePath = et.texturePath;
+        return 1;
+    }
+
+    @:keep
+    public static function getTilesetAt(index:Int, outInfo:Pointer<TilesetInfoStruct>):Int {
+        var et = tilesetManager != null ? tilesetManager.getTilesetInfoAt(index) : null;
+        if (et == null) { log("Editor: Tileset not found at index: " + index); return 0; }
+        var ref:Reference<TilesetInfoStruct> = outInfo.ref;
+        ref.name = et.name;
+        ref.texturePath = et.texturePath;
+        return 1;
+    }
+
+    /**
+     * Set the current active tileset for drawing
+     * @param tilesetName Name of the tileset to make active
+     * @return 1 if tileset was found and set, 0 otherwise
+     */
+    @:keep
+    public static function setActiveTileset(tilesetName:String):Int {
+        if (app == null || !initialized) {
+            log("Editor: Cannot set tileset - engine not initialized");
+            return 0;
+        }
+
+        if (editorState == null) {
+            log("Editor: EditorState not loaded");
+            return 0;
+        }
+
+        try {
+            var result = editorState.tilesetManager.setActiveTileset(tilesetName);
+            if (result) {
+                log("Editor: Active tileset set to: " + tilesetName);
+                return 1;
+            } else {
+                log("Editor: Tileset not found: " + tilesetName);
+                return 0;
+            }
+        } catch (e:Dynamic) {
+            log("Editor: Error setting tileset: " + e);
+            return 0;
+        }
+    }
+
     /**
      * Get texture data by resource path
      * @param path Resource path (e.g., "textures/myTexture.tga")
@@ -348,7 +680,7 @@ class Editor {
             log("Editor: Texture not found: " + path);
             return;
         }
-        
+
         var ref:Reference<TextureDataStruct> = outData.ref;
         ref.width = textureData.width;
         ref.height = textureData.height;
@@ -376,68 +708,126 @@ class Editor {
         ref.dataLength = textureData.bytes.length;
         ref.transparent = textureData.transparent ? 1 : 0;
     }
-    
-    /**
-     * Get tileset information by name
-     * @param tilesetName Name of the tileset (e.g., "devTiles")
-     * @param outInfo Pointer to TilesetInfoStruct to fill
-     * @return 1 if successful, 0 if tileset not found
-     */
+
+    // ===== ENTITY DEFINITIONS =====
+
     @:keep
-    public static function getTileset(tilesetName:String, outInfo:Pointer<TilesetInfoStruct>):Int {
-
-        var editorTexture:EditorTexture = editorState.tilesetManager.getTilesetInfo(tilesetName);
-            
-        if (editorTexture == null) {
-            log("Editor: Tileset not found: " + tilesetName);
-            return 0;
-        }
-        
-        // copy values directly into the C struct via the pointer reference
-
-        var ref:Reference<TilesetInfoStruct> = outInfo.ref;
-        ref.name = editorTexture.name;
-        ref.texturePath = editorTexture.texturePath;
-
-        return 1;
+    public static function createEntityDef(entityName:String, data:Pointer<EntityDataStruct>):String {
+        // createEntityFull validates tileset exists and that the name is unique
+        var ref:Reference<EntityDataStruct> = data.ref;
+        var tilesetName:String = ref.tilesetName;
+        return editorState.createEntityFull(
+            entityName,
+            ref.width, ref.height,
+            tilesetName,
+            ref.regionX, ref.regionY, ref.regionWidth, ref.regionHeight,
+            ref.pivotX, ref.pivotY
+        );
     }
 
     @:keep
-    public static function getTilesetAt(index:Int, outInfo:Pointer<TilesetInfoStruct>):Int {
-        if (app == null || !initialized) {
-            log("Editor: Cannot get tileset - engine not initialized");
-            return 0;
+    public static function editEntityDef(entityName:String, data:Pointer<EntityDataStruct>):String {
+        if (!entityManager.exists(entityName))
+            return "Cannot edit entity '" + entityName + "': definition does not exist";
+        var ref:Reference<EntityDataStruct> = data.ref;
+        var tilesetName:String = ref.tilesetName;
+        // tilesetName null/empty means "no tileset" — allowed.
+        // Non-null/empty names must exist in the manager.
+        if (tilesetName != null && tilesetName != "" && !tilesetManager.exists(tilesetName))
+            return "Cannot edit entity '" + entityName + "': tileset '" + tilesetName + "' does not exist";
+        // Update the shared manager record.
+        // When there's no tileset, use the entity's own dimensions as the render region
+        // so the red silhouette is sized correctly.
+        var rX = ref.regionX; var rY = ref.regionY; var rW = ref.regionWidth; var rH = ref.regionHeight;
+        if (tilesetName == null || tilesetName == "") { rX = 0; rY = 0; rW = ref.width; rH = ref.height; }
+        entityManager.setEntityFull(entityName, ref.width, ref.height, tilesetName,
+            rX, rY, rW, rH,
+            ref.pivotX, ref.pivotY);
+        // Refresh placed entity instances in every state
+        var def = entityManager.getEntityDefinition(entityName);
+        // ts will be null when tilesetName is null/empty — applyDefinitionUpdate handles this
+        // by migrating instances to the orphan batch.
+        var ts = (tilesetName != null && tilesetName != "") ? tilesetManager.getTilesetInfo(tilesetName) : null;
+        for (s in app.states) {
+            var state:EditorState = cast s;
+            var programInfo = app.renderer.getProgramInfo("texture");
+            var allEntityLayers:Array<layers.EntityLayer> = [];
+            @:privateAccess state.collectEntityLayers(state.entities, allEntityLayers);
+            for (el in allEntityLayers) el.applyDefinitionUpdate(def, ts, app.renderer, programInfo);
         }
-        
-        if (editorState == null) {
-            log("Editor: EditorState not loaded");
-            return 0;
-        }
-        
-        try {
-            var editorTexture:EditorTexture = editorState.tilesetManager.getTilesetInfoAt(index);
-            
-            if (editorTexture == null) {
-                log("Editor: Tileset not found at index: " + index);
-                return 0;
-            }
-            
-            // copy values directly into the C struct via the pointer reference
-            var name = editorTexture.name;
-            var texturePath = editorTexture.texturePath;
-
-            var ref:Reference<TilesetInfoStruct> = outInfo.ref;
-            ref.name = name;
-            ref.texturePath = texturePath;
-
-            log("Editor: Retrieved tileset at index " + index + ": " + name);
-            return 1;
-            
-        } catch (e:Dynamic) {
-            log("Editor: Error getting tileset at index " + index + ": " + e);
-            return 0;
-        }
+        return null;
     }
+
+    @:keep
+    public static function getEntityDef(entityName:String, outData:Pointer<EntityDataStruct>):String {
+        var entityDef = entityManager != null ? entityManager.getEntityDefinition(entityName) : null;
+        if (entityDef == null) {
+            var error = "Editor: No entity definition found: " + entityName;
+            app.log.warn(LogCategory.APP, error);
+            return error;
+        }
+        try { populateEntityDataStruct(entityDef, outData); }
+        catch (e:Dynamic) {
+            var error = "Editor: Failed to retrieve data for entity '" + entityName + "': " + e;
+            app.log.error(LogCategory.APP, error);
+            return error;
+        }
+        return null;
+    }
+
+    @:keep
+    public static function getEntityDefAt(index:Int, outData:Pointer<EntityDataStruct>):String {
+        var entityDef = entityManager != null ? entityManager.getEntityDefinitionAt(index) : null;
+        if (entityDef == null) {
+            var error = "Editor: No entity definition found at index: " + index;
+            app.log.warn(LogCategory.APP, error);
+            return error;
+        }
+        try { populateEntityDataStruct(entityDef, outData); }
+        catch (e:Dynamic) {
+            var error = "Editor: Failed to retrieve data for entity at index '" + index + "': " + e;
+            app.log.error(LogCategory.APP, error);
+            return error;
+        }
+        return null;
+    }
+
+    @:keep
+    public static function getEntityDefCount():Int {
+        return entityManager != null ? entityManager.getEntityDefinitionCount() : 0;
+    }
+
+    @:keep
+    public static function setActiveEntityDef(entityName:String):Int {
+        return editorState.setActiveEntity(entityName) ? 1 : 0;
+    }
+
+    @:keep
+    public static function deleteEntityDef(entityName:String):String {
+        if (entityManager == null || !entityManager.exists(entityName))
+            return "Cannot delete entity '" + entityName + "': definition does not exist";
+        // Remove placed instances from all states, then delete from shared manager
+        for (s in app.states) (cast s:EditorState).removeEntityInstances(entityName);
+        entityManager.deleteEntityDefinition(entityName);
+        return null;
+    }
+
+    @:keep @:noExport
+    public static function populateEntityDataStruct(entityDef:EntityDefinition, outData:Pointer<EntityDataStruct>):Void {
+        var ref:Reference<EntityDataStruct> = outData.ref;
+		ref.name = entityDef.name;
+		ref.width = entityDef.width;
+		ref.height = entityDef.height;
+		ref.tilesetName = entityDef.tilesetName;
+		ref.regionX = entityDef.regionX;
+		ref.regionY = entityDef.regionY;
+		ref.regionWidth = entityDef.regionWidth;
+		ref.regionHeight = entityDef.regionHeight;
+		ref.pivotX = entityDef.pivotX;
+		ref.pivotY = entityDef.pivotY;
+    }
+
+    // ===== ENTITY SELECTION & TOOLS =====
 
     @:keep
     public static function selectEntityByUID(uid:String):Bool {
@@ -452,33 +842,6 @@ class Editor {
     @:keep
     public static function deselectEntity():Void {
         editorState.deselectEntity();
-    }
-
-    @:keep
-    public static function getActiveTile():Int {
-        return editorState.getActiveTile();
-    }
-    
-    @:keep
-    public static function setActiveTile(tileRegionId:Int):Void {
-        editorState.setActiveTile(tileRegionId);
-    }
-
-    @:keep
-    public static function setToolType(toolType:Int):Void {
-        editorState.toolType = toolType;
-    }
-
-    @:keep
-    public static function getToolType():Int {
-        return editorState.toolType;
-    }
-
-    @:noExport @:keep
-    public static function wireEditorStateCallbacks():Void {
-        editorState.onEntitySelectionChanged = function() {
-            untyped __cpp__("if (g_entitySelectionChangedCallback) g_entitySelectionChangedCallback()");
-        };
     }
 
     @:keep
@@ -501,342 +864,44 @@ class Editor {
         ref.height = Std.int(ent.height);
         return 1;
     }
-    
-    /**
-     * Export the current tilemap to a JSON file
-     * @param filePath Absolute path where to save the JSON file
-     * @return Number of tiles exported, or -1 on error
-     */
-    @:keep
-    public static function exportMap(filePath:String):Int {
-        if (app == null || !initialized) {
-            log("Editor: Cannot export tilemap - engine not initialized");
-            return -1;
-        }
-        
-        if (editorState == null) {
-            log("Editor: EditorState not loaded");
-            return -1;
-        }
-        
-        try {
-            var tileCount = editorState.exportToJSON(filePath);
-            if (tileCount >= 0) {
-                log("Editor: Exported " + tileCount + " tiles to: " + filePath);
-            } else {
-                log("Editor: Failed to export tilemap");
-            }
-            return tileCount;
-        } catch (e:Dynamic) {
-            log("Editor: Error exporting tilemap: " + e);
-            return -1;
-        }
-    }
-    
-    /**
-     * Import tilemap from a JSON file into a brand-new EditorState.
-     * The new state is pushed onto editorStates and made active.
-     * @param filePath Absolute path to the JSON file
-     * @return The index of the newly created state, or -1 on error
-     */
-    @:keep
-    public static function importMap(filePath:String):Int {
-        if (app == null || !initialized) {
-            log("Editor: Cannot import tilemap - engine not initialized");
-            return -1;
-        }
-        
-        try {
-            // Create a fresh state for this map
-            var newState = new EditorState(app);
-            editorStates.push(newState);
-            app.addState(newState);
-            app.switchToState(newState);
-            wireEditorStateCallbacks();
 
-            var stateIndex = editorStates.length - 1;
-            var tileCount = editorState.importFromJSON(filePath);
-            if (tileCount >= 0) {
-                log("Editor: Imported " + tileCount + " tiles from: " + filePath + " into state " + stateIndex);
-            } else {
-                log("Editor: Failed to import tilemap");
-                return -1;
-            }
-            return stateIndex;
-        } catch (e:Dynamic) {
-            log("Editor: Error importing tilemap: " + e);
-            return -1;
-        }
-    }
-    
-    /**
-     * Save entity definitions and tilesets to a project file (.hxproject).
-     * After a successful save the active state's projectFilePath is updated so
-     * subsequent map exports reference this file instead of embedding entity data.
-     * @param filePath     Absolute path for the output .hxproject JSON file.
-     * @param projectName  Human-readable name stored inside the file.
-     * @return Number of entity definitions written, or -1 on error.
-     */
     @:keep
-    public static function exportProject(filePath:String, projectName:String):Int {
-        if (app == null || !initialized) {
-            log("Editor: Cannot export project - engine not initialized");
-            return -1;
-        }
-        if (editorState == null) {
-            log("Editor: EditorState not loaded");
-            return -1;
-        }
-        try {
-            var count = editorState.exportProject(filePath, projectName);
-            if (count >= 0)
-                log("Editor: Exported project '" + projectName + "' with " + count + " entity definitions to: " + filePath);
-            else
-                log("Editor: Failed to export project");
-            return count;
-        } catch (e:Dynamic) {
-            log("Editor: Error exporting project: " + e);
-            return -1;
-        }
-    }
-
-    /**
-     * Load entity definitions and tilesets from a project file (.hxproject).
-     * After a successful load the active state's projectFilePath is updated so
-     * subsequent map exports reference this file.
-     * @param filePath  Absolute path to the .hxproject JSON file.
-     * @return Number of entity definitions loaded, or -1 on error.
-     */
-    @:keep
-    public static function importProject(filePath:String):Int {
-        if (app == null || !initialized) {
-            log("Editor: Cannot import project - engine not initialized");
-            return -1;
-        }
-        if (editorState == null) {
-            log("Editor: EditorState not loaded");
-            return -1;
-        }
-        try {
-            var count = editorState.importProject(filePath);
-            if (count >= 0)
-                log("Editor: Imported project with " + count + " entity definitions from: " + filePath);
-            else
-                log("Editor: Failed to import project");
-            return count;
-        } catch (e:Dynamic) {
-            log("Editor: Error importing project: " + e);
-            return -1;
-        }
-    }
-
-    /**
-     * Read only the projectName field from a .hxproject file without loading
-     * any data into the editor state.  Useful for displaying recent-files lists.
-     * @param filePath  Absolute path to the .hxproject JSON file.
-     * @return The project name string, or an empty string on error.
-     */
-    @:keep
-    public static function getProjectName(filePath:String):String {
-        try {
-            var name = ProjectSerializer.readProjectName(filePath);
-            return name != null ? name : "";
-        } catch (e:Dynamic) {
-            log("Editor: Error reading project name: " + e);
-            return "";
-        }
-    }
-
-    /**
-     * Return the absolute path of the project file currently attached to the
-     * active editor state, or an empty string if no project is loaded.
-     */
-    @:keep
-    public static function getActiveProjectPath():String {
-        if (editorState == null) return "";
-        var p = editorState.projectFilePath;
-        return p != null ? p : "";
-    }
-
-    @:keep public static function createTileset(texturePath:String, tilesetName:String):String { 
-        return editorState.createTileset(texturePath, tilesetName);
-    }
-
-    @:keep public static function deleteTileset(name:String):String {
-        return editorState.deleteTileset(name);
-    }
-    
-    /**
-     * Get the count of loaded tilesets
-     * @return Number of tilesets loaded
-     */
-    @:keep
-    public static function getTilesetCount():Int {
-        if (app == null || !initialized) {
-            log("Editor: Cannot get tileset count - engine not initialized");
-            return 0;
-        }
-        
-        if (editorState == null) {
-            log("Editor: EditorState not loaded");
-            return 0;
-        }
-        
-        try {
-            return editorState.tilesetManager.getTilesetCount();
-        } catch (e:Dynamic) {
-            log("Editor: Error getting tileset count: " + e);
-            return 0;
-        }
-    }
-    
-    /**
-     * Set the current active tileset for drawing
-     * @param tilesetName Name of the tileset to make active
-     * @return 1 if tileset was found and set, 0 otherwise
-     */
-    @:keep
-    public static function setActiveTileset(tilesetName:String):Int {
-        if (app == null || !initialized) {
-            log("Editor: Cannot set tileset - engine not initialized");
-            return 0;
-        }
-        
-        if (editorState == null) {
-            log("Editor: EditorState not loaded");
-            return 0;
-        }
-        
-        try {
-            var result = editorState.tilesetManager.setActiveTileset(tilesetName);
-            if (result) {
-                log("Editor: Active tileset set to: " + tilesetName);
-                return 1;
-            } else {
-                log("Editor: Tileset not found: " + tilesetName);
-                return 0;
-            }
-        } catch (e:Dynamic) {
-            log("Editor: Error setting tileset: " + e);
-            return 0;
-        }
-    }
-    
-    // ===== ENTITY DEFINITION MANAGEMENT =====
-    
-    @:keep
-    public static function createEntityDef(entityName:String, data:Pointer<EntityDataStruct>):String {
-        var ref:Reference<EntityDataStruct> = data.ref;
-        var tilesetName:String = ref.tilesetName;
-        return editorState.createEntityFull(
-            entityName,
-            ref.width, ref.height,
-            tilesetName,
-            ref.regionX, ref.regionY, ref.regionWidth, ref.regionHeight,
-            ref.pivotX, ref.pivotY
-        );
+    public static function getActiveTile():Int {
+        return editorState.getActiveTile();
     }
 
     @:keep
-    public static function editEntityDef(entityName:String, data:Pointer<EntityDataStruct>):String {
-        var ref:Reference<EntityDataStruct> = data.ref;
-        var tilesetName:String = ref.tilesetName;
-        return editorState.editEntity(
-            entityName,
-            ref.width, ref.height,
-            tilesetName,
-            ref.regionX, ref.regionY, ref.regionWidth, ref.regionHeight,
-            ref.pivotX, ref.pivotY
-        );
-    }
-    
-    @:keep
-    public static function getEntityDef(entityName:String, outData:Pointer<EntityDataStruct>):String {
-        var error:String = null;
-        var entityDef = editorState.entityManager.getEntityDefinition(entityName);
-        if (entityDef == null) {
-            error = "Editor: No entity definition found: " + entityName;
-            app.log.warn(LogCategory.APP, error);
-            return error;
-        }
-
-        try {
-            populateEntityDataStruct(entityDef, outData);
-        } catch (e:Dynamic) {
-            error = "Editor: Failed to retrieve data for entity '" + entityName + "': " + e;
-            app.log.error(LogCategory.APP, error);
-        }
-
-        return error;
-    }
-    
-    @:keep
-    public static function getEntityDefAt(index:Int, outData:Pointer<EntityDataStruct>):String {
-        var error:String = null;
-        var entityDef:EntityDefinition = editorState.entityManager.getEntityDefinitionAt(index);
-        if (entityDef == null) {
-            error = "Editor: No entity definition found at index: " + index;
-            app.log.warn(LogCategory.APP, error);
-            return error;
-        }
-
-       try {
-            populateEntityDataStruct(entityDef, outData);
-        } catch (e:Dynamic) {
-            error = "Editor: Failed to retrieve data for entity at index '" + index + "': " + e;
-            app.log.error(LogCategory.APP, error);
-        }
-
-        return error;
-    }
-    
-    @:keep
-    public static function getEntityDefCount():Int {
-        return editorState.entityManager.getEntityDefinitionCount();
+    public static function setActiveTile(tileRegionId:Int):Void {
+        editorState.setActiveTile(tileRegionId);
     }
 
     @:keep
-    public static function setActiveEntityDef(entityName:String):Int {
-        return editorState.setActiveEntity(entityName) ? 1 : 0;
+    public static function setToolType(toolType:Int):Void {
+        editorState.toolType = toolType;
     }
 
     @:keep
-    public static function deleteEntityDef(entityName:String):String {
-        return editorState.deleteEntityDef(entityName);
+    public static function getToolType():Int {
+        return editorState.toolType;
     }
 
-    @:keep @:noExport
-    public static function populateEntityDataStruct(entityDef:EntityDefinition, outData:Pointer<EntityDataStruct>):Void {
-        var ref:Reference<EntityDataStruct> = outData.ref;
-		ref.name = entityDef.name;
-		ref.width = entityDef.width;
-		ref.height = entityDef.height;
-		ref.tilesetName = entityDef.tilesetName;
-		ref.regionX = entityDef.regionX;
-		ref.regionY = entityDef.regionY;
-		ref.regionWidth = entityDef.regionWidth;
-		ref.regionHeight = entityDef.regionHeight;
-		ref.pivotX = entityDef.pivotX;
-		ref.pivotY = entityDef.pivotY;
-    }
-    
     // ===== LAYER MANAGEMENT =====
-    
+
     @:keep
     public static function createTilemapLayer(layerName:String, tilesetName:String, tileSize:Int, index:Int = -1):Void {
         editorState.createTilemapLayer(layerName, tilesetName, index, tileSize);
     }
-    
+
     @:keep
     public static function createEntityLayer(layerName:String):Void {
         editorState.createEntityLayer(layerName);
     }
-    
+
     @:keep
     public static function createFolderLayer(layerName:String):Void {
         editorState.createFolderLayer(layerName);
     }
-    
+
     @:keep
     public static function setActiveLayer(layerName:String):Int {
         return editorState.setActiveLayer(layerName) ? 1 : 0;
@@ -846,22 +911,22 @@ class Editor {
     public static function setActiveLayerAt(index:Int):Int {
         return editorState.setActiveLayerAt(index) ? 1 : 0;
     }
-    
+
     @:keep
     public static function removeLayer(layerName:String):Int {
         return editorState.removeLayer(layerName) ? 1 : 0;
     }
-    
+
     @:keep
     public static function removeLayerByIndex(index:Int):Int {
         return editorState.removeLayerByIndex(index) ? 1 : 0;
     }
-    
+
     @:keep
     public static function moveLayerUp(layerName:String):Int {
         return editorState.moveLayerUp(layerName) ? 1 : 0;
     }
-    
+
     @:keep
     public static function moveLayerDown(layerName:String):Int {
         return editorState.moveLayerDown(layerName) ? 1 : 0;
@@ -871,17 +936,17 @@ class Editor {
     public static function moveLayerTo(layerName:String, newIndex:Int):Int {
         return editorState.moveLayerTo(layerName, newIndex) ? 1 : 0;
     }
-    
+
     @:keep
     public static function moveLayerUpByIndex(index:Int):Int {
        return editorState.moveLayerUpByIndex(index) ? 1 : 0;
     }
-    
+
     @:keep
     public static function moveLayerDownByIndex(index:Int):Int {
         return editorState.moveLayerDownByIndex(index) ? 1 : 0;
     }
-    
+
     @:keep
     public static function getLayerCount():Int {
         return editorState.getLayerCount();
@@ -909,7 +974,9 @@ class Editor {
 			type = 1;
 			var entityLayer:layers.EntityLayer = cast layer;
             if (entityLayer.batches != null && entityLayer.batches.length > 0) {
-                tilesetName = entityLayer.batches[0].editorTexture.name;
+                var firstEntry = entityLayer.batches[0];
+                if (firstEntry.editorTexture != null)
+                    tilesetName = firstEntry.editorTexture.name;
             }
         }
 
@@ -946,7 +1013,9 @@ class Editor {
 			type = 1;
 			var entityLayer:layers.EntityLayer = cast layer;
             if (entityLayer.batches != null && entityLayer.batches.length > 0) {
-                tilesetName = entityLayer.batches[0].editorTexture.name;
+                var firstEntry = entityLayer.batches[0];
+                if (firstEntry.editorTexture != null)
+                    tilesetName = firstEntry.editorTexture.name;
             }
         }
 
@@ -961,7 +1030,7 @@ class Editor {
         ref.silhouetteColor = layer.silhouetteColor.hexValue;
         return 1;
     }
-    
+
     @:keep
     public static function setLayerProperties(layerName:String, properties:Pointer<LayerInfoStruct>):Void {
         var ref:Reference<LayerInfoStruct> = properties.ref;
@@ -979,7 +1048,8 @@ class Editor {
 		editorState.replaceLayerTileset(layerName, newTilesetName);
 	}
 
-    // ----- entity layer batch accessors -----
+    // ===== ENTITY LAYER BATCHES =====
+
     @:keep
     public static function getEntityLayerBatchCount(layerName:String):Int {
         var layer = editorState.getLayerByName(layerName);
@@ -1083,7 +1153,9 @@ class Editor {
     public static function moveEntityLayerBatchToByIndex(layerIndex:Int, batchIndex:Int, newIndex:Int):Int {
         return editorState.moveEntityLayerBatchToByLayerIndex(layerIndex, batchIndex, newIndex) ? 1 : 0;
     }
-    
+
+    // ===== MAP PROPERTIES =====
+
 	@:keep
 	public static function getMapProps(outInfo:Pointer<MapProps>):String {
         var error:String = null;
@@ -1100,6 +1172,8 @@ class Editor {
 			ref.tileSizeY = editorState.tileSizeY;
 			ref.bgColor = editorState.grid.backgroundColor.hexValue;
 			ref.gridColor = editorState.grid.gridColor.hexValue;
+			ref.projectFilePath = editorState.projectFilePath != null ? editorState.projectFilePath : "";
+			ref.projectName     = editorState.projectName     != null ? editorState.projectName     : "";
 		} catch (e:Dynamic) {
 			error = "Editor: Failed to get map properties: " + e;
             app.log.error(LogCategory.APP, error);
@@ -1115,11 +1189,15 @@ class Editor {
 
         try {
             var ref:Reference<MapProps> = info.ref;
-            editorState.grid.gridColor.hexValue = ref.gridColor; 
+            editorState.grid.gridColor.hexValue = ref.gridColor;
             editorState.grid.backgroundColor.hexValue = ref.bgColor;
             if (ref.tileSizeX != editorState.tileSizeX || ref.tileSizeY != editorState.tileSizeY) {
                 editorState.recalibrateTileSize(ref.tileSizeX, ref.tileSizeY);
             }
+            var fp:String = ref.projectFilePath;
+            editorState.projectFilePath = (fp != null && fp != "") ? fp : null;
+            var pn:String = ref.projectName;
+            editorState.projectName = (pn != null && pn != "") ? pn : null;
         } catch (e:Dynamic) {
             error = "Editor: Failed to set map properties: " + e;
             app.log.error(LogCategory.APP, error);

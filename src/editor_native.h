@@ -63,7 +63,16 @@ typedef struct {
     int tileSizeY;
     int bgColor;
     int gridColor;
+    const char* projectFilePath; // null / empty if map is not linked to a project
+    const char* projectName;     // null / empty if map is not linked to a project
 } MapProps;
+
+typedef struct {
+    const char* filePath;
+    const char* projectName;
+    int defaultTileSizeX;
+    int defaultTileSizeY;
+} ProjectProps;
 
 typedef void (__cdecl *CustomCallback)(const char* priority, const char* category, const char* message);
 typedef void (__cdecl *EntitySelectionChangedCallback)(); // fired when selection changes
@@ -73,26 +82,25 @@ extern "C" {
     extern CustomCallback g_callback;
     
     __declspec(dllexport) const char* HxcppInit();
-
-    //__declspec(dllexport) void setCallback(CustomCallback callback);
     
-    // Engine lifecycle functions
-    __declspec(dllexport) int init();
-    __declspec(dllexport) int initWithCallback(CustomCallback callback);
+    // Lifecycle functions
+    __declspec(dllexport) bool init();
+    __declspec(dllexport) bool initWithCallback(CustomCallback callback);
+    __declspec(dllexport) void release();
+    __declspec(dllexport) bool isRunning();
     __declspec(dllexport) void updateFrame(float deltaTime);
     __declspec(dllexport) void render();
     __declspec(dllexport) void swapBuffers();
-    __declspec(dllexport) void release();
-    __declspec(dllexport) int loadState(int stateId);
-    __declspec(dllexport) int setActiveState(int index);
-    __declspec(dllexport) int releaseState(int index);
-    __declspec(dllexport) int isRunning();
+
+    __declspec(dllexport) int newEditorState();
+    __declspec(dllexport) bool setActiveState(int index);
+    __declspec(dllexport) bool releaseState(int index);
 
     // Window management functions
+    __declspec(dllexport) void* getWindowHandle();
     __declspec(dllexport) int getWindowWidth();
     __declspec(dllexport) int getWindowHeight();
     __declspec(dllexport) void setWindowSize(int width, int height);
-    __declspec(dllexport) void* getWindowHandle();
     __declspec(dllexport) void setWindowPosition(int x, int y);
 
     // Input handling
@@ -103,20 +111,19 @@ extern "C" {
     __declspec(dllexport) void onKeyboardUp(int keyCode);
     __declspec(dllexport) void onMouseWheel(float x, float y, float delta);
 
-    __declspec(dllexport) int newEditorState();
-
-    // Texture data retrieval
-    __declspec(dllexport) void getTextureData(const char* path, TextureDataStruct* outData);
+    // Project management
+    __declspec(dllexport) bool exportProject(const char* filePath, const char* projectName);
+    __declspec(dllexport) bool importProject(const char* filePath);
+    __declspec(dllexport) bool isProjectLoaded();             // editor-level: a project is open
+    __declspec(dllexport) bool getProjectProps(ProjectProps* outProps);
+    __declspec(dllexport) bool editProject(ProjectProps* inProps);
     
-    // Tilemap import/export
+    // Map import/export
     __declspec(dllexport) int exportMap(const char* filePath);
     __declspec(dllexport) int importMap(const char* filePath);
 
-    // Project import/export
-    __declspec(dllexport) int exportProject(const char* filePath, const char* projectName);
-    __declspec(dllexport) int importProject(const char* filePath);
-    __declspec(dllexport) const char* getProjectName(const char* filePath);
-    __declspec(dllexport) const char* getActiveProjectPath();
+    // Texture data retrieval
+    __declspec(dllexport) void getTextureData(const char* path, TextureDataStruct* outData);
     
     // Tileset management
     __declspec(dllexport) const char* createTileset(const char* texturePath, const char* tilesetName);
@@ -197,10 +204,9 @@ extern "C" {
     __declspec(dllexport) void setEntitySelectionChangedCallback(EntitySelectionChangedCallback callback);
     __declspec(dllexport) int getEntitySelectionCount();
     __declspec(dllexport) int getEntitySelectionInfo(int index, EntityStruct* outData);
-    __declspec(dllexport) int selectEntityByUID(const char* uid);
-    __declspec(dllexport) int selectEntityInLayerByUID(const char* layerName, const char* uid);
+    __declspec(dllexport) bool selectEntityByUID(const char* uid);
+    __declspec(dllexport) bool selectEntityInLayerByUID(const char* layerName, const char* uid);
     __declspec(dllexport) void deselectEntity();
-    
 }
 
 #endif // EDITOR_NATIVE_H

@@ -33,11 +33,14 @@ class BatchEntry {
     public var batch:ManagedTileBatch;
     public var entities:Map<String, Entity>;
     public var definedRegions:Map<String,Int>;
+    /** True when the tileset has been deleted but entities are kept for preview. */
+    public var missingTileset:Bool;
     public function new(editorTexture:EditorTexture, batch:ManagedTileBatch) {
         this.editorTexture = editorTexture;
         this.batch = batch;
         this.entities = new Map<String, Entity>();
         this.definedRegions = new Map<String,Int>();
+        this.missingTileset = false;
     }
 }
 
@@ -98,7 +101,11 @@ class EntityLayer extends Layer implements ITilesLayer {
             // silhouette=true would otherwise bleed into entity rendering.
             mb.uniforms.set("silhouette", false);
 
-            renderer.renderDisplayObject(mb, viewProjectionMatrix);
+            // Skip the normal texture render when the tileset is missing; the GPU
+            // texture has been freed and sampling it would produce undefined output.
+            if (!entry.missingTileset) {
+                renderer.renderDisplayObject(mb, viewProjectionMatrix);
+            }
 
             if (silhouette) {
                 mb.uniforms.set("silhouette", true);
@@ -106,7 +113,7 @@ class EntityLayer extends Layer implements ITilesLayer {
                 renderer.renderDisplayObject(mb, viewProjectionMatrix);
             }
 
-            if (missingTileset) {
+            if (missingTileset || entry.missingTileset) {
                 mb.uniforms.set("silhouette", true);
                 mb.uniforms.set("silhouetteColor", [1.0, 0.0, 0.0, 0.5]);
                 renderer.renderDisplayObject(mb, viewProjectionMatrix);
@@ -148,7 +155,7 @@ class EntityLayer extends Layer implements ITilesLayer {
      * When pivotX / pivotY are omitted (or Math.NaN), the entity definition's
      * own default pivot (def.pivotX / def.pivotY) is used instead.
      */
-    public function placeEntity(def:EntityDefinition, editorTexture:EditorTexture, x:Float, y:Float, renderer:Dynamic, programInfo:Dynamic, ?pivotX:Null<Float>, ?pivotY:Null<Float>, ?uid:String):String {
+    public function placeEntity(def:EntityDefinition, editorTexture:EditorTexture, x:Float, y:Float, renderer:Dynamic, programInfo:Dynamic, ?pivotX:Null<Float>, ?pivotY:Null<Float>, ?uid:String, ?fallbackTexture:EditorTexture):String {
         // Resolve pivot: explicit override > definition default
         var px:Float = (pivotX != null) ? pivotX : def.pivotX;
         var py:Float = (pivotY != null) ? pivotY : def.pivotY;
@@ -161,37 +168,56 @@ class EntityLayer extends Layer implements ITilesLayer {
             }
         }
         if (entry == null) {
-            // create a new batch for this tileset
-            var mb = new ManagedTileBatch(programInfo, editorTexture.textureId);
-            mb.init(renderer);
-            entry = new BatchEntry(editorTexture, mb);
+            if (editorTexture != null) {
+                var mb = new ManagedTileBatch(programInfo, editorTexture.textureId);
+                mb.init(renderer);
+                entry = new BatchEntry(editorTexture, mb);
+            } else {
+                // No tileset available. If a fallback texture exists, back the orphan batch
+                // with it so GPU geometry is created and the red silhouette can be rendered.
+                // The fallback texture content is irrelevant — the silhouette shader ignores it.
+                // entry.editorTexture stays null to mark this batch as orphaned.
+                if (fallbackTexture != null) {
+                    var mb = new ManagedTileBatch(programInfo, fallbackTexture.textureId);
+                    mb.init(renderer);
+                    entry = new BatchEntry(null, mb);
+                } else {
+                    entry = new BatchEntry(null, null);
+                }
+                entry.missingTileset = true;
+            }
             batches.push(entry);
         }
 
-        // determine region
+        // determine region (skip for orphan batches that have no GPU tile batch)
         var regionId:Int = -1;
-        if (entry.definedRegions.exists(def.name)) {
-            regionId = entry.definedRegions.get(def.name);
-        } else {
-            regionId = entry.batch.defineRegion(def.regionX, def.regionY,
-                                                def.regionWidth, def.regionHeight);
-            if (regionId < 0) {
-                trace("EntityLayer.placeEntity: defineRegion failed");
-                return null;
+        if (entry.batch != null) {
+            if (entry.definedRegions.exists(def.name)) {
+                regionId = entry.definedRegions.get(def.name);
+            } else {
+                regionId = entry.batch.defineRegion(def.regionX, def.regionY,
+                                                    def.regionWidth, def.regionHeight);
+                if (regionId < 0) {
+                    trace("EntityLayer.placeEntity: defineRegion failed");
+                    return null;
+                }
+                entry.definedRegions.set(def.name, regionId);
             }
-            entry.definedRegions.set(def.name, regionId);
         }
 
         // Actual top-left render position is offset from the pivot world position
         var renderX = x - px * def.width;
         var renderY = y - py * def.height;
 
-        var tileId = entry.batch.addTile(renderX, renderY, def.width, def.height, regionId);
-        if (tileId < 0) {
-            trace("EntityLayer.placeEntity: addTile failed");
-            return null;
+        var tileId:Int = -1;
+        if (entry.batch != null) {
+            tileId = entry.batch.addTile(renderX, renderY, def.width, def.height, regionId);
+            if (tileId < 0) {
+                trace("EntityLayer.placeEntity: addTile failed");
+                return null;
+            }
+            entry.batch.needsBufferUpdate = true;
         }
-        entry.batch.needsBufferUpdate = true;
 
         var entityId:String = (uid != null && uid != "") ? uid : UIDGenerator.generate();
 
@@ -269,7 +295,10 @@ class EntityLayer extends Layer implements ITilesLayer {
             }
             if (idsToUpdate.length == 0) continue;
 
-            if (entry.editorTexture.name == def.tilesetName) {
+            // "Same batch": textures match by name, or both are the orphan/no-tileset case.
+            var isSameBatch = (entry.editorTexture != null && entry.editorTexture.name == def.tilesetName)
+                || (entry.editorTexture == null && (def.tilesetName == null || def.tilesetName == ""));
+            if (isSameBatch) {
                 // Same tileset — update region UV and tile properties in-place.
                 syncRegion(entry, def);
                 for (id in idsToUpdate) {
@@ -278,12 +307,14 @@ class EntityLayer extends Layer implements ITilesLayer {
                     ent.height = def.height;
                     ent.pivotX = def.pivotX;
                     ent.pivotY = def.pivotY;
-                    var tile = entry.batch.getTile(ent.tileId);
-                    if (tile != null) {
-                        tile.x      = ent.x - def.pivotX * def.width;
-                        tile.y      = ent.y - def.pivotY * def.height;
-                        tile.width  = def.width;
-                        tile.height = def.height;
+                    if (entry.batch != null) {
+                        var tile = entry.batch.getTile(ent.tileId);
+                        if (tile != null) {
+                            tile.x      = ent.x - def.pivotX * def.width;
+                            tile.y      = ent.y - def.pivotY * def.height;
+                            tile.width  = def.width;
+                            tile.height = def.height;
+                        }
                     }
                     // Rebuild text label at updated position
                     if (ent.text != null && labelFont != null) {
@@ -293,7 +324,7 @@ class EntityLayer extends Layer implements ITilesLayer {
                             Math.round(ent.y - ent.pivotY * ent.height - labelFont.fontData.lineHeight - 2));
                     }
                 }
-                entry.batch.needsBufferUpdate = true;
+                if (entry.batch != null) entry.batch.needsBufferUpdate = true;
                 changed = true;
             } else {
                 // Tileset changed — queue for migration.
@@ -307,12 +338,30 @@ class EntityLayer extends Layer implements ITilesLayer {
             // Find or create the target batch for the new tileset.
             var targetEntry:BatchEntry = null;
             for (e in batches) {
-                if (e.editorTexture.name == def.tilesetName) { targetEntry = e; break; }
+                if (newEditorTexture == null) {
+                    if (e.editorTexture == null) { targetEntry = e; break; }
+                } else {
+                    if (e.editorTexture != null && e.editorTexture.name == def.tilesetName) { targetEntry = e; break; }
+                }
             }
             if (targetEntry == null) {
-                var mb = new ManagedTileBatch(programInfo, newEditorTexture.textureId);
-                mb.init(renderer);
-                targetEntry = new BatchEntry(newEditorTexture, mb);
+                if (newEditorTexture != null) {
+                    var mb = new ManagedTileBatch(programInfo, newEditorTexture.textureId);
+                    mb.init(renderer);
+                    targetEntry = new BatchEntry(newEditorTexture, mb);
+                } else {
+                    // Migrating to no-tileset — back with a fallback GPU batch for silhouette rendering.
+                    var fallbackTex:EditorTexture = null;
+                    for (e in batches) { if (e.editorTexture != null) { fallbackTex = e.editorTexture; break; } }
+                    if (fallbackTex != null) {
+                        var mb = new ManagedTileBatch(programInfo, fallbackTex.textureId);
+                        mb.init(renderer);
+                        targetEntry = new BatchEntry(null, mb);
+                    } else {
+                        targetEntry = new BatchEntry(null, null);
+                    }
+                    targetEntry.missingTileset = true;
+                }
                 batches.push(targetEntry);
             }
 
@@ -323,10 +372,12 @@ class EntityLayer extends Layer implements ITilesLayer {
             for (item in toMigrate) {
                 var ent = item.ent;
 
-                // Remove tile from old batch.
-                item.entry.batch.removeTile(ent.tileId);
+                // Remove tile from old batch (orphan entries have no GPU batch).
+                if (item.entry.batch != null && ent.tileId >= 0) {
+                    item.entry.batch.removeTile(ent.tileId);
+                    item.entry.batch.needsBufferUpdate = true;
+                }
                 item.entry.entities.remove(item.id);
-                item.entry.batch.needsBufferUpdate = true;
 
                 // Update entity properties.
                 ent.width  = def.width;
@@ -334,11 +385,14 @@ class EntityLayer extends Layer implements ITilesLayer {
                 ent.pivotX = def.pivotX;
                 ent.pivotY = def.pivotY;
 
-                // Add to new batch.
-                var newTileId = targetEntry.batch.addTile(
-                    ent.x - def.pivotX * def.width,
-                    ent.y - def.pivotY * def.height,
-                    def.width, def.height, regionId);
+                // Add to new batch (null batch = orphan without GPU backing, tileId stays -1).
+                var newTileId = -1;
+                if (targetEntry.batch != null) {
+                    newTileId = targetEntry.batch.addTile(
+                        ent.x - def.pivotX * def.width,
+                        ent.y - def.pivotY * def.height,
+                        def.width, def.height, regionId);
+                }
                 ent.tileId = newTileId;
                 // Rebuild text label at updated position
                 if (ent.text != null && labelFont != null) {
@@ -349,13 +403,13 @@ class EntityLayer extends Layer implements ITilesLayer {
                 }
                 targetEntry.entities.set(item.id, ent);
             }
-            targetEntry.batch.needsBufferUpdate = true;
+            if (targetEntry.batch != null) targetEntry.batch.needsBufferUpdate = true;
 
             // Remove any batches that are now empty.
             var batchesToRemove:Array<BatchEntry> = [];
             for (entry in batches) {
                 if (!entry.entities.keys().hasNext()) {
-                    entry.batch.clear();
+                    if (entry.batch != null) entry.batch.clear();
                     batchesToRemove.push(entry);
                 }
             }
@@ -377,6 +431,7 @@ class EntityLayer extends Layer implements ITilesLayer {
      * - Skips region work when regionWidth/Height are 0 (partially-filled struct).
      */
     private function syncRegion(entry:BatchEntry, def:EntityDefinition):Void {
+        if (entry.batch == null) return;
         if (def.regionWidth <= 0 || def.regionHeight <= 0) return;
 
         var regionId = entry.definedRegions.get(def.name);
@@ -467,6 +522,20 @@ class EntityLayer extends Layer implements ITilesLayer {
             }
         }
         return false;
+    }
+
+    /**
+     * Mark all batch entries that reference the given tileset as missing.
+     * Entities remain in place and will render as a red silhouette so the
+     * user can see where they were placed even after the tileset is deleted.
+     * Call removeEntitiesByTileset() if you want a hard removal instead.
+     */
+    public function markTilesetMissing(tilesetName:String):Void {
+        for (entry in batches) {
+            if (entry.editorTexture != null && entry.editorTexture.name == tilesetName) {
+                entry.missingTileset = true;
+            }
+        }
     }
 
     /**

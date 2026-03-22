@@ -14,4 +14,6 @@ extern class MapProps {
 	var tileSizeY:Int;
 	var bgColor:Int;
 	var gridColor:Int;
+	var projectFilePath:cpp.ConstCharStar;
+	var projectName:cpp.ConstCharStar;
 }

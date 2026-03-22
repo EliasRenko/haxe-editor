@@ -34,17 +34,19 @@ class EditorState extends State {
     private var _mapSerializer:MapSerializer;
     private var _projectSerializer:ProjectSerializer;
 
-    /** Absolute path to the currently loaded/saved project file, or null if none. */
+    /** Absolute path to the project this map belongs to, or null if standalone. */
     public var projectFilePath:Null<String> = null;
+    /** Display name of the project this map belongs to, or null if standalone. */
+    public var projectName:Null<String> = null;
 
     // Options
     public var showWorldAxes:Bool = true; // Show X/Y axes at origin (0,0)
     public var showQuadtreeDebug:Bool = true; // Visualise EntityLayer quadtree cell bounds
     public var deleteOutOfBoundsTilesOnResize:Bool = true; // Auto-delete tiles when shrinking frame
 
-    // Managers
-    public var tilesetManager:TilesetManager = new TilesetManager();
-    public var entityManager:EntityManager = new EntityManager();
+    // Managers — owned at Editor level, assigned via Editor.initState() before first use.
+    public var tilesetManager:TilesetManager;
+    public var entityManager:EntityManager;
     
     // Tile editor settings
     public var tileSizeX:Int = 64; // Width of each tile in pixels
@@ -88,8 +90,10 @@ class EditorState extends State {
     // Fired whenever the selection changes (added, cleared, etc.)
     public var onEntitySelectionChanged:()->Void = null;
     
-    public function new(app:App) {
+    public function new(app:App, tilesetManager:TilesetManager, entityManager:EntityManager) {
         super("EditorState", app);
+        this.tilesetManager = tilesetManager;
+        this.entityManager = entityManager;
         _mapSerializer = new MapSerializer(this);
         _projectSerializer = new ProjectSerializer(this);
     }
@@ -275,6 +279,16 @@ class EditorState extends State {
         return null;
     }
 
+    /** Remove all placed entity instances with the given definition name from this
+     *  state's layers, without touching the shared EntityManager. */
+    public function removeEntityInstances(entityName:String):Void {
+        var allEntityLayers:Array<EntityLayer> = [];
+        collectEntityLayers(entities, allEntityLayers);
+        for (entityLayer in allEntityLayers) {
+            entityLayer.removeEntitiesByDefName(entityName);
+        }
+    }
+
     /** Recursively collect all EntityLayer instances from an entity array (includes FolderLayer children). */
     private function collectEntityLayers(source:Array<Dynamic>, result:Array<EntityLayer>):Void {
         for (entity in source) {
@@ -319,16 +333,31 @@ class EditorState extends State {
         collectTilemapLayerNamesByTileset(entities, tilesetName, tilemapNames);
         for (name in tilemapNames) removeLayer(name);
 
-        // 2. Drop the tileset batch (and its entity instances) from every EntityLayer
+        // 2. Mark tileset batches as missing in every EntityLayer (entities are kept and
+        //    rendered as red silhouettes so the user knows where they were placed).
         var allEntityLayers:Array<EntityLayer> = [];
         collectEntityLayers(entities, allEntityLayers);
         for (entityLayer in allEntityLayers) {
-            entityLayer.removeEntitiesByTileset(tilesetName);
+            entityLayer.markTilesetMissing(tilesetName);
         }
 
         // 3. Delete the tileset itself
         tilesetManager.deleteTileset(tilesetName);
         return null;
+    }
+
+    /** Remove TilemapLayers referencing the given tileset from this state's layer tree,
+     *  and mark entity batches for that tileset as missing — without deleting it from
+     *  the shared TilesetManager. */
+    public function removeTilesetReferences(tilesetName:String):Void {
+        var tilemapNames:Array<String> = [];
+        collectTilemapLayerNamesByTileset(entities, tilesetName, tilemapNames);
+        for (name in tilemapNames) removeLayer(name);
+        var allEntityLayers:Array<EntityLayer> = [];
+        collectEntityLayers(entities, allEntityLayers);
+        for (entityLayer in allEntityLayers) {
+            entityLayer.markTilesetMissing(tilesetName);
+        }
     }
 
     /**
@@ -338,7 +367,9 @@ class EditorState extends State {
     public function createEntityFull(entityName:String, width:Int, height:Int, tilesetName:String,
                                      regionX:Int, regionY:Int, regionWidth:Int, regionHeight:Int,
                                      pivotX:Float, pivotY:Float):String {
-        if (!tilesetManager.exists(tilesetName)) {
+        // tilesetName may be null/empty to create a definition with no tileset attached.
+        // Non-null, non-empty names are validated to catch typos.
+        if (tilesetName != null && tilesetName != "" && !tilesetManager.exists(tilesetName)) {
             var error = "Cannot create entity '" + entityName + "': tileset '" + tilesetName + "' does not exist";
             app.log.info(LogCategory.APP, error);
             return error;
@@ -348,8 +379,12 @@ class EditorState extends State {
             app.log.info(LogCategory.APP, error);
             return error;
         }
+        // When there's no tileset, use the entity's own dimensions as the render region
+        // so the red silhouette is sized correctly.
+        var rX = regionX; var rY = regionY; var rW = regionWidth; var rH = regionHeight;
+        if (tilesetName == null || tilesetName == "") { rX = 0; rY = 0; rW = width; rH = height; }
         entityManager.setEntityFull(entityName, width, height, tilesetName,
-                                    regionX, regionY, regionWidth, regionHeight,
+                                    rX, rY, rW, rH,
                                     pivotX, pivotY);
         return null;
     }
@@ -693,10 +728,15 @@ class EditorState extends State {
         // Add entity as a tile in the appropriate batch
         var textureProgramInfo = app.renderer.getProgramInfo("texture");
         if (textureProgramInfo == null) return;
-        // lookup tileset instance for this entity
-        var editorTexture:EditorTexture = tilesetManager.tilesets.get(entityDef.tilesetName);
-        if (editorTexture == null) return;
-        var entityId = entityLayer.placeEntity(entityDef, editorTexture, worldX, worldY, app.renderer, textureProgramInfo);
+        // Lookup tileset — null for no-tileset or missing-tileset entities (both routed to orphan batch)
+        var editorTexture:EditorTexture = (entityDef.tilesetName != null && entityDef.tilesetName != "")
+            ? tilesetManager.tilesets.get(entityDef.tilesetName) : null;
+        // Find a fallback texture to back the GPU silhouette batch for orphan entities
+        var fallbackTexture:EditorTexture = null;
+        if (editorTexture == null) {
+            for (ts in tilesetManager.tilesets) { fallbackTexture = ts; break; }
+        }
+        var entityId = entityLayer.placeEntity(entityDef, editorTexture, worldX, worldY, app.renderer, textureProgramInfo, null, null, null, fallbackTexture);
         app.log.info(LogCategory.APP, "[LabelFont] placeEntityAt: layerLabelFont=" + (entityLayer.labelFont != null) + " totalTiles=" + (entityLabelFont != null ? entityLabelFont.getTileCount() : -1));
     }
     
@@ -734,7 +774,7 @@ class EditorState extends State {
                         + " name=" + ent.name
                         + " pos=(" + ent.x + ", " + ent.y + ")"
                         + " size=(" + ent.width + "x" + ent.height + ")"
-                        + " tileset=" + entry.editorTexture.name);
+                        + " tileset=" + (entry.editorTexture != null ? entry.editorTexture.name : "<orphan>"));
                     selectedEntities.push(ent);
                     break;
                 }
@@ -770,7 +810,7 @@ class EditorState extends State {
                         + " name=" + ent.name
                         + " pos=(" + ent.x + ", " + ent.y + ")"
                         + " size=(" + ent.width + "x" + ent.height + ")"
-                        + " tileset=" + entry.editorTexture.name);
+                        + " tileset=" + (entry.editorTexture != null ? entry.editorTexture.name : "<orphan>"));
                     selectedEntities.push(ent);
                     if (selection != null) selection.setSelections(selectedEntities);
                     if (onEntitySelectionChanged != null) onEntitySelectionChanged();
@@ -809,7 +849,7 @@ class EditorState extends State {
                     + " name=" + ent.name
                     + " pos=(" + ent.x + ", " + ent.y + ")"
                     + " size=(" + ent.width + "x" + ent.height + ")"
-                    + " tileset=" + entry.editorTexture.name);
+                    + " tileset=" + (entry.editorTexture != null ? entry.editorTexture.name : "<orphan>"));
                 selectedEntities.push(ent);
                 if (selection != null) selection.setSelections(selectedEntities);
                 if (onEntitySelectionChanged != null) onEntitySelectionChanged();
@@ -1591,31 +1631,6 @@ class EditorState extends State {
         return _mapSerializer.exportToJSON(filePath);
     }
 
-    /**
-     * Save entity definitions and tilesets to a project file.
-     * Also updates `projectFilePath` so subsequent map exports reference it.
-     * @param filePath  Absolute path for the .hxproject JSON file.
-     * @param projectName  Optional human-readable name stored inside the file.
-     * @return  Number of entity definitions written, or -1 on error.
-     */
-    public function exportProject(filePath:String, projectName:String = ""):Int {
-        var result = _projectSerializer.exportToJSON(filePath, projectName);
-        if (result >= 0) projectFilePath = filePath;
-        return result;
-    }
-
-    /**
-     * Load entity definitions and tilesets from a project file.
-     * Also updates `projectFilePath` so subsequent map exports reference it.
-     * @param filePath  Absolute path to the .hxproject JSON file.
-     * @return  Number of entity definitions loaded, or -1 on error.
-     */
-    public function importProject(filePath:String):Int {
-        var result = _projectSerializer.importFromJSON(filePath);
-        if (result >= 0) projectFilePath = filePath;
-        return result;
-    }
-
     public function setLayerProperties(layerName:String, name:String, type:Int, tilesetName:String, visible:Bool, silhouette:Bool, silhouetteColor:Int):Void {
         var layer = getLayerByName(layerName);
         if (layer != null) {
@@ -1968,7 +1983,6 @@ private class MapSerializer {
                     }
                     if (batchEntities.length > 0) {
                         batchesData.push({
-                            tilesetName: entry.editorTexture.name,
                             entities: batchEntities,
                             count: batchEntities.length
                         });
@@ -2162,18 +2176,24 @@ private class MapSerializer {
                             if (layerData.batches != null) {
                                 // Current batched format
                                 var batches:Array<Dynamic> = layerData.batches;
+                                var programInfo = state.app.renderer.getProgramInfo("texture");
+                                // Find any loaded texture to back orphan batches with GPU geometry
+                                // so missing-tileset entities render as red silhouettes.
+                                var fallback:EditorTexture = null;
+                                for (ts in state.tilesetManager.tilesets) { fallback = ts; break; }
                                 for (batchData in batches) {
-                                    var tileset:EditorTexture = state.tilesetManager.tilesets.get(batchData.tilesetName);
-                                    if (tileset == null) continue;
-                                    var programInfo = state.app.renderer.getProgramInfo("texture");
                                     var batchEntities:Array<Dynamic> = batchData.entities;
                                     for (entityData in batchEntities) {
                                         var def = state.entityManager.getEntityDefinition(entityData.name);
                                         if (def == null) continue;
+                                        var tileset:EditorTexture = state.tilesetManager.tilesets.get(def.tilesetName);
+                                        // tileset may be null when it hasn't been loaded yet — placeEntity
+                                        // routes null-texture entities to an orphan batch so they survive
+                                        // save/load cycles and migrate automatically when the tileset is restored.
                                         var pivotX:Float = entityData.pivotX != null ? entityData.pivotX : 0.0;
                                         var pivotY:Float = entityData.pivotY != null ? entityData.pivotY : 0.0;
                                         entityLayer.placeEntity(def, tileset, entityData.x, entityData.y,
-                                            state.app.renderer, programInfo, pivotX, pivotY, entityData.uid);
+                                            state.app.renderer, programInfo, pivotX, pivotY, entityData.uid, fallback);
                                         importedCount++;
                                     }
                                 }
@@ -2198,7 +2218,7 @@ private class MapSerializer {
 
                             // Upload all entity batches to GPU
                             for (eentry in entityLayer.batches) {
-                                if (eentry.batch.needsBufferUpdate)
+                                if (eentry.batch != null && eentry.batch.needsBufferUpdate)
                                     eentry.batch.updateBuffers(state.app.renderer);
                             }
                         }
