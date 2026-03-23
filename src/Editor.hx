@@ -16,11 +16,13 @@ import cpp.Pointer;
 import cpp.Reference;
 import manager.TilesetManager;
 import manager.EntityManager;
+import utils.UIDGenerator;
 
 /** Project-level metadata shared across all maps.
  *  Tileset and entity-definition data live in the shared managers, not here. */
 typedef ProjectData = {
     var projectFilePath:Null<String>;
+    var projectId:String;
     var projectName:String;
     var defaultTileSizeX:Int;
     var defaultTileSizeY:Int;
@@ -203,13 +205,15 @@ class Editor {
     }
 
     /** Apply project-level defaults (tile size) to a state.
-     *  Does NOT touch state.projectFilePath / projectName — those track map-to-project
-     *  association and are only set when a map is explicitly loaded from / saved to a
-     *  project-backed file. */
+     *  Also connect state.projectFilePath/projectName when project context exists.
+     */
     @:noExport @:keep
     private static function applyProjectToState(state:EditorState):Void {
         if (_projectData == null || state == null) return;
         @:privateAccess state.setTileSize(_projectData.defaultTileSizeX, _projectData.defaultTileSizeY);
+        state.projectFilePath = _projectData.projectFilePath;
+        state.projectId = _projectData.projectId;
+        state.projectName = _projectData.projectName;
     }
 
     @:noExport @:keep
@@ -342,8 +346,12 @@ class Editor {
                 });
             }
 
+            var projectId:String = (_projectData != null && _projectData.projectId != null && _projectData.projectId != "")
+                ? _projectData.projectId : UIDGenerator.generate();
+
             var data = {
                 version:          "1.0",
+                projectId:        projectId,
                 projectName:      projectName != "" ? projectName : "Untitled",
                 defaultTileSizeX: editorState.tileSizeX,
                 defaultTileSizeY: editorState.tileSizeY,
@@ -358,12 +366,14 @@ class Editor {
             if (_projectData == null) {
                 _projectData = {
                     projectFilePath:  filePath,
+                    projectId:        projectId,
                     projectName:      projectName,
                     defaultTileSizeX: editorState.tileSizeX,
                     defaultTileSizeY: editorState.tileSizeY
                 };
             } else {
                 _projectData.projectFilePath = filePath;
+                _projectData.projectId       = projectId;
                 _projectData.projectName     = projectName;
             }
 
@@ -450,8 +460,12 @@ class Editor {
             }
 
             // Persist project metadata and apply to the single blank state.
+            var projectId:String = (data.projectId != null && Std.is(data.projectId, String) && cast(data.projectId, String) != "")
+                ? cast(data.projectId, String) : UIDGenerator.generate();
+
             _projectData = {
                 projectFilePath:  filePath,
+                projectId:        projectId,
                 projectName:      data.projectName != null ? data.projectName : "",
                 defaultTileSizeX: tileSizeX,
                 defaultTileSizeY: tileSizeY
@@ -467,16 +481,6 @@ class Editor {
     }
 
     /**
-     * Returns true if a project has been loaded into the editor (via importProject).
-     * This is an editor-level flag and is independent of whether any map state has
-     * a projectFilePath set (which only indicates the map's own association).
-     */
-    @:keep
-    public static function isProjectLoaded():Bool {
-        return _projectData != null;
-    }
-
-    /**
      * Fill a ProjectProps struct with the current editor-level project metadata.
      * @return 1 if a project is loaded, 0 if not.
      */
@@ -485,8 +489,10 @@ class Editor {
         if (_projectData == null) return false;
         var ref:Reference<ProjectProps> = outProps.ref;
         var fp:String = _projectData.projectFilePath != null ? _projectData.projectFilePath : "";
+        var pid:String = _projectData.projectId != null ? _projectData.projectId : "";
         var pn:String = _projectData.projectName;
         ref.filePath         = fp;
+        ref.projectId       = pid;
         ref.projectName      = pn;
         ref.defaultTileSizeX = _projectData.defaultTileSizeX;
         ref.defaultTileSizeY = _projectData.defaultTileSizeY;
@@ -504,8 +510,10 @@ class Editor {
         if (_projectData == null) return false;
         var ref:Reference<ProjectProps> = inProps.ref;
         var fp:String = ref.filePath;
+        var pid:String = ref.projectId;
         var pn:String = ref.projectName;
         _projectData.projectFilePath  = fp != null && fp != "" ? fp : _projectData.projectFilePath;
+        _projectData.projectId        = pid != null && pid != "" ? pid : _projectData.projectId;
         _projectData.projectName      = pn;
         _projectData.defaultTileSizeX = ref.defaultTileSizeX;
         _projectData.defaultTileSizeY = ref.defaultTileSizeY;
@@ -529,31 +537,29 @@ class Editor {
     /**
      * Export the current tilemap to a JSON file
      * @param filePath Absolute path where to save the JSON file
-     * @return Number of tiles exported, or -1 on error
+     * @return true on success, false on error
      */
     @:keep
-    public static function exportMap(filePath:String):Int {
+    public static function exportMap(filePath:String):Bool {
         if (app == null || !initialized) {
             log("Editor: Cannot export tilemap - engine not initialized");
-            return -1;
+            return false;
         }
 
         if (editorState == null) {
             log("Editor: EditorState not loaded");
-            return -1;
+            return false;
         }
 
         try {
-            var tileCount = editorState.exportToJSON(filePath);
-            if (tileCount >= 0) {
-                log("Editor: Exported " + tileCount + " tiles to: " + filePath);
-            } else {
-                log("Editor: Failed to export tilemap");
+            var success = editorState.exportToJSON(filePath);
+            if (success) {
+                app.log.info(LogCategory.APP, "Editor: Exported map to: " + filePath);
             }
-            return tileCount;
+            return success;
         } catch (e:Dynamic) {
-            log("Editor: Error exporting tilemap: " + e);
-            return -1;
+            app.log.error(LogCategory.APP, "Editor: Error exporting tilemap: " + e);
+            return false;
         }
     }
 
@@ -564,10 +570,10 @@ class Editor {
      * @return The index of the newly created state, or -1 on error
      */
     @:keep
-    public static function importMap(filePath:String):Int {
+    public static function importMap(filePath:String):Bool {
         if (app == null || !initialized) {
             log("Editor: Cannot import tilemap - engine not initialized");
-            return -1;
+            return false;
         }
 
         try {
@@ -578,18 +584,69 @@ class Editor {
             applyProjectToState(newState);
             wireEditorStateCallbacks();
 
-            var tileCount = editorState.importFromJSON(filePath);
-            if (tileCount >= 0) {
-                log("Editor: Imported " + tileCount + " tiles from: " + filePath + " into state " + stateIndex);
-            } else {
-                log("Editor: Failed to import tilemap");
-                return -1;
+            var success = editorState.importFromJSON(filePath);
+            if (success) {
+                app.log.info(LogCategory.APP, "Editor: Imported map from: " + filePath);
             }
-            return stateIndex;
+            return success;
         } catch (e:Dynamic) {
-            log("Editor: Error importing tilemap: " + e);
-            return -1;
+            app.log.error(LogCategory.APP, "Editor: Error importing tilemap: " + e);
+            return false;
         }
+    }
+
+    @:keep
+	public static function getMapProps(outInfo:Pointer<MapProps>):Bool {
+        var error:String = null;
+
+		try {
+			var ref:Reference<MapProps> = outInfo.ref;
+			ref.idd = editorState.iid;
+			ref.name = editorState.name;
+			ref.worldx = Std.int(editorState.mapX);
+			ref.worldy = Std.int(editorState.mapY);
+			ref.width = Std.int(editorState.mapWidth);
+			ref.height = Std.int(editorState.mapHeight);
+			ref.tileSizeX = editorState.tileSizeX;
+			ref.tileSizeY = editorState.tileSizeY;
+			ref.bgColor = editorState.grid.backgroundColor.hexValue;
+			ref.gridColor = editorState.grid.gridColor.hexValue;
+			ref.projectFilePath = editorState.projectFilePath != null ? editorState.projectFilePath : "";
+			ref.projectId       = editorState.projectId       != null ? editorState.projectId       : "";
+			ref.projectName     = editorState.projectName     != null ? editorState.projectName     : "";
+		} catch (e:Dynamic) {
+			error = "Editor: Failed to get map properties: " + e;
+            app.log.error(LogCategory.APP, error);
+			return false;
+		}
+
+		return true;
+	}
+
+    @:keep
+    public static function setMapProps(info:Pointer<MapProps>):Bool {
+        var error:String = null;
+
+        try {
+            var ref:Reference<MapProps> = info.ref;
+            editorState.grid.gridColor.hexValue = ref.gridColor;
+            editorState.grid.backgroundColor.hexValue = ref.bgColor;
+            if (ref.tileSizeX != editorState.tileSizeX || ref.tileSizeY != editorState.tileSizeY) {
+                editorState.recalibrateTileSize(ref.tileSizeX, ref.tileSizeY);
+            }
+            var fp:String = ref.projectFilePath;
+            editorState.projectFilePath = (fp != null && fp != "") ? fp : null;
+            var pid:String = ref.projectId;
+            editorState.projectId = (pid != null && pid != "") ? pid : null;
+            var pn:String = ref.projectName;
+            editorState.projectName = (pn != null && pn != "") ? pn : null;
+        } catch (e:Dynamic) {
+            error = "Editor: Failed to set map properties: " + e;
+            app.log.error(LogCategory.APP, error);
+            return false;
+        }
+
+        return true;
     }
 
     // ===== TILESET MANAGEMENT =====
@@ -1162,57 +1219,5 @@ class Editor {
     @:keep
     public static function moveEntityLayerBatchToByIndex(layerIndex:Int, batchIndex:Int, newIndex:Int):Int {
         return editorState.moveEntityLayerBatchToByLayerIndex(layerIndex, batchIndex, newIndex) ? 1 : 0;
-    }
-
-    // ===== MAP PROPERTIES =====
-
-	@:keep
-	public static function getMapProps(outInfo:Pointer<MapProps>):String {
-        var error:String = null;
-
-		try {
-			var ref:Reference<MapProps> = outInfo.ref;
-			ref.idd = editorState.iid;
-			ref.name = editorState.name;
-			ref.worldx = Std.int(editorState.mapX);
-			ref.worldy = Std.int(editorState.mapY);
-			ref.width = Std.int(editorState.mapWidth);
-			ref.height = Std.int(editorState.mapHeight);
-			ref.tileSizeX = editorState.tileSizeX;
-			ref.tileSizeY = editorState.tileSizeY;
-			ref.bgColor = editorState.grid.backgroundColor.hexValue;
-			ref.gridColor = editorState.grid.gridColor.hexValue;
-			ref.projectFilePath = editorState.projectFilePath != null ? editorState.projectFilePath : "";
-			ref.projectName     = editorState.projectName     != null ? editorState.projectName     : "";
-		} catch (e:Dynamic) {
-			error = "Editor: Failed to get map properties: " + e;
-            app.log.error(LogCategory.APP, error);
-			return error;
-		}
-
-		return null;
-	}
-
-    @:keep
-    public static function setMapProps(info:Pointer<MapProps>):String {
-        var error:String = null;
-
-        try {
-            var ref:Reference<MapProps> = info.ref;
-            editorState.grid.gridColor.hexValue = ref.gridColor;
-            editorState.grid.backgroundColor.hexValue = ref.bgColor;
-            if (ref.tileSizeX != editorState.tileSizeX || ref.tileSizeY != editorState.tileSizeY) {
-                editorState.recalibrateTileSize(ref.tileSizeX, ref.tileSizeY);
-            }
-            var fp:String = ref.projectFilePath;
-            editorState.projectFilePath = (fp != null && fp != "") ? fp : null;
-            var pn:String = ref.projectName;
-            editorState.projectName = (pn != null && pn != "") ? pn : null;
-        } catch (e:Dynamic) {
-            error = "Editor: Failed to set map properties: " + e;
-            app.log.error(LogCategory.APP, error);
-        }
-
-        return error;
     }
 }

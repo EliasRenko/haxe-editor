@@ -3,6 +3,7 @@ package;
 import EntityDefinition;
 import EditorTexture;
 import states.EditorState;
+import utils.UIDGenerator;
 
 // ---------------------------------------------------------------------------
 // ProjectSerializer — saves and loads .hxproject JSON files.
@@ -41,7 +42,9 @@ class ProjectSerializer {
      * @param projectName  Human-readable project name stored inside the file.
      * @return  Number of entity definitions written, or -1 on error.
      */
-    public function exportToJSON(filePath:String, projectName:String = ""):Int {
+    public function exportToJSON(filePath:String, projectName:String = "", projectId:String = ""):Int {
+
+        var projectUid:String = (projectId != "") ? projectId : UIDGenerator.generate();
 
         // ── Tilesets ────────────────────────────────────────────────────────
         var tilesetsArray:Array<Dynamic> = [];
@@ -73,6 +76,7 @@ class ProjectSerializer {
 
         var data = {
             version:         PROJECT_VERSION,
+            projectId:       projectUid,
             projectName:     projectName != "" ? projectName : "Untitled",
             defaultTileSizeX: state.tileSizeX,
             defaultTileSizeY: state.tileSizeY,
@@ -115,6 +119,15 @@ class ProjectSerializer {
             trace("ProjectSerializer: Could not read/parse project file: " + e);
             return -1;
         }
+
+        // ── Project identity ─────────────────────────────────────────────────
+        var projectId:String = "";
+        if (data.projectId != null && Std.is(data.projectId, String) && cast(data.projectId, String) != "") {
+            projectId = cast(data.projectId, String);
+        } else {
+            projectId = UIDGenerator.generate();
+        }
+        state.projectId = projectId;
 
         // ── Global settings ──────────────────────────────────────────────────
         if (data.defaultTileSizeX != null && data.defaultTileSizeY != null) {
@@ -178,8 +191,9 @@ class ProjectSerializer {
             }
         }
 
-        trace("ProjectSerializer: Loaded project '" + (data.projectName != null ? data.projectName : "?")
-            + "' — " + entitiesLoaded + " entities, " + tilesetsLoaded + " tilesets");
+        var loadedProjectName:String = data.projectName != null ? cast(data.projectName, String) : "?";
+        trace("ProjectSerializer: Loaded project '" + loadedProjectName + "' (" + projectId + ") — "
+            + entitiesLoaded + " entities, " + tilesetsLoaded + " tilesets");
         return entitiesLoaded;
     }
 

@@ -64,11 +64,13 @@ typedef struct {
     int bgColor;
     int gridColor;
     const char* projectFilePath; // null / empty if map is not linked to a project
+    const char* projectId;       // null / empty if map is not linked to a project
     const char* projectName;     // null / empty if map is not linked to a project
 } MapProps;
 
 typedef struct {
     const char* filePath;
+    const char* projectId;
     const char* projectName;
     int defaultTileSizeX;
     int defaultTileSizeY;
@@ -114,13 +116,14 @@ extern "C" {
     // Project management
     __declspec(dllexport) bool exportProject(const char* filePath, const char* projectName);
     __declspec(dllexport) bool importProject(const char* filePath);
-    __declspec(dllexport) bool isProjectLoaded();             // editor-level: a project is open
     __declspec(dllexport) bool getProjectProps(ProjectProps* outProps);
     __declspec(dllexport) bool editProject(ProjectProps* inProps);
     
-    // Map import/export
-    __declspec(dllexport) int exportMap(const char* filePath);
-    __declspec(dllexport) int importMap(const char* filePath);
+    // Map management
+    __declspec(dllexport) bool exportMap(const char* filePath);
+    __declspec(dllexport) bool importMap(const char* filePath);
+    __declspec(dllexport) bool getMapProps(MapProps* outInfo);
+    __declspec(dllexport) bool setMapProps(MapProps* info);
 
     // Texture data retrieval
     __declspec(dllexport) void getTextureData(const char* path, TextureDataStruct* outData);
@@ -191,10 +194,7 @@ extern "C" {
     __declspec(dllexport) int moveLayerTo(const char* layerName, int newIndex);
     __declspec(dllexport) int moveLayerUpByIndex(int index);
     __declspec(dllexport) int moveLayerDownByIndex(int index);
-
-    // map
-    __declspec(dllexport) const char* getMapProps(MapProps* outInfo);
-    __declspec(dllexport) const char* setMapProps(MapProps* info);
+ 
 
     // tool
     __declspec(dllexport) void setToolType(int toolType);

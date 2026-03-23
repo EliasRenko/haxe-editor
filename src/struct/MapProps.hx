@@ -15,5 +15,6 @@ extern class MapProps {
 	var bgColor:Int;
 	var gridColor:Int;
 	var projectFilePath:cpp.ConstCharStar;
+	var projectId:cpp.ConstCharStar;
 	var projectName:cpp.ConstCharStar;
 }

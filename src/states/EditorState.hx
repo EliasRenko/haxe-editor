@@ -36,6 +36,8 @@ class EditorState extends State {
 
     /** Absolute path to the project this map belongs to, or null if standalone. */
     public var projectFilePath:Null<String> = null;
+    /** Stable project UID for map/project binding, or null if standalone. */
+    public var projectId:Null<String> = null;
     /** Display name of the project this map belongs to, or null if standalone. */
     public var projectName:Null<String> = null;
 
@@ -1625,10 +1627,22 @@ class EditorState extends State {
     /**
      * Export tilemap data to JSON format
      * @param filePath Absolute path where to save the JSON file
-     * @return Number of tiles exported
+     * @return true on success, false on error
      */
-    public function exportToJSON(filePath:String):Int {
-        return _mapSerializer.exportToJSON(filePath);
+    public function exportToJSON(filePath:String):Bool {
+        try {
+            var count = _mapSerializer.exportToJSON(filePath);
+            if (count < 0) {
+                var errMsg = "EditorState: exportToJSON failed for " + filePath;
+                app.log.error(LogCategory.APP, errMsg);
+                throw errMsg;
+            }
+            return true;
+        } catch (e:Dynamic) {
+            var errMsg = "EditorState: exportToJSON error for " + filePath + ": " + e;
+            app.log.error(LogCategory.APP, errMsg);
+            throw errMsg;
+        }
     }
 
     public function setLayerProperties(layerName:String, name:String, type:Int, tilesetName:String, visible:Bool, silhouette:Bool, silhouetteColor:Int):Void {
@@ -1656,25 +1670,37 @@ class EditorState extends State {
      * Import tilemap data from JSON format
      * Automatically loads tilesets and places tiles
      * @param filePath Absolute path to the JSON file
-     * @return Number of tiles imported, or -1 on error
+     * @return true on success, false on error
      */
-    public function importFromJSON(filePath:String):Int {
-        var result = _mapSerializer.importFromJSON(filePath);
+    public function importFromJSON(filePath:String):Bool {
+        try {
+            var result = _mapSerializer.importFromJSON(filePath);
+            if (result < 0) {
+                var errMsg = "EditorState: importFromJSON failed for " + filePath;
+                app.log.error(LogCategory.APP, errMsg);
+                throw errMsg;
+            }
 
-        // Rebuild entity name labels for all imported entities.
-        // Labels may not have been created during import if labelFont was not yet assigned
-        // to a layer when placeEntity was called (e.g. timing / ordering issues).
-        if (entityLabelFont != null) {
-            for (entity in entities) {
-                var el = Std.downcast(entity, EntityLayer);
-                if (el != null) {
-                    el.labelFont = entityLabelFont;
-                    el.rebuildLabels();
+            // Rebuild entity name labels for all imported entities.
+            // Labels may not have been created during import if labelFont was not yet assigned
+            // to a layer when placeEntity was called (e.g. timing / ordering issues).
+            if (entityLabelFont != null) {
+                for (entity in entities) {
+                    var el = Std.downcast(entity, EntityLayer);
+                    if (el != null) {
+                        el.labelFont = entityLabelFont;
+                        el.rebuildLabels();
+                    }
                 }
             }
-        }
 
-        return result;
+            return true;
+
+        } catch (e:Dynamic) {
+            var errMsg = "EditorState: importFromJSON error for " + filePath + ": " + e;
+            app.log.error(LogCategory.APP, errMsg);
+            throw errMsg;
+        }
     }
     
     // Helper functions for import context
@@ -1912,6 +1938,14 @@ private class MapSerializer {
 
     private var state:EditorState;
 
+    private function normalizeProjectPath(path:String):String {
+        if (path == null) return null;
+        var normalized = StringTools.replace(path, "\\", "/");
+        normalized = StringTools.trim(normalized);
+        if (normalized.length == 0) return null;
+        return normalized.toLowerCase();
+    }
+
     public function new(state:EditorState) {
         this.state = state;
     }
@@ -2010,7 +2044,6 @@ private class MapSerializer {
 
         var data:Dynamic = {
             version: "1.5",
-            currentTileset: state.tilesetManager.currentTilesetName,
             mapBounds: {
                 x: state.mapX,
                 y: state.mapY,
@@ -2025,10 +2058,12 @@ private class MapSerializer {
             tileCount: totalTileCount
         };
 
-        if (hasProject) {
-            // Project-backed map: store the project path, skip redundant texture list.
-            Reflect.setField(data, "projectFile", state.projectFilePath);
-        } else {
+        // Always write map->project relationship so callers can confirm if map is project-backed.
+        Reflect.setField(data, "projectFile", state.projectFilePath != null ? state.projectFilePath : "");
+        Reflect.setField(data, "projectId", state.projectId != null ? state.projectId : "");
+        Reflect.setField(data, "projectName", state.projectName != null ? state.projectName : "");
+
+        if (!hasProject) {
             // Standalone map: embed texture declarations so the file is self-contained.
             var texturesArray:Array<Dynamic> = [];
             for (tilesetName in state.tilesetManager.tilesets.keys()) {
@@ -2044,8 +2079,10 @@ private class MapSerializer {
             trace("Exported " + totalTileCount + " tiles in " + layersData.length + " layers to: " + filePath);
             return totalTileCount;
         } catch (e:Dynamic) {
-            trace("Error exporting JSON: " + e);
-            return -1;
+            var errMsg = "Error exporting JSON: " + e;
+            state.app.log.error(LogCategory.APP, errMsg);
+            trace(errMsg);
+            throw errMsg;
         }
     }
 
@@ -2066,14 +2103,63 @@ private class MapSerializer {
 
             state.clearLayers();
 
-            // If the map references a project file, load it first so that
-            // entity definitions and tilesets are available before layers are
-            // reconstructed.  Inline tilesets/entityDefinitions are still
-            // honoured as a fallback for standalone (project-less) maps.
-            if (data.projectFile != null) {
-                var projectPath:String = data.projectFile;
-                var projectResult = state._projectSerializer.importFromJSON(projectPath);
-                if (projectResult >= 0) state.projectFilePath = projectPath;
+            // If the map references a project, enforce UID coherence.
+            // If this state already has a project loaded, map must match by projectId.
+            // If state has no project, load the map's project first.
+            var existingProjectId:String = state.projectId;
+
+            var mapProjectPath:String = null;
+            var mapProjectId:String = null;
+            var mapProjectName:String = null;
+
+            if (data.projectFile != null && Std.is(data.projectFile, String)) {
+                mapProjectPath = cast(data.projectFile, String);
+            }
+            if (data.projectId != null && Std.is(data.projectId, String)) {
+                mapProjectId = cast(data.projectId, String);
+                if (mapProjectId == "") mapProjectId = null;
+            }
+            if (data.projectName != null && Std.is(data.projectName, String)) {
+                mapProjectName = cast(data.projectName, String);
+                if (mapProjectName == "") mapProjectName = null;
+            }
+
+            if (mapProjectId == null) {
+                var errMsg:String = "Map is not project-backed (missing projectId)";
+                state.app.log.error(LogCategory.APP, errMsg);
+                trace("Error importing map: " + errMsg);
+                throw errMsg;
+            }
+
+            if (existingProjectId != null && existingProjectId != mapProjectId) {
+                var errMsg:String = "Map project mismatch: map references projectId '" + mapProjectId + "', current state has projectId '" + existingProjectId + "'";
+                state.app.log.error(LogCategory.APP, errMsg);
+                trace("Error importing map: " + errMsg);
+                throw errMsg;
+            }
+
+            if (existingProjectId == null) {
+                if (mapProjectPath == null) {
+                    var errMsg:String = "Map is not project-backed (missing projectFile)";
+                    state.app.log.error(LogCategory.APP, errMsg);
+                    trace("Error importing map: " + errMsg);
+                    throw errMsg;
+                }
+
+                // No project has been loaded yet in this state - import now.
+                var projectResult = state._projectSerializer.importFromJSON(mapProjectPath);
+                if (projectResult < 0) {
+                    var errMsg:String = "Project import failed for: " + mapProjectPath;
+                    state.app.log.error(LogCategory.APP, errMsg);
+                    trace("Error importing map: " + errMsg);
+                    throw errMsg;
+                }
+            }
+
+            state.projectFilePath = mapProjectPath;
+            state.projectId = mapProjectId;
+            if (mapProjectName != null) {
+                state.projectName = mapProjectName;
             }
 
             // Load textures — new key is "textures", fall back to legacy "tilesets" key.
@@ -2106,13 +2192,6 @@ private class MapSerializer {
                     );
                     trace("[legacy] Loaded entity definition from map JSON: " + entityData.name);
                 }
-            }
-
-            // Set current tileset
-            if (data.currentTileset != null) {
-                var currentName:String = data.currentTileset;
-                if (state.tilesetManager.exists(currentName))
-                    state.setCurrentTileset(currentName);
             }
 
             // Restore map bounds and tile size
@@ -2229,8 +2308,10 @@ private class MapSerializer {
             return importedCount;
 
         } catch (e:Dynamic) {
-            trace("Error importing JSON: " + e);
-            return -1;
+            var errMsg = "Error importing JSON: " + e;
+            state.app.log.error(LogCategory.APP, errMsg);
+            trace(errMsg);
+            throw errMsg;
         }
     }
 }
