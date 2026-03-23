@@ -509,6 +509,16 @@ class Editor {
         _projectData.projectName      = pn;
         _projectData.defaultTileSizeX = ref.defaultTileSizeX;
         _projectData.defaultTileSizeY = ref.defaultTileSizeY;
+
+        // Save the edited project back to disk if the project path is set.
+        if (_projectData.projectFilePath != null && _projectData.projectFilePath != "") {
+            var saveName = _projectData.projectName != null ? _projectData.projectName : "";
+            if (!exportProject(_projectData.projectFilePath, saveName)) {
+                app.log.error(LogCategory.APP, "Editor: Failed to save project after edit: " + _projectData.projectFilePath);
+                return false;
+            }
+        }
+
         // Re-apply project defaults to all active states.
         for (state in app.states) {
             applyProjectToState(cast state);
