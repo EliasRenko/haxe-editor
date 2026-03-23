@@ -2043,7 +2043,7 @@ private class MapSerializer {
         var hasProject = state.projectFilePath != null;
 
         var data:Dynamic = {
-            version: "1.5",
+            version: "1.6",
             mapBounds: {
                 x: state.mapX,
                 y: state.mapY,
@@ -2100,6 +2100,19 @@ private class MapSerializer {
         try {
             var jsonString = sys.io.File.getContent(filePath);
             var data:Dynamic = haxe.Json.parse(jsonString);
+
+            // Enforce exact map data versioning: only 1.6 is supported.
+            var mapVersion:String = null;
+            if (data.version != null && Std.is(data.version, String)) {
+                mapVersion = cast(data.version, String);
+            }
+
+            if (mapVersion != "1.6") {
+                var errMsg:String = "Unsupported map version: " + (mapVersion != null ? mapVersion : "<missing>") + ". Expected 1.6.";
+                state.app.log.error(LogCategory.APP, errMsg);
+                trace("Error importing map: " + errMsg);
+                throw errMsg;
+            }
 
             state.clearLayers();
 
