@@ -547,20 +547,20 @@ class Editor {
      * @return The index of the newly created state, or -1 on error
      */
     @:keep
-    public static function importMap(filePath:String):Bool {
+    public static function importMap(filePath:String):Int {
         try {
             var jsonString = app.loadBytes(filePath).toString();
             var data:Dynamic = haxe.Json.parse(jsonString);
 
             if (data.map == null) {
                 app.log.error(LogCategory.APP, "Editor: Invalid map JSON: missing top-level 'map' object");
-                return false;
+                return -1;
             }
 
             var mapContent:Dynamic = data.map;
             if (mapContent == null) {
                 app.log.error(LogCategory.APP, "Editor: Invalid map JSON: 'map' object is null");
-                return false;
+                return -1;
             }
 
             // ** Project handling
@@ -585,17 +585,17 @@ class Editor {
             if (mapProjectPath != null) {
                 if (!sys.FileSystem.exists(mapProjectPath)) {
                     app.log.error(LogCategory.APP, "Editor: Map references missing project file: " + mapProjectPath);
-                    return false;
+                    return -1;
                 }
 
                 if (!importProject(mapProjectPath)) {
                     app.log.error(LogCategory.APP, "Editor: Failed to import referenced project: " + mapProjectPath);
-                    return false;
+                    return -1;
                 }
 
                 if (mapProjectId != null && _projectData != null && _projectData.projectId != mapProjectId) {
                     app.log.error(LogCategory.APP, "Editor: Map projectId does not match project file id");
-                    return false;
+                    return -1;
                 }
 
                 if (mapProjectName != null && _projectData != null && _projectData.projectName != mapProjectName) {
@@ -605,19 +605,18 @@ class Editor {
                 // active state is created by importProject (blank state with project context)
                 if (editorState == null) {
                     app.log.error(LogCategory.APP, "Editor: No editor state available after importing project");
-                    return false;
+                    return -1;
                 }
 
             } else {
-                // tilesetManager = new TilesetManager();
-                // entityManager = new EntityManager();
-                // var newState = new EditorState(app, tilesetManager, entityManager);
-                // app.addState(newState);
-                // app.switchToState(newState);
-                // wireEditorStateCallbacks();
+                throw "Map JSON does not reference a project file";
             }
 
             var newState = new EditorState(app, tilesetManager, entityManager);
+            newState.projectFilePath = mapProjectPath;
+            newState.projectId = mapProjectId;
+            newState.projectName = mapProjectName;
+
             var index = app.addState(newState);
             wireEditorStateCallbacks();
 
@@ -629,10 +628,10 @@ class Editor {
 
             app.switchToState(newState);
 
-            return success;
+            return index;
         } catch (e:Dynamic) {
             app.log.error(LogCategory.APP, "Editor: Error importing tilemap: " + e);
-            return false;
+            return -1;
         }
     }
 

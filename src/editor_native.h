@@ -121,7 +121,7 @@ extern "C" {
     
     // Map management
     __declspec(dllexport) bool exportMap(const char* filePath);
-    __declspec(dllexport) bool importMap(const char* filePath);
+    __declspec(dllexport) int importMap(const char* filePath);
     __declspec(dllexport) bool getMapProps(MapProps* outInfo);
     __declspec(dllexport) bool setMapProps(MapProps* info);
 

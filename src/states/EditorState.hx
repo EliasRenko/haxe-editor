@@ -1837,87 +1837,30 @@ class EditorState extends State {
             if (mapVersion != "1.6") {
                 var errMsg:String = "Unsupported map version: " + (mapVersion != null ? mapVersion : "<missing>") + ". Expected 1.6.";
                 app.log.error(LogCategory.APP, errMsg);
-                trace("Error importing map: " + errMsg);
                 throw errMsg;
             }
 
-            clearLayers();
+            // TODO: Import textures later
+            // var rawTextures:Null<Array<Dynamic>> = mapData.textures != null ? mapData.textures : mapData.tilesets;
+            // if (rawTextures != null) {
+            //     for (texData in rawTextures) {
+            //         var name:String = texData.name;
+            //         var path:String = texData.texturePath;
+            //         if (texData.tileSize != null) tileSizeMap.set(name, Std.int(texData.tileSize));
 
-            var existingProjectId:String = projectId;
-
-            var mapProjectPath:String = null;
-            var mapProjectId:String = null;
-            var mapProjectName:String = null;
-
-            if (mapData.projectFile != null && Std.is(mapData.projectFile, String)) {
-                mapProjectPath = cast(mapData.projectFile, String);
-            }
-            if (mapData.projectId != null && Std.is(mapData.projectId, String)) {
-                mapProjectId = cast(mapData.projectId, String);
-                if (mapProjectId == "") mapProjectId = null;
-            }
-            if (mapData.projectName != null && Std.is(mapData.projectName, String)) {
-                mapProjectName = cast(mapData.projectName, String);
-                if (mapProjectName == "") mapProjectName = null;
-            }
-
-            if (mapProjectId == null) {
-                var errMsg:String = "Map is not project-backed (missing projectId)";
-                app.log.error(LogCategory.APP, errMsg);
-                trace("Error importing map: " + errMsg);
-                throw errMsg;
-            }
-
-            if (existingProjectId != null && existingProjectId != mapProjectId) {
-                var errMsg:String = "Map project mismatch: map references projectId '" + mapProjectId + "', current state has projectId '" + existingProjectId + "'";
-                app.log.error(LogCategory.APP, errMsg);
-                trace("Error importing map: " + errMsg);
-                throw errMsg;
-            }
-
-            if (existingProjectId == null) {
-                if (mapProjectPath == null) {
-                    var errMsg:String = "Map is not project-backed (missing projectFile)";
-                    app.log.error(LogCategory.APP, errMsg);
-                    trace("Error importing map: " + errMsg);
-                    throw errMsg;
-                }
-
-                var projectResult = new ProjectSerializer(this).importFromJSON(mapProjectPath);
-                if (projectResult < 0) {
-                    var errMsg:String = "Project import failed for: " + mapProjectPath;
-                    app.log.error(LogCategory.APP, errMsg);
-                    trace("Error importing map: " + errMsg);
-                    throw errMsg;
-                }
-            }
-
-            projectFilePath = mapProjectPath;
-            projectId = mapProjectId;
-            if (mapProjectName != null) {
-                projectName = mapProjectName;
-            }
-
-            var rawTextures:Null<Array<Dynamic>> = mapData.textures != null ? mapData.textures : mapData.tilesets;
-            if (rawTextures != null) {
-                for (texData in rawTextures) {
-                    var name:String = texData.name;
-                    var path:String = texData.texturePath;
-                    if (texData.tileSize != null) tileSizeMap.set(name, Std.int(texData.tileSize));
-
-                    if (!tilesetManager.exists(name)) {
-                        var resolvedPath:String = resolveTexturePath(path);
-                        var err:String = Editor.createTileset(resolvedPath, name);
-                        if (err != null) {
-                            var errorMsg:String = "EditorState: Could not load tileset '" + name + "' from '" + resolvedPath + "': " + err;
-                            app.log.error(LogCategory.APP, errorMsg);
-                            trace(errorMsg);
-                            continue;
-                        }
-                        trace("Loaded texture from map JSON: " + name + " (path: " + resolvedPath + ")");
-                    }
-                }
-            }
+            //         if (!tilesetManager.exists(name)) {
+            //             var resolvedPath:String = resolveTexturePath(path);
+            //             var err:String = Editor.createTileset(resolvedPath, name);
+            //             if (err != null) {
+            //                 var errorMsg:String = "EditorState: Could not load tileset '" + name + "' from '" + resolvedPath + "': " + err;
+            //                 app.log.error(LogCategory.APP, errorMsg);
+            //                 trace(errorMsg);
+            //                 continue;
+            //             }
+            //             trace("Loaded texture from map JSON: " + name + " (path: " + resolvedPath + ")");
+            //         }
+            //     }
+            // }
 
             var importedCount = 0;
             var layersData:Array<Dynamic> = mapData.layers;
@@ -2031,20 +1974,6 @@ class EditorState extends State {
             trace(errMsg);
             return -1;
         }
-    }
-
-    private function resolveTexturePath(rawPath:String):String {
-        if (rawPath == null) return null;
-
-        var path:String = StringTools.replace(rawPath, "\\", "/");
-
-        if (sys.FileSystem.exists(path)) {
-            return path;
-        }
-
-        // no mapDir fallback needed in project-backed flow;
-        // keep rawPath as last-resort for fully resolved locations.
-        return rawPath;
     }
 
     private function clearLayers():Void {
