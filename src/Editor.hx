@@ -189,21 +189,6 @@ class Editor {
         return true;
     }
 
-    /** Release and destroy every registered EditorState.
-     *  After this call app.states.count == 0 and app.currentState == null. */
-    private static function releaseAllStates():Void {
-        if (app == null || app.states.count == 0) return;
-        // Collect all valid slot IDs first — must not modify the collection while iterating.
-        // Slot IDs are small non-negative integers; bound the search conservatively.
-        var ids:Array<Int> = [];
-        var maxId = app.states.count * 2 + 16;
-        for (i in 0...maxId) {
-            if (app.states.isValid(i)) ids.push(i);
-        }
-        for (id in ids) app.removeState(id);
-        app.log.info(Log.LogCategory.SYSTEM, "Editor: Released " + ids.length + " state(s) for project switch");
-    }
-
     /** Apply project-level defaults (tile size) to a state.
      *  Also connect state.projectFilePath/projectName when project context exists.
      */
@@ -316,10 +301,6 @@ class Editor {
      */
     @:keep
     public static function exportProject(filePath:String, projectName:String):Bool {
-        if (editorState == null) {
-            app.log.error(LogCategory.APP, "Editor: EditorState not loaded");
-            return false;
-        }
         try {
             // Tilesets
             var tilesetsArray:Array<Dynamic> = [];
@@ -359,7 +340,11 @@ class Editor {
                 entityDefinitions: entitiesArray
             };
 
-            sys.io.File.saveContent(filePath, haxe.Json.stringify(data, null, "  "));
+            var payload = {
+                project: data
+            };
+
+            sys.io.File.saveContent(filePath, haxe.Json.stringify(payload, null, "  "));
 
             // Update editor-level project metadata only.
             // state.projectFilePath is map-level — not touched here.
@@ -397,19 +382,10 @@ class Editor {
      */
     @:keep
     public static function importProject(filePath:String):Bool {
-        if (app == null || !initialized) {
-            log("Editor: App not initialized");
-            return false;
-        }
         try {
-            // Parse first — leave existing state untouched if the file is unreadable.
-            var jsonString = sys.io.File.getContent(filePath);
+            var jsonString = app.loadBytes(filePath).toString();
             var data:Dynamic = haxe.Json.parse(jsonString);
 
-            // Shut down every state that belongs to the previous project (if any).
-            releaseAllStates();
-
-            // Fresh managers so no old project data leaks into the new one.
             tilesetManager = new TilesetManager();
             entityManager  = new EntityManager();
 
@@ -418,32 +394,38 @@ class Editor {
             app.addState(blankState);
             wireEditorStateCallbacks();
 
+            var projectData:Dynamic;
+            if (data.project != null) {
+                projectData = data.project;
+            } else {
+                throw "Invalid project file: missing top-level 'project' object";
+            }
+
             // Global tile size
             var tileSizeX = 16;
             var tileSizeY = 16;
-            if (data.defaultTileSizeX != null && data.defaultTileSizeY != null) {
-                tileSizeX = Std.int(data.defaultTileSizeX);
-                tileSizeY = Std.int(data.defaultTileSizeY);
+            if (projectData.defaultTileSizeX != null && projectData.defaultTileSizeY != null) {
+                tileSizeX = Std.int(projectData.defaultTileSizeX);
+                tileSizeY = Std.int(projectData.defaultTileSizeY);
             }
 
             // Tilesets — one bad path must not abort the rest
-            if (data.tilesets != null) {
-                var tilesetsArray:Array<Dynamic> = data.tilesets;
+            if (projectData.tilesets != null) {
+                var tilesetsArray:Array<Dynamic> = projectData.tilesets;
                 for (tilesetData in tilesetsArray) {
                     var name:String = tilesetData.name;
                     var path:String = tilesetData.texturePath;
-                    if (!tilesetManager.exists(name)) {
-                        var err = editorState.createTileset(path, name);
-                        if (err != null)
+                    var err = Editor.createTileset(path, name);
+                        if (err != null) {
                             app.log.error(LogCategory.APP, "Editor: Warning — could not load tileset '" + name + "': " + err);
-                    }
+                        }
                 }
             }
 
             // Entity definitions — written directly to shared EntityManager
             var entitiesLoaded = 0;
-            if (data.entityDefinitions != null) {
-                var entitiesArray:Array<Dynamic> = data.entityDefinitions;
+            if (projectData.entityDefinitions != null) {
+                var entitiesArray:Array<Dynamic> = projectData.entityDefinitions;
                 for (entityData in entitiesArray) {
                     var pivotX:Float = entityData.pivotX != null ? entityData.pivotX : 0.0;
                     var pivotY:Float = entityData.pivotY != null ? entityData.pivotY : 0.0;
@@ -460,13 +442,13 @@ class Editor {
             }
 
             // Persist project metadata and apply to the single blank state.
-            var projectId:String = (data.projectId != null && Std.is(data.projectId, String) && cast(data.projectId, String) != "")
-                ? cast(data.projectId, String) : UIDGenerator.generate();
+            var projectId:String = (projectData.projectId != null && Std.is(projectData.projectId, String) && cast(projectData.projectId, String) != "")
+                ? cast(projectData.projectId, String) : UIDGenerator.generate();
 
             _projectData = {
                 projectFilePath:  filePath,
                 projectId:        projectId,
-                projectName:      data.projectName != null ? data.projectName : "",
+                projectName:      projectData.projectName != null ? projectData.projectName : "",
                 defaultTileSizeX: tileSizeX,
                 defaultTileSizeY: tileSizeY
             };
@@ -487,12 +469,13 @@ class Editor {
     @:keep
     public static function getProjectProps(outProps:Pointer<ProjectProps>):Bool {
         if (_projectData == null) return false;
+
         var ref:Reference<ProjectProps> = outProps.ref;
         var fp:String = _projectData.projectFilePath != null ? _projectData.projectFilePath : "";
         var pid:String = _projectData.projectId != null ? _projectData.projectId : "";
         var pn:String = _projectData.projectName;
         ref.filePath         = fp;
-        ref.projectId       = pid;
+        ref.projectId        = pid;
         ref.projectName      = pn;
         ref.defaultTileSizeX = _projectData.defaultTileSizeX;
         ref.defaultTileSizeY = _projectData.defaultTileSizeY;
@@ -541,16 +524,6 @@ class Editor {
      */
     @:keep
     public static function exportMap(filePath:String):Bool {
-        if (app == null || !initialized) {
-            log("Editor: Cannot export tilemap - engine not initialized");
-            return false;
-        }
-
-        if (editorState == null) {
-            log("Editor: EditorState not loaded");
-            return false;
-        }
-
         try {
             var success = editorState.exportToJSON(filePath);
             if (success) {
@@ -571,20 +544,77 @@ class Editor {
      */
     @:keep
     public static function importMap(filePath:String):Bool {
-        if (app == null || !initialized) {
-            log("Editor: Cannot import tilemap - engine not initialized");
-            return false;
-        }
-
         try {
-            // Create a fresh state for this map
-            var newState = new EditorState(app, tilesetManager, entityManager);
-            var stateIndex = app.addState(newState);
-            app.switchToState(newState);
-            applyProjectToState(newState);
-            wireEditorStateCallbacks();
+            var jsonString = app.loadBytes(filePath).toString();
+            var data:Dynamic = haxe.Json.parse(jsonString);
 
-            var success = editorState.importFromJSON(filePath);
+            if (data.map == null) {
+                app.log.error(LogCategory.APP, "Editor: Invalid map JSON: missing top-level 'map' object");
+                return false;
+            }
+
+            var mapContent:Dynamic = data.map;
+            if (mapContent == null) {
+                app.log.error(LogCategory.APP, "Editor: Invalid map JSON: 'map' object is null");
+                return false;
+            }
+
+            // ** Project handling
+            var mapProjectPath:String = null;
+            if (mapContent.projectFile != null && Std.is(mapContent.projectFile, String)) {
+                mapProjectPath = cast(mapContent.projectFile, String);
+                if (mapProjectPath == "") mapProjectPath = null;
+            }
+
+            var mapProjectId:String = null;
+            if (mapContent.projectId != null && Std.is(mapContent.projectId, String)) {
+                mapProjectId = cast(mapContent.projectId, String);
+                if (mapProjectId == "") mapProjectId = null;
+            }
+
+            var mapProjectName:String = null;
+            if (mapContent.projectName != null && Std.is(mapContent.projectName, String)) {
+                mapProjectName = cast(mapContent.projectName, String);
+                if (mapProjectName == "") mapProjectName = null;
+            }
+
+            if (mapProjectPath != null) {
+                if (!sys.FileSystem.exists(mapProjectPath)) {
+                    app.log.error(LogCategory.APP, "Editor: Map references missing project file: " + mapProjectPath);
+                    return false;
+                }
+
+                if (!importProject(mapProjectPath)) {
+                    app.log.error(LogCategory.APP, "Editor: Failed to import referenced project: " + mapProjectPath);
+                    return false;
+                }
+
+                if (mapProjectId != null && _projectData != null && _projectData.projectId != mapProjectId) {
+                    app.log.error(LogCategory.APP, "Editor: Map projectId does not match project file id");
+                    return false;
+                }
+
+                if (mapProjectName != null && _projectData != null && _projectData.projectName != mapProjectName) {
+                    app.log.warn(LogCategory.APP, "Editor: Map projectName does not match project file name, using project file name");
+                }
+
+                // active state is created by importProject (blank state with project context)
+                if (editorState == null) {
+                    app.log.error(LogCategory.APP, "Editor: No editor state available after importing project");
+                    return false;
+                }
+
+            } else {
+                tilesetManager = new TilesetManager();
+                entityManager = new EntityManager();
+                var newState = new EditorState(app, tilesetManager, entityManager);
+                app.addState(newState);
+                app.switchToState(newState);
+                wireEditorStateCallbacks();
+            }
+
+            // Import map contents (layers, tiles, entity instances, etc.)
+            var success = editorState.importFromJSON(mapContent);
             if (success) {
                 app.log.info(LogCategory.APP, "Editor: Imported map from: " + filePath);
             }
@@ -652,8 +682,23 @@ class Editor {
     // ===== TILESET MANAGEMENT =====
 
     @:keep public static function createTileset(texturePath:String, tilesetName:String):String {
-        // Delegate: state loads texture + uploads to GPU, writing into shared tilesetManager
-        return editorState.createTileset(texturePath, tilesetName);
+        var error:String = null;
+
+        if (!app.resources.cached(texturePath)) {
+            app.log.info(LogCategory.APP, "Loading texture: " + texturePath);
+            app.resources.loadTexture(texturePath, false);
+        }
+
+        if (tilesetManager.exists(tilesetName)) {
+            error = "Tileset with the name " + tilesetName + " already exists";
+            app.log.info(LogCategory.APP, error);
+            return error;
+        }
+        
+        var glTexture:Texture = app.renderer.uploadTexture(app.resources.getTexture(texturePath, false));
+        tilesetManager.setTileset(glTexture, tilesetName, texturePath);
+
+        return null;
     }
 
     @:keep public static function deleteTileset(name:String):String {
@@ -780,16 +825,41 @@ class Editor {
 
     @:keep
     public static function createEntityDef(entityName:String, data:Pointer<EntityDataStruct>):String {
-        // createEntityFull validates tileset exists and that the name is unique
+        if (entityManager == null) {
+            return "Cannot create entity '" + entityName + "': editor not initialized";
+        }
+
         var ref:Reference<EntityDataStruct> = data.ref;
         var tilesetName:String = ref.tilesetName;
-        return editorState.createEntityFull(
+
+        if (tilesetName != null && tilesetName != "" && !tilesetManager.exists(tilesetName)) {
+            return "Cannot create entity '" + entityName + "': tileset '" + tilesetName + "' does not exist";
+        }
+
+        if (entityManager.exists(entityName)) {
+            return "Cannot create entity '" + entityName + "': definition already exists";
+        }
+
+        var rX = ref.regionX;
+        var rY = ref.regionY;
+        var rW = ref.regionWidth;
+        var rH = ref.regionHeight;
+        if (tilesetName == null || tilesetName == "") {
+            rX = 0;
+            rY = 0;
+            rW = ref.width;
+            rH = ref.height;
+        }
+
+        entityManager.setEntityFull(
             entityName,
             ref.width, ref.height,
             tilesetName,
-            ref.regionX, ref.regionY, ref.regionWidth, ref.regionHeight,
+            rX, rY, rW, rH,
             ref.pivotX, ref.pivotY
         );
+
+        return null;
     }
 
     @:keep

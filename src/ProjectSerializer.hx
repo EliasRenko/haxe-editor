@@ -74,14 +74,18 @@ class ProjectSerializer {
             });
         }
 
-        var data = {
-            version:         PROJECT_VERSION,
-            projectId:       projectUid,
-            projectName:     projectName != "" ? projectName : "Untitled",
+        var projectData = {
+            version:          PROJECT_VERSION,
+            projectId:        projectUid,
+            projectName:      projectName != "" ? projectName : "Untitled",
             defaultTileSizeX: state.tileSizeX,
             defaultTileSizeY: state.tileSizeY,
             tilesets:         tilesetsArray,
             entityDefinitions: entitiesArray
+        };
+
+        var data = {
+            project: projectData
         };
 
         var jsonString = haxe.Json.stringify(data, null, "  ");
@@ -120,17 +124,24 @@ class ProjectSerializer {
             return -1;
         }
 
+        // Enforce wrapped project format.
+        if (data.project == null) {
+            trace("ProjectSerializer: Invalid project JSON: missing top-level 'project' object");
+            return -1;
+        }
+        var projectData:Dynamic = data.project;
+
         // ── Project identity ─────────────────────────────────────────────────
         var projectId:String = "";
-        if (data.projectId != null && Std.is(data.projectId, String) && cast(data.projectId, String) != "") {
-            projectId = cast(data.projectId, String);
+        if (projectData.projectId != null && Std.is(projectData.projectId, String) && cast(projectData.projectId, String) != "") {
+            projectId = cast(projectData.projectId, String);
         } else {
             projectId = UIDGenerator.generate();
         }
         state.projectId = projectId;
 
         // ── Global settings ──────────────────────────────────────────────────
-        if (data.defaultTileSizeX != null && data.defaultTileSizeY != null) {
+        if (projectData.defaultTileSizeX != null && projectData.defaultTileSizeY != null) {
             try {
                 state.setTileSize(Std.int(data.defaultTileSizeX), Std.int(data.defaultTileSizeY));
             } catch (e:Dynamic) {
@@ -151,7 +162,7 @@ class ProjectSerializer {
                     if (state.tilesetManager.exists(name)) {
                         trace("ProjectSerializer: Tileset already loaded, skipping: " + name);
                     } else {
-                        var err = state.createTileset(path, name);
+                        var err = Editor.createTileset(path, name);
                         if (err == null)
                             trace("ProjectSerializer: Loaded tileset: " + name);
                         else
@@ -191,7 +202,7 @@ class ProjectSerializer {
             }
         }
 
-        var loadedProjectName:String = data.projectName != null ? cast(data.projectName, String) : "?";
+        var loadedProjectName:String = projectData.projectName != null ? cast(projectData.projectName, String) : "?";
         trace("ProjectSerializer: Loaded project '" + loadedProjectName + "' (" + projectId + ") — "
             + entitiesLoaded + " entities, " + tilesetsLoaded + " tilesets");
         return entitiesLoaded;
@@ -211,7 +222,8 @@ class ProjectSerializer {
         try {
             var jsonString = sys.io.File.getContent(filePath);
             var data:Dynamic = haxe.Json.parse(jsonString);
-            return data.projectName;
+            if (data.project == null) return null;
+            return data.project.projectName;
         } catch (_:Dynamic) {
             return null;
         }

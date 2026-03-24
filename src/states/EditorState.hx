@@ -7,6 +7,7 @@ import App;
 import Renderer;
 import display.Grid;
 import display.ManagedTileBatch;
+import Editor;
 import display.MapFrame;
 import display.LineBatch;
 import display.Selection;
@@ -31,8 +32,6 @@ class EditorState extends State {
     /** Shared BitmapFont for entity name labels. */
     private var entityLabelFont:BitmapFont = null;
     private var _labelDebugFrames:Int = 0;
-    private var _mapSerializer:MapSerializer;
-    private var _projectSerializer:ProjectSerializer;
 
     /** Absolute path to the project this map belongs to, or null if standalone. */
     public var projectFilePath:Null<String> = null;
@@ -96,8 +95,6 @@ class EditorState extends State {
         super("EditorState", app);
         this.tilesetManager = tilesetManager;
         this.entityManager = entityManager;
-        _mapSerializer = new MapSerializer(this);
-        _projectSerializer = new ProjectSerializer(this);
     }
     
     override public function init():Void {
@@ -187,25 +184,25 @@ class EditorState extends State {
     }
 
     // CHECKED!
-    public function createTileset(texturePath:String, tilesetName:String):String {
-        var error:String = null;
+    // public function createTileset(texturePath:String, tilesetName:String):String {
+    //     var error:String = null;
 
-        if (!app.resources.cached(texturePath)) {
-            app.log.info(LogCategory.APP, "Loading texture: " + texturePath);
-            app.resources.loadTexture(texturePath, false);
-        }
+    //     if (!app.resources.cached(texturePath)) {
+    //         app.log.info(LogCategory.APP, "Loading texture: " + texturePath);
+    //         app.resources.loadTexture(texturePath, false);
+    //     }
 
-        if (tilesetManager.exists(tilesetName)) {
-            error = "Tileset with the name " + tilesetName + " already exists";
-            app.log.info(LogCategory.APP, error);
-            return error;
-        }
+    //     if (tilesetManager.exists(tilesetName)) {
+    //         error = "Tileset with the name " + tilesetName + " already exists";
+    //         app.log.info(LogCategory.APP, error);
+    //         return error;
+    //     }
         
-        var tileTexture:Texture = app.renderer.uploadTexture(app.resources.getTexture(texturePath, false));
-        tilesetManager.setTileset(tileTexture, tilesetName, texturePath);
+    //     var glTexture:Texture = app.renderer.uploadTexture(app.resources.getTexture(texturePath, false));
+    //     tilesetManager.setTileset(glTexture, tilesetName, texturePath);
 
-        return null;
-    }
+    //     return null;
+    // }
     
     // ===== ENTITY DEFINITION MANAGEMENT =====
     
@@ -362,34 +359,34 @@ class EditorState extends State {
         }
     }
 
-    /**
-     * Create a brand-new entity definition from a full set of fields.
-     * Fails if a definition with the same name already exists.
-     */
-    public function createEntityFull(entityName:String, width:Int, height:Int, tilesetName:String,
-                                     regionX:Int, regionY:Int, regionWidth:Int, regionHeight:Int,
-                                     pivotX:Float, pivotY:Float):String {
-        // tilesetName may be null/empty to create a definition with no tileset attached.
-        // Non-null, non-empty names are validated to catch typos.
-        if (tilesetName != null && tilesetName != "" && !tilesetManager.exists(tilesetName)) {
-            var error = "Cannot create entity '" + entityName + "': tileset '" + tilesetName + "' does not exist";
-            app.log.info(LogCategory.APP, error);
-            return error;
-        }
-        if (entityManager.exists(entityName)) {
-            var error = "Cannot create entity '" + entityName + "': definition already exists. Use editEntityDef to update it.";
-            app.log.info(LogCategory.APP, error);
-            return error;
-        }
-        // When there's no tileset, use the entity's own dimensions as the render region
-        // so the red silhouette is sized correctly.
-        var rX = regionX; var rY = regionY; var rW = regionWidth; var rH = regionHeight;
-        if (tilesetName == null || tilesetName == "") { rX = 0; rY = 0; rW = width; rH = height; }
-        entityManager.setEntityFull(entityName, width, height, tilesetName,
-                                    rX, rY, rW, rH,
-                                    pivotX, pivotY);
-        return null;
-    }
+    // /**
+    //  * Create a brand-new entity definition from a full set of fields.
+    //  * Fails if a definition with the same name already exists.
+    //  */
+    // public function createEntityFull(entityName:String, width:Int, height:Int, tilesetName:String,
+    //                                  regionX:Int, regionY:Int, regionWidth:Int, regionHeight:Int,
+    //                                  pivotX:Float, pivotY:Float):String {
+    //     // tilesetName may be null/empty to create a definition with no tileset attached.
+    //     // Non-null, non-empty names are validated to catch typos.
+    //     if (tilesetName != null && tilesetName != "" && !tilesetManager.exists(tilesetName)) {
+    //         var error = "Cannot create entity '" + entityName + "': tileset '" + tilesetName + "' does not exist";
+    //         app.log.info(LogCategory.APP, error);
+    //         return error;
+    //     }
+    //     if (entityManager.exists(entityName)) {
+    //         var error = "Cannot create entity '" + entityName + "': definition already exists. Use editEntityDef to update it.";
+    //         app.log.info(LogCategory.APP, error);
+    //         return error;
+    //     }
+    //     // When there's no tileset, use the entity's own dimensions as the render region
+    //     // so the red silhouette is sized correctly.
+    //     var rX = regionX; var rY = regionY; var rW = regionWidth; var rH = regionHeight;
+    //     if (tilesetName == null || tilesetName == "") { rX = 0; rY = 0; rW = width; rH = height; }
+    //     entityManager.setEntityFull(entityName, width, height, tilesetName,
+    //                                 rX, rY, rW, rH,
+    //                                 pivotX, pivotY);
+    //     return null;
+    // }
     
     // CHECKED!
     public function setEntityRegion(entityName:String, x:Int, y:Int, width:Int, height:Int):Void {
@@ -1631,7 +1628,7 @@ class EditorState extends State {
      */
     public function exportToJSON(filePath:String):Bool {
         try {
-            var count = _mapSerializer.exportToJSON(filePath);
+            var count = new MapSerializer(this).exportToJSON(filePath);
             if (count < 0) {
                 var errMsg = "EditorState: exportToJSON failed for " + filePath;
                 app.log.error(LogCategory.APP, errMsg);
@@ -1674,7 +1671,7 @@ class EditorState extends State {
      */
     public function importFromJSON(filePath:String):Bool {
         try {
-            var result = _mapSerializer.importFromJSON(filePath);
+            var result = importMapFromJSON(filePath);
             if (result < 0) {
                 var errMsg = "EditorState: importFromJSON failed for " + filePath;
                 app.log.error(LogCategory.APP, errMsg);
@@ -1700,6 +1697,204 @@ class EditorState extends State {
             var errMsg = "EditorState: importFromJSON error for " + filePath + ": " + e;
             app.log.error(LogCategory.APP, errMsg);
             throw errMsg;
+        }
+    }
+
+    private function importMapFromJSON(mapData:Dynamic):Int {
+        var tileSizeMap:Map<String, Int> = new Map();
+        try {
+            // Enforce exact map data versioning: only 1.6 is supported.
+            var mapVersion:String = null;
+            if (mapData.version != null && Std.is(mapData.version, String)) {
+                mapVersion = cast(mapData.version, String);
+            }
+
+            if (mapVersion != "1.6") {
+                var errMsg:String = "Unsupported map version: " + (mapVersion != null ? mapVersion : "<missing>") + ". Expected 1.6.";
+                app.log.error(LogCategory.APP, errMsg);
+                trace("Error importing map: " + errMsg);
+                throw errMsg;
+            }
+
+            clearLayers();
+
+            var existingProjectId:String = projectId;
+
+            var mapProjectPath:String = null;
+            var mapProjectId:String = null;
+            var mapProjectName:String = null;
+
+            if (mapData.projectFile != null && Std.is(mapData.projectFile, String)) {
+                mapProjectPath = cast(mapData.projectFile, String);
+            }
+            if (mapData.projectId != null && Std.is(mapData.projectId, String)) {
+                mapProjectId = cast(mapData.projectId, String);
+                if (mapProjectId == "") mapProjectId = null;
+            }
+            if (mapData.projectName != null && Std.is(mapData.projectName, String)) {
+                mapProjectName = cast(mapData.projectName, String);
+                if (mapProjectName == "") mapProjectName = null;
+            }
+
+            if (mapProjectId == null) {
+                var errMsg:String = "Map is not project-backed (missing projectId)";
+                app.log.error(LogCategory.APP, errMsg);
+                trace("Error importing map: " + errMsg);
+                throw errMsg;
+            }
+
+            if (existingProjectId != null && existingProjectId != mapProjectId) {
+                var errMsg:String = "Map project mismatch: map references projectId '" + mapProjectId + "', current state has projectId '" + existingProjectId + "'";
+                app.log.error(LogCategory.APP, errMsg);
+                trace("Error importing map: " + errMsg);
+                throw errMsg;
+            }
+
+            if (existingProjectId == null) {
+                if (mapProjectPath == null) {
+                    var errMsg:String = "Map is not project-backed (missing projectFile)";
+                    app.log.error(LogCategory.APP, errMsg);
+                    trace("Error importing map: " + errMsg);
+                    throw errMsg;
+                }
+
+                var projectResult = new ProjectSerializer(this).importFromJSON(mapProjectPath);
+                if (projectResult < 0) {
+                    var errMsg:String = "Project import failed for: " + mapProjectPath;
+                    app.log.error(LogCategory.APP, errMsg);
+                    trace("Error importing map: " + errMsg);
+                    throw errMsg;
+                }
+            }
+
+            projectFilePath = mapProjectPath;
+            projectId = mapProjectId;
+            if (mapProjectName != null) {
+                projectName = mapProjectName;
+            }
+
+            var rawTextures:Null<Array<Dynamic>> = mapData.textures != null ? mapData.textures : mapData.tilesets;
+            if (rawTextures != null) {
+                for (texData in rawTextures) {
+                    var name:String = texData.name;
+                    var path:String = texData.texturePath;
+                    if (texData.tileSize != null) tileSizeMap.set(name, Std.int(texData.tileSize));
+                    if (!tilesetManager.exists(name)) {
+                        Editor.createTileset(path, name);
+                        trace("Loaded texture from map JSON: " + name);
+                    }
+                }
+            }
+
+            var importedCount = 0;
+            var layersData:Array<Dynamic> = mapData.layers;
+
+            if (layersData != null) {
+                for (layerData in layersData) {
+                    var layerType:String = layerData.type != null ? layerData.type : "tilemap";
+                    var layerName:String = layerData.name != null ? layerData.name : "Layer_" + layerData.tilesetName;
+
+                    if (layerType == "tilemap") {
+                        var tilesetName:String = layerData.tilesetName;
+                        var editorTexture:EditorTexture = tilesetManager.tilesets.get(tilesetName);
+                        if (editorTexture == null) {
+                            trace("Skipping layer with unknown tileset: " + tilesetName);
+                            continue;
+                        }
+
+                        var layerTileSize:Int = layerData.tileSize != null ? Std.int(layerData.tileSize)
+                            : tileSizeMap.exists(tilesetName) ? tileSizeMap.get(tilesetName) : 64;
+                        var tilemapLayer = createTilemapLayer(layerName, tilesetName, -1, layerTileSize);
+
+                        if (tilemapLayer != null) {
+                            if (layerData.visible != null) tilemapLayer.visible = layerData.visible;
+
+                            if (layerData.tiles != null) {
+                                var tiles:Array<Dynamic> = layerData.tiles;
+                                for (tileData in tiles) {
+                                    var gridX:Int = tileData.gridX;
+                                    var gridY:Int = tileData.gridY;
+                                    var tileId = tilemapLayer.managedTileBatch.addTile(
+                                        gridX * tileSizeX, gridY * tileSizeY,
+                                        tilemapLayer.tileSize, tilemapLayer.tileSize,
+                                        tileData.region
+                                    );
+                                    if (tileId >= 0) {
+                                        tilemapLayer.tileGrid.set(gridX + "_" + gridY, tileId);
+                                        importedCount++;
+                                    }
+                                }
+                                if (tilemapLayer.managedTileBatch.needsBufferUpdate)
+                                    tilemapLayer.managedTileBatch.updateBuffers(app.renderer);
+                            }
+                        }
+
+                    } else if (layerType == "entity") {
+                        var entityLayer = createEntityLayer(layerName);
+
+                        if (entityLayer != null) {
+                            if (layerData.visible != null) entityLayer.visible = layerData.visible;
+
+                            if (layerData.batches != null) {
+                                var batches:Array<Dynamic> = layerData.batches;
+                                var programInfo = app.renderer.getProgramInfo("texture");
+                                var fallback:EditorTexture = null;
+                                for (ts in tilesetManager.tilesets) { fallback = ts; break; }
+                                for (batchData in batches) {
+                                    var batchEntities:Array<Dynamic> = batchData.entities;
+                                    for (entityData in batchEntities) {
+                                        var def = entityManager.getEntityDefinition(entityData.name);
+                                        if (def == null) continue;
+                                        var tileset:EditorTexture = tilesetManager.tilesets.get(def.tilesetName);
+                                        var pivotX:Float = entityData.pivotX != null ? entityData.pivotX : 0.0;
+                                        var pivotY:Float = entityData.pivotY != null ? entityData.pivotY : 0.0;
+                                        entityLayer.placeEntity(def, tileset, entityData.x, entityData.y,
+                                            app.renderer, programInfo, pivotX, pivotY, entityData.uid, fallback);
+                                        importedCount++;
+                                    }
+                                }
+                            } else if (layerData.entities != null) {
+                                var legacyEntities:Array<Dynamic> = layerData.entities;
+                                var programInfo = app.renderer.getProgramInfo("texture");
+                                for (entityData in legacyEntities) {
+                                    var def = entityManager.getEntityDefinition(entityData.name);
+                                    if (def == null) continue;
+                                    var tsName:String = Std.is(entityData.tilesetName, String) ? entityData.tilesetName : null;
+                                    var lookupName = tsName != null ? tsName : def.tilesetName;
+                                    var tileset:EditorTexture = tilesetManager.tilesets.get(lookupName);
+                                    if (tileset == null) continue;
+                                    var pivotX:Float = entityData.pivotX != null ? entityData.pivotX : 0.0;
+                                    var pivotY:Float = entityData.pivotY != null ? entityData.pivotY : 0.0;
+                                    entityLayer.placeEntity(def, tileset, entityData.x, entityData.y,
+                                        app.renderer, programInfo, pivotX, pivotY, entityData.uid);
+                                    importedCount++;
+                                }
+                            }
+
+                            for (eentry in entityLayer.batches) {
+                                if (eentry.batch != null && eentry.batch.needsBufferUpdate)
+                                    eentry.batch.updateBuffers(app.renderer);
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Map bounds and tile size restore, if present
+            var tsx:Int = (mapData.mapBounds != null && mapData.mapBounds.tileSizeX != null) ? Std.int(mapData.mapBounds.tileSizeX) : 64;
+            var tsy:Int = (mapData.mapBounds != null && mapData.mapBounds.tileSizeY != null) ? Std.int(mapData.mapBounds.tileSizeY) : 64;
+            if (mapData.mapBounds != null) {
+                updateMapBounds(mapData.mapBounds.x, mapData.mapBounds.y, mapData.mapBounds.width, mapData.mapBounds.height);
+                setTileSize(tsx, tsy);
+            }
+
+            return importedCount;
+
+        } catch (e:Dynamic) {
+            var errMsg = "Error importing JSON: " + e;
+            app.log.error(LogCategory.APP, errMsg);
+            trace(errMsg);
+            return -1;
         }
     }
     
@@ -2042,7 +2237,7 @@ private class MapSerializer {
         // projectFile path; the loader will pull textures from the project instead.
         var hasProject = state.projectFilePath != null;
 
-        var data:Dynamic = {
+        var mapData:Dynamic = {
             version: "1.6",
             mapBounds: {
                 x: state.mapX,
@@ -2059,9 +2254,13 @@ private class MapSerializer {
         };
 
         // Always write map->project relationship so callers can confirm if map is project-backed.
-        Reflect.setField(data, "projectFile", state.projectFilePath != null ? state.projectFilePath : "");
-        Reflect.setField(data, "projectId", state.projectId != null ? state.projectId : "");
-        Reflect.setField(data, "projectName", state.projectName != null ? state.projectName : "");
+        Reflect.setField(mapData, "projectFile", state.projectFilePath != null ? state.projectFilePath : "");
+        Reflect.setField(mapData, "projectId", state.projectId != null ? state.projectId : "");
+        Reflect.setField(mapData, "projectName", state.projectName != null ? state.projectName : "");
+
+        var data:Dynamic = {
+            map: mapData
+        };
 
         if (!hasProject) {
             // Standalone map: embed texture declarations so the file is self-contained.
@@ -2095,236 +2294,245 @@ private class MapSerializer {
      * @param filePath Absolute path to the JSON file
      * @return Number of tiles/entities imported, or -1 on error
      */
-    public function importFromJSON(filePath:String):Int {
-        var tileSizeMap:Map<String, Int> = new Map();
-        try {
-            var jsonString = sys.io.File.getContent(filePath);
-            var data:Dynamic = haxe.Json.parse(jsonString);
+    // public function importFromJSON(filePath:String):Int {
+    //     var tileSizeMap:Map<String, Int> = new Map();
+    //     try {
+    //         var jsonString = sys.io.File.getContent(filePath);
+    //         var data:Dynamic = haxe.Json.parse(jsonString);
 
-            // Enforce exact map data versioning: only 1.6 is supported.
-            var mapVersion:String = null;
-            if (data.version != null && Std.is(data.version, String)) {
-                mapVersion = cast(data.version, String);
-            }
+    //         // Enforce wrapped map format.
+    //         if (data.map == null) {
+    //             var errMsg:String = "Map JSON format invalid: missing top-level 'map' object";
+    //             state.app.log.error(LogCategory.APP, errMsg);
+    //             trace("Error importing map: " + errMsg);
+    //             throw errMsg;
+    //         }
+    //         var mapData:Dynamic = data.map;
 
-            if (mapVersion != "1.6") {
-                var errMsg:String = "Unsupported map version: " + (mapVersion != null ? mapVersion : "<missing>") + ". Expected 1.6.";
-                state.app.log.error(LogCategory.APP, errMsg);
-                trace("Error importing map: " + errMsg);
-                throw errMsg;
-            }
+    //         // Enforce exact map data versioning: only 1.6 is supported.
+    //         var mapVersion:String = null;
+    //         if (mapData.version != null && Std.is(mapData.version, String)) {
+    //             mapVersion = cast(mapData.version, String);
+    //         }
 
-            state.clearLayers();
+    //         if (mapVersion != "1.6") {
+    //             var errMsg:String = "Unsupported map version: " + (mapVersion != null ? mapVersion : "<missing>") + ". Expected 1.6.";
+    //             state.app.log.error(LogCategory.APP, errMsg);
+    //             trace("Error importing map: " + errMsg);
+    //             throw errMsg;
+    //         }
 
-            // If the map references a project, enforce UID coherence.
-            // If this state already has a project loaded, map must match by projectId.
-            // If state has no project, load the map's project first.
-            var existingProjectId:String = state.projectId;
+    //         state.clearLayers();
 
-            var mapProjectPath:String = null;
-            var mapProjectId:String = null;
-            var mapProjectName:String = null;
+    //         // If the map references a project, enforce UID coherence.
+    //         // If this state already has a project loaded, map must match by projectId.
+    //         // If state has no project, load the map's project first.
+    //         var existingProjectId:String = state.projectId;
 
-            if (data.projectFile != null && Std.is(data.projectFile, String)) {
-                mapProjectPath = cast(data.projectFile, String);
-            }
-            if (data.projectId != null && Std.is(data.projectId, String)) {
-                mapProjectId = cast(data.projectId, String);
-                if (mapProjectId == "") mapProjectId = null;
-            }
-            if (data.projectName != null && Std.is(data.projectName, String)) {
-                mapProjectName = cast(data.projectName, String);
-                if (mapProjectName == "") mapProjectName = null;
-            }
+    //         var mapProjectPath:String = null;
+    //         var mapProjectId:String = null;
+    //         var mapProjectName:String = null;
 
-            if (mapProjectId == null) {
-                var errMsg:String = "Map is not project-backed (missing projectId)";
-                state.app.log.error(LogCategory.APP, errMsg);
-                trace("Error importing map: " + errMsg);
-                throw errMsg;
-            }
+    //         if (mapData.projectFile != null && Std.is(mapData.projectFile, String)) {
+    //             mapProjectPath = cast(mapData.projectFile, String);
+    //         }
+    //         if (mapData.projectId != null && Std.is(mapData.projectId, String)) {
+    //             mapProjectId = cast(mapData.projectId, String);
+    //             if (mapProjectId == "") mapProjectId = null;
+    //         }
+    //         if (mapData.projectName != null && Std.is(mapData.projectName, String)) {
+    //             mapProjectName = cast(mapData.projectName, String);
+    //             if (mapProjectName == "") mapProjectName = null;
+    //         }
 
-            if (existingProjectId != null && existingProjectId != mapProjectId) {
-                var errMsg:String = "Map project mismatch: map references projectId '" + mapProjectId + "', current state has projectId '" + existingProjectId + "'";
-                state.app.log.error(LogCategory.APP, errMsg);
-                trace("Error importing map: " + errMsg);
-                throw errMsg;
-            }
+    //         if (mapProjectId == null) {
+    //             var errMsg:String = "Map is not project-backed (missing projectId)";
+    //             state.app.log.error(LogCategory.APP, errMsg);
+    //             trace("Error importing map: " + errMsg);
+    //             throw errMsg;
+    //         }
 
-            if (existingProjectId == null) {
-                if (mapProjectPath == null) {
-                    var errMsg:String = "Map is not project-backed (missing projectFile)";
-                    state.app.log.error(LogCategory.APP, errMsg);
-                    trace("Error importing map: " + errMsg);
-                    throw errMsg;
-                }
+    //         if (existingProjectId != null && existingProjectId != mapProjectId) {
+    //             var errMsg:String = "Map project mismatch: map references projectId '" + mapProjectId + "', current state has projectId '" + existingProjectId + "'";
+    //             state.app.log.error(LogCategory.APP, errMsg);
+    //             trace("Error importing map: " + errMsg);
+    //             throw errMsg;
+    //         }
 
-                // No project has been loaded yet in this state - import now.
-                var projectResult = state._projectSerializer.importFromJSON(mapProjectPath);
-                if (projectResult < 0) {
-                    var errMsg:String = "Project import failed for: " + mapProjectPath;
-                    state.app.log.error(LogCategory.APP, errMsg);
-                    trace("Error importing map: " + errMsg);
-                    throw errMsg;
-                }
-            }
+    //         if (existingProjectId == null) {
+    //             if (mapProjectPath == null) {
+    //                 var errMsg:String = "Map is not project-backed (missing projectFile)";
+    //                 state.app.log.error(LogCategory.APP, errMsg);
+    //                 trace("Error importing map: " + errMsg);
+    //                 throw errMsg;
+    //             }
 
-            state.projectFilePath = mapProjectPath;
-            state.projectId = mapProjectId;
-            if (mapProjectName != null) {
-                state.projectName = mapProjectName;
-            }
+    //             // No project has been loaded yet in this state - import now.
+    //             var projectResult = state._projectSerializer.importFromJSON(mapProjectPath);
+    //             if (projectResult < 0) {
+    //                 var errMsg:String = "Project import failed for: " + mapProjectPath;
+    //                 state.app.log.error(LogCategory.APP, errMsg);
+    //                 trace("Error importing map: " + errMsg);
+    //                 throw errMsg;
+    //             }
+    //         }
 
-            // Load textures — new key is "textures", fall back to legacy "tilesets" key.
-            var rawTextures:Null<Array<Dynamic>> = data.textures != null ? data.textures : data.tilesets;
-            if (rawTextures != null) {
-                for (texData in rawTextures) {
-                    var name:String = texData.name;
-                    var path:String = texData.texturePath;
-                    if (texData.tileSize != null) tileSizeMap.set(name, Std.int(texData.tileSize));
-                    if (!state.tilesetManager.exists(name)) {
-                        state.createTileset(path, name);
-                        trace("Loaded texture from map JSON: " + name);
-                    }
-                }
-            }
+    //         state.projectFilePath = mapProjectPath;
+    //         state.projectId = mapProjectId;
+    //         if (mapProjectName != null) {
+    //             state.projectName = mapProjectName;
+    //         }
 
-            // Legacy: load entity definitions embedded in old map files.
-            // New maps never contain this block — definitions live in the project file.
-            if (data.entityDefinitions != null) {
-                var entitiesArray:Array<Dynamic> = data.entityDefinitions;
-                for (entityData in entitiesArray) {
-                    var pivotX:Float = entityData.pivotX != null ? entityData.pivotX : 0.0;
-                    var pivotY:Float = entityData.pivotY != null ? entityData.pivotY : 0.0;
-                    state.createEntityFull(
-                        entityData.name, entityData.width, entityData.height,
-                        entityData.tilesetName,
-                        entityData.regionX, entityData.regionY,
-                        entityData.regionWidth, entityData.regionHeight,
-                        pivotX, pivotY
-                    );
-                    trace("[legacy] Loaded entity definition from map JSON: " + entityData.name);
-                }
-            }
+    //         // Load textures — new key is "textures", fall back to legacy "tilesets" key.
+    //         var rawTextures:Null<Array<Dynamic>> = mapData.textures != null ? mapData.textures : mapData.tilesets;
+    //         if (rawTextures != null) {
+    //             for (texData in rawTextures) {
+    //                 var name:String = texData.name;
+    //                 var path:String = texData.texturePath;
+    //                 if (texData.tileSize != null) tileSizeMap.set(name, Std.int(texData.tileSize));
+    //                 if (!state.tilesetManager.exists(name)) {
+    //                     Editor.createTileset(path, name);
+    //                     trace("Loaded texture from map JSON: " + name);
+    //                 }
+    //             }
+    //         }
 
-            // Restore map bounds and tile size
-            var tsx:Int = (data.mapBounds != null && data.mapBounds.tileSizeX != null) ? Std.int(data.mapBounds.tileSizeX) : 64;
-            var tsy:Int = (data.mapBounds != null && data.mapBounds.tileSizeY != null) ? Std.int(data.mapBounds.tileSizeY) : 64;
-            if (data.mapBounds != null) {
-                state.updateMapBounds(data.mapBounds.x, data.mapBounds.y, data.mapBounds.width, data.mapBounds.height);
-                state.setTileSize(tsx, tsy);
-            }
+    //         // Legacy: load entity definitions embedded in old map files.
+    //         // New maps never contain this block — definitions live in the project file.
+    //         if (mapData.entityDefinitions != null) {
+    //             var entitiesArray:Array<Dynamic> = mapData.entityDefinitions;
+    //             for (entityData in entitiesArray) {
+    //                 var pivotX:Float = entityData.pivotX != null ? entityData.pivotX : 0.0;
+    //                 var pivotY:Float = entityData.pivotY != null ? entityData.pivotY : 0.0;
+    //                 state.entityManager.setEntityFull(
+    //                     entityData.name, entityData.width, entityData.height,
+    //                     entityData.tilesetName,
+    //                     entityData.regionX, entityData.regionY,
+    //                     entityData.regionWidth, entityData.regionHeight,
+    //                     pivotX, pivotY
+    //                 );
+    //                 trace("[legacy] Loaded entity definition from map JSON: " + entityData.name);
+    //             }
+    //         }
 
-            // Recreate layers
-            var importedCount = 0;
-            var layersData:Array<Dynamic> = data.layers;
+    //         // Restore map bounds and tile size
+    //         var tsx:Int = (mapData.mapBounds != null && mapData.mapBounds.tileSizeX != null) ? Std.int(mapData.mapBounds.tileSizeX) : 64;
+    //         var tsy:Int = (mapData.mapBounds != null && mapData.mapBounds.tileSizeY != null) ? Std.int(mapData.mapBounds.tileSizeY) : 64;
+    //         if (mapData.mapBounds != null) {
+    //             state.updateMapBounds(mapData.mapBounds.x, mapData.mapBounds.y, mapData.mapBounds.width, mapData.mapBounds.height);
+    //             state.setTileSize(tsx, tsy);
+    //         }
 
-            if (layersData != null) {
-                for (layerData in layersData) {
-                    var layerType:String = layerData.type != null ? layerData.type : "tilemap";
-                    var layerName:String = layerData.name != null ? layerData.name : "Layer_" + layerData.tilesetName;
+    //         // Recreate layers
+    //         var importedCount = 0;
+    //         var layersData:Array<Dynamic> = mapData.layers;
 
-                    if (layerType == "tilemap") {
-                        var tilesetName:String = layerData.tilesetName;
-                        var editorTexture:EditorTexture = state.tilesetManager.tilesets.get(tilesetName);
-                        if (editorTexture == null) {
-                            trace("Skipping layer with unknown tileset: " + tilesetName);
-                            continue;
-                        }
+    //         if (layersData != null) {
+    //             for (layerData in layersData) {
+    //                 var layerType:String = layerData.type != null ? layerData.type : "tilemap";
+    //                 var layerName:String = layerData.name != null ? layerData.name : "Layer_" + layerData.tilesetName;
 
-                        var layerTileSize:Int = layerData.tileSize != null ? Std.int(layerData.tileSize)
-                            : tileSizeMap.exists(tilesetName) ? tileSizeMap.get(tilesetName) : 64;
-                        var tilemapLayer = state.createTilemapLayer(layerName, tilesetName, -1, layerTileSize);
+    //                 if (layerType == "tilemap") {
+    //                     var tilesetName:String = layerData.tilesetName;
+    //                     var editorTexture:EditorTexture = state.tilesetManager.tilesets.get(tilesetName);
+    //                     if (editorTexture == null) {
+    //                         trace("Skipping layer with unknown tileset: " + tilesetName);
+    //                         continue;
+    //                     }
 
-                        if (tilemapLayer != null) {
-                            if (layerData.visible != null) tilemapLayer.visible = layerData.visible;
+    //                     var layerTileSize:Int = layerData.tileSize != null ? Std.int(layerData.tileSize)
+    //                         : tileSizeMap.exists(tilesetName) ? tileSizeMap.get(tilesetName) : 64;
+    //                     var tilemapLayer = state.createTilemapLayer(layerName, tilesetName, -1, layerTileSize);
 
-                            if (layerData.tiles != null) {
-                                var tiles:Array<Dynamic> = layerData.tiles;
-                                for (tileData in tiles) {
-                                    var gridX:Int = tileData.gridX;
-                                    var gridY:Int = tileData.gridY;
-                                    var tileId = tilemapLayer.managedTileBatch.addTile(
-                                        gridX * tsx, gridY * tsy,
-                                        tilemapLayer.tileSize, tilemapLayer.tileSize,
-                                        tileData.region
-                                    );
-                                    if (tileId >= 0) {
-                                        tilemapLayer.tileGrid.set(gridX + "_" + gridY, tileId);
-                                        importedCount++;
-                                    }
-                                }
-                                if (tilemapLayer.managedTileBatch.needsBufferUpdate)
-                                    tilemapLayer.managedTileBatch.updateBuffers(state.app.renderer);
-                            }
-                        }
+    //                     if (tilemapLayer != null) {
+    //                         if (layerData.visible != null) tilemapLayer.visible = layerData.visible;
 
-                    } else if (layerType == "entity") {
-                        var entityLayer = state.createEntityLayer(layerName);
+    //                         if (layerData.tiles != null) {
+    //                             var tiles:Array<Dynamic> = layerData.tiles;
+    //                             for (tileData in tiles) {
+    //                                 var gridX:Int = tileData.gridX;
+    //                                 var gridY:Int = tileData.gridY;
+    //                                 var tileId = tilemapLayer.managedTileBatch.addTile(
+    //                                     gridX * tsx, gridY * tsy,
+    //                                     tilemapLayer.tileSize, tilemapLayer.tileSize,
+    //                                     tileData.region
+    //                                 );
+    //                                 if (tileId >= 0) {
+    //                                     tilemapLayer.tileGrid.set(gridX + "_" + gridY, tileId);
+    //                                     importedCount++;
+    //                                 }
+    //                             }
+    //                             if (tilemapLayer.managedTileBatch.needsBufferUpdate)
+    //                                 tilemapLayer.managedTileBatch.updateBuffers(state.app.renderer);
+    //                         }
+    //                     }
 
-                        if (entityLayer != null) {
-                            if (layerData.visible != null) entityLayer.visible = layerData.visible;
+    //                 } else if (layerType == "entity") {
+    //                     var entityLayer = state.createEntityLayer(layerName);
 
-                            if (layerData.batches != null) {
-                                // Current batched format
-                                var batches:Array<Dynamic> = layerData.batches;
-                                var programInfo = state.app.renderer.getProgramInfo("texture");
-                                // Find any loaded texture to back orphan batches with GPU geometry
-                                // so missing-tileset entities render as red silhouettes.
-                                var fallback:EditorTexture = null;
-                                for (ts in state.tilesetManager.tilesets) { fallback = ts; break; }
-                                for (batchData in batches) {
-                                    var batchEntities:Array<Dynamic> = batchData.entities;
-                                    for (entityData in batchEntities) {
-                                        var def = state.entityManager.getEntityDefinition(entityData.name);
-                                        if (def == null) continue;
-                                        var tileset:EditorTexture = state.tilesetManager.tilesets.get(def.tilesetName);
-                                        // tileset may be null when it hasn't been loaded yet — placeEntity
-                                        // routes null-texture entities to an orphan batch so they survive
-                                        // save/load cycles and migrate automatically when the tileset is restored.
-                                        var pivotX:Float = entityData.pivotX != null ? entityData.pivotX : 0.0;
-                                        var pivotY:Float = entityData.pivotY != null ? entityData.pivotY : 0.0;
-                                        entityLayer.placeEntity(def, tileset, entityData.x, entityData.y,
-                                            state.app.renderer, programInfo, pivotX, pivotY, entityData.uid, fallback);
-                                        importedCount++;
-                                    }
-                                }
-                            } else if (layerData.entities != null) {
-                                // Legacy flat-list format
-                                var legacyEntities:Array<Dynamic> = layerData.entities;
-                                var programInfo = state.app.renderer.getProgramInfo("texture");
-                                for (entityData in legacyEntities) {
-                                    var def = state.entityManager.getEntityDefinition(entityData.name);
-                                    if (def == null) continue;
-                                    var tsName:String = Std.is(entityData.tilesetName, String) ? entityData.tilesetName : null;
-                                    var lookupName = tsName != null ? tsName : def.tilesetName;
-                                    var tileset:EditorTexture = state.tilesetManager.tilesets.get(lookupName);
-                                    if (tileset == null) continue;
-                                    var pivotX:Float = entityData.pivotX != null ? entityData.pivotX : 0.0;
-                                    var pivotY:Float = entityData.pivotY != null ? entityData.pivotY : 0.0;
-                                    entityLayer.placeEntity(def, tileset, entityData.x, entityData.y,
-                                        state.app.renderer, programInfo, pivotX, pivotY, entityData.uid);
-                                    importedCount++;
-                                }
-                            }
+    //                     if (entityLayer != null) {
+    //                         if (layerData.visible != null) entityLayer.visible = layerData.visible;
 
-                            // Upload all entity batches to GPU
-                            for (eentry in entityLayer.batches) {
-                                if (eentry.batch != null && eentry.batch.needsBufferUpdate)
-                                    eentry.batch.updateBuffers(state.app.renderer);
-                            }
-                        }
-                    }
-                }
-            }
+    //                         if (layerData.batches != null) {
+    //                             // Current batched format
+    //                             var batches:Array<Dynamic> = layerData.batches;
+    //                             var programInfo = state.app.renderer.getProgramInfo("texture");
+    //                             // Find any loaded texture to back orphan batches with GPU geometry
+    //                             // so missing-tileset entities render as red silhouettes.
+    //                             var fallback:EditorTexture = null;
+    //                             for (ts in state.tilesetManager.tilesets) { fallback = ts; break; }
+    //                             for (batchData in batches) {
+    //                                 var batchEntities:Array<Dynamic> = batchData.entities;
+    //                                 for (entityData in batchEntities) {
+    //                                     var def = state.entityManager.getEntityDefinition(entityData.name);
+    //                                     if (def == null) continue;
+    //                                     var tileset:EditorTexture = state.tilesetManager.tilesets.get(def.tilesetName);
+    //                                     // tileset may be null when it hasn't been loaded yet — placeEntity
+    //                                     // routes null-texture entities to an orphan batch so they survive
+    //                                     // save/load cycles and migrate automatically when the tileset is restored.
+    //                                     var pivotX:Float = entityData.pivotX != null ? entityData.pivotX : 0.0;
+    //                                     var pivotY:Float = entityData.pivotY != null ? entityData.pivotY : 0.0;
+    //                                     entityLayer.placeEntity(def, tileset, entityData.x, entityData.y,
+    //                                         state.app.renderer, programInfo, pivotX, pivotY, entityData.uid, fallback);
+    //                                     importedCount++;
+    //                                 }
+    //                             }
+    //                         } else if (layerData.entities != null) {
+    //                             // Legacy flat-list format
+    //                             var legacyEntities:Array<Dynamic> = layerData.entities;
+    //                             var programInfo = state.app.renderer.getProgramInfo("texture");
+    //                             for (entityData in legacyEntities) {
+    //                                 var def = state.entityManager.getEntityDefinition(entityData.name);
+    //                                 if (def == null) continue;
+    //                                 var tsName:String = Std.is(entityData.tilesetName, String) ? entityData.tilesetName : null;
+    //                                 var lookupName = tsName != null ? tsName : def.tilesetName;
+    //                                 var tileset:EditorTexture = state.tilesetManager.tilesets.get(lookupName);
+    //                                 if (tileset == null) continue;
+    //                                 var pivotX:Float = entityData.pivotX != null ? entityData.pivotX : 0.0;
+    //                                 var pivotY:Float = entityData.pivotY != null ? entityData.pivotY : 0.0;
+    //                                 entityLayer.placeEntity(def, tileset, entityData.x, entityData.y,
+    //                                     state.app.renderer, programInfo, pivotX, pivotY, entityData.uid);
+    //                                 importedCount++;
+    //                             }
+    //                         }
 
-            return importedCount;
+    //                         // Upload all entity batches to GPU
+    //                         for (eentry in entityLayer.batches) {
+    //                             if (eentry.batch != null && eentry.batch.needsBufferUpdate)
+    //                                 eentry.batch.updateBuffers(state.app.renderer);
+    //                         }
+    //                     }
+    //                 }
+    //             }
+    //         }
 
-        } catch (e:Dynamic) {
-            var errMsg = "Error importing JSON: " + e;
-            state.app.log.error(LogCategory.APP, errMsg);
-            trace(errMsg);
-            throw errMsg;
-        }
-    }
+    //         return importedCount;
+
+    //     } catch (e:Dynamic) {
+    //         var errMsg = "Error importing JSON: " + e;
+    //         state.app.log.error(LogCategory.APP, errMsg);
+    //         trace(errMsg);
+    //         throw errMsg;
+    //     }
+    // }
 }
