@@ -526,6 +526,10 @@ class Editor {
     public static function exportMap(filePath:String):Bool {
         try {
             var success = editorState.exportToJSON(filePath);
+
+            
+
+
             if (success) {
                 app.log.info(LogCategory.APP, "Editor: Exported map to: " + filePath);
             }
@@ -605,19 +609,26 @@ class Editor {
                 }
 
             } else {
-                tilesetManager = new TilesetManager();
-                entityManager = new EntityManager();
-                var newState = new EditorState(app, tilesetManager, entityManager);
-                app.addState(newState);
-                app.switchToState(newState);
-                wireEditorStateCallbacks();
+                // tilesetManager = new TilesetManager();
+                // entityManager = new EntityManager();
+                // var newState = new EditorState(app, tilesetManager, entityManager);
+                // app.addState(newState);
+                // app.switchToState(newState);
+                // wireEditorStateCallbacks();
             }
 
+            var newState = new EditorState(app, tilesetManager, entityManager);
+            var index = app.addState(newState);
+            wireEditorStateCallbacks();
+
             // Import map contents (layers, tiles, entity instances, etc.)
-            var success = editorState.importFromJSON(mapContent);
+            var success = newState.importFromJSON(mapContent, filePath);
             if (success) {
                 app.log.info(LogCategory.APP, "Editor: Imported map from: " + filePath);
             }
+
+            app.switchToState(newState);
+
             return success;
         } catch (e:Dynamic) {
             app.log.error(LogCategory.APP, "Editor: Error importing tilemap: " + e);
