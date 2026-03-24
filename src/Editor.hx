@@ -582,34 +582,43 @@ class Editor {
                 if (mapProjectName == "") mapProjectName = null;
             }
 
-            if (mapProjectPath != null) {
-                if (!sys.FileSystem.exists(mapProjectPath)) {
-                    app.log.error(LogCategory.APP, "Editor: Map references missing project file: " + mapProjectPath);
-                    return -1;
-                }
+            if (_projectData == null) {
+                
+                if (mapProjectPath != null) {
+                    if (!sys.FileSystem.exists(mapProjectPath)) {
+                        app.log.error(LogCategory.APP, "Editor: Map references missing project file: " + mapProjectPath);
+                        return -1;
+                    }
 
-                if (!importProject(mapProjectPath)) {
-                    app.log.error(LogCategory.APP, "Editor: Failed to import referenced project: " + mapProjectPath);
-                    return -1;
-                }
+                    if (!importProject(mapProjectPath)) {
+                        app.log.error(LogCategory.APP, "Editor: Failed to import referenced project: " + mapProjectPath);
+                        return -1;
+                    }
 
-                if (mapProjectId != null && _projectData != null && _projectData.projectId != mapProjectId) {
-                    app.log.error(LogCategory.APP, "Editor: Map projectId does not match project file id");
-                    return -1;
-                }
+                    if (mapProjectId != null && _projectData != null && _projectData.projectId != mapProjectId) {
+                        app.log.error(LogCategory.APP, "Editor: Map projectId does not match project file id");
+                        return -1;
+                    }
 
-                if (mapProjectName != null && _projectData != null && _projectData.projectName != mapProjectName) {
-                    app.log.warn(LogCategory.APP, "Editor: Map projectName does not match project file name, using project file name");
-                }
+                    if (mapProjectName != null && _projectData != null && _projectData.projectName != mapProjectName) {
+                        app.log.warn(LogCategory.APP, "Editor: Map projectName does not match project file name, using project file name");
+                    }
 
-                // active state is created by importProject (blank state with project context)
-                if (editorState == null) {
-                    app.log.error(LogCategory.APP, "Editor: No editor state available after importing project");
-                    return -1;
+                    // active state is created by importProject (blank state with project context)
+                    if (editorState == null) {
+                        app.log.error(LogCategory.APP, "Editor: No editor state available after importing project");
+                        return -1;
+                    }
+
+                } else {
+                    throw "Map JSON does not reference a project file";
                 }
 
             } else {
-                throw "Map JSON does not reference a project file";
+                if (mapProjectId != null && _projectData.projectId != mapProjectId) {
+                    app.log.error(LogCategory.APP, "Editor: Map projectId does not match active project id");
+                    return -1;
+                }
             }
 
             var newState = new EditorState(app, tilesetManager, entityManager);
