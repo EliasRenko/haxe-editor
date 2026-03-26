@@ -125,88 +125,77 @@ extern "C" {
     __declspec(dllexport) bool getMapProps(MapProps* outInfo);
     __declspec(dllexport) bool setMapProps(MapProps* info);
 
-    // Texture data retrieval
+    // Texture management
     __declspec(dllexport) void getTextureData(const char* path, TextureDataStruct* outData);
     
     // Tileset management
-    __declspec(dllexport) const char* createTileset(const char* texturePath, const char* tilesetName);
-
-    __declspec(dllexport) int getTileset(const char* tilesetName, TilesetInfoStruct* outInfo);
-    __declspec(dllexport) int getTilesetAt(int index, TilesetInfoStruct* outInfo);
-    __declspec(dllexport) int getActiveTile();
+    __declspec(dllexport) bool createTileset(const char* texturePath, const char* name);
+    __declspec(dllexport) bool deleteTileset(const char* name);
+    __declspec(dllexport) bool getTileset(const char* tilesetName, TilesetInfoStruct* outInfo);
+    __declspec(dllexport) bool getTilesetAt(int index, TilesetInfoStruct* outInfo);
     __declspec(dllexport) int getTilesetCount();
-
-    __declspec(dllexport) int setActiveTileset(const char* tilesetName);
+    __declspec(dllexport) bool setActiveTileset(const char* tilesetName);
+    __declspec(dllexport) int getActiveTile();
     __declspec(dllexport) void setActiveTile(int tileRegionId);
-    
+
     // Entity definition management
-    // Removes a tileset by name. Also removes every TilemapLayer using it and every entity
-    // batch in EntityLayers that references it. Returns null on success, error string on failure.
-    __declspec(dllexport) const char* deleteTileset(const char* name);
-
-    __declspec(dllexport) const char* createEntityDef(const char* entityName, EntityDataStruct* data);
-    __declspec(dllexport) const char* editEntityDef(const char* entityName, EntityDataStruct* data);
-    __declspec(dllexport) const char* deleteEntityDef(const char* entityName);
-
-    __declspec(dllexport) const char* getEntityDef(const char* entityName, EntityDataStruct* outData);
-    __declspec(dllexport) const char* getEntityDefAt(int index, EntityDataStruct* outData);
+    __declspec(dllexport) bool createEntityDef(const char* entityName, EntityDataStruct* data);
+    __declspec(dllexport) bool editEntityDef(const char* entityName, EntityDataStruct* data);
+    __declspec(dllexport) bool deleteEntityDef(const char* entityName);
+    __declspec(dllexport) bool getEntityDef(const char* entityName, EntityDataStruct* outData);
+    __declspec(dllexport) bool getEntityDefAt(int index, EntityDataStruct* outData);
     __declspec(dllexport) int getEntityDefCount();
+    __declspec(dllexport) bool setActiveEntityDef(const char* entityName);
 
-    __declspec(dllexport) int setActiveEntityDef(const char* entityName);
+    // Entity instances managment
+    __declspec(dllexport) void setEntitySelectionChangedCallback(EntitySelectionChangedCallback callback);
+    __declspec(dllexport) int getEntitySelectionCount();
+    __declspec(dllexport) bool getEntitySelectionInfo(int index, EntityStruct* outData);
+    __declspec(dllexport) bool selectEntityByUID(const char* uid);
+    __declspec(dllexport) bool selectEntityInLayerByUID(const char* layerName, const char* uid);
+    __declspec(dllexport) void deselectEntity();
 
     // Layer management
     __declspec(dllexport) void createTilemapLayer(const char* layerName, const char* tilesetName, int tileSize, int index);
     __declspec(dllexport) void createEntityLayer(const char* layerName);
     __declspec(dllexport) void createFolderLayer(const char* layerName);
 
-    __declspec(dllexport) int getLayerInfoAt(int index, LayerInfoStruct* outInfo);
     __declspec(dllexport) int getLayerCount();
+    __declspec(dllexport) bool getLayerInfo(const char* layerName, LayerInfoStruct* outInfo);
+    __declspec(dllexport) bool getLayerInfoAt(int index, LayerInfoStruct* outInfo);
 
-    __declspec(dllexport) int getLayerInfo(const char* layerName, LayerInfoStruct* outInfo);
-    __declspec(dllexport) void replaceLayerTileset(const char* layerName, const char* newTilesetName);
+    __declspec(dllexport) bool replaceLayerTileset(const char* layerName, const char* newTilesetName);
 
-    __declspec(dllexport) int setActiveLayer(const char* layerName);
-    __declspec(dllexport) int setActiveLayerAt(int index);
-    __declspec(dllexport) void setLayerProperties(const char* layerName, LayerInfoStruct* properties);
-    __declspec(dllexport) void setLayerPropertiesAt(int index, LayerInfoStruct* properties);
-    __declspec(dllexport) int removeLayer(const char* layerName);
-    __declspec(dllexport) int removeLayerByIndex(int index);
+    __declspec(dllexport) bool setActiveLayer(const char* layerName);
+    __declspec(dllexport) bool setActiveLayerAt(int index);
+    __declspec(dllexport) bool setLayerProperties(const char* layerName, LayerInfoStruct* properties);
+    __declspec(dllexport) bool setLayerPropertiesAt(int index, LayerInfoStruct* properties);
+    __declspec(dllexport) bool removeLayer(const char* layerName);
+    __declspec(dllexport) bool removeLayerByIndex(int index);
 
-    // batch accessors for entity layers
+    __declspec(dllexport) bool moveLayerUp(const char* layerName);
+    __declspec(dllexport) bool moveLayerDown(const char* layerName);
+    __declspec(dllexport) bool moveLayerTo(const char* layerName, int newIndex);
+    __declspec(dllexport) bool moveLayerUpByIndex(int index);
+    __declspec(dllexport) bool moveLayerDownByIndex(int index);
+
+    // Batch management (for entity layers only)
     __declspec(dllexport) int getEntityLayerBatchCount(const char* layerName);
     __declspec(dllexport) int getEntityLayerBatchCountAt(int index);
     __declspec(dllexport) const char* getEntityLayerBatchTilesetName(const char* layerName, int batchIndex);
-
-    // entity instance accessors (batchIndex = -1 for all batches)
     __declspec(dllexport) int getEntityLayerInstanceCount(const char* layerName, int batchIndex);
     __declspec(dllexport) int getEntityLayerInstanceAt(const char* layerName, int batchIndex, int instanceIndex, EntityStruct* outData);
 
     // batch movement
-    __declspec(dllexport) int moveEntityLayerBatchUp(const char* layerName, int batchIndex);
-    __declspec(dllexport) int moveEntityLayerBatchDown(const char* layerName, int batchIndex);
-    __declspec(dllexport) int moveEntityLayerBatchTo(const char* layerName, int batchIndex, int newIndex);
-    __declspec(dllexport) int moveEntityLayerBatchUpByIndex(int layerIndex, int batchIndex);
-    __declspec(dllexport) int moveEntityLayerBatchDownByIndex(int layerIndex, int batchIndex);
-    __declspec(dllexport) int moveEntityLayerBatchToByIndex(int layerIndex, int batchIndex, int newIndex);
-    
-    __declspec(dllexport) int moveLayerUp(const char* layerName);
-    __declspec(dllexport) int moveLayerDown(const char* layerName);
-    __declspec(dllexport) int moveLayerTo(const char* layerName, int newIndex);
-    __declspec(dllexport) int moveLayerUpByIndex(int index);
-    __declspec(dllexport) int moveLayerDownByIndex(int index);
- 
-
+    __declspec(dllexport) bool moveEntityLayerBatchUp(const char* layerName, int batchIndex);
+    __declspec(dllexport) bool moveEntityLayerBatchDown(const char* layerName, int batchIndex);
+    __declspec(dllexport) bool moveEntityLayerBatchTo(const char* layerName, int batchIndex, int newIndex);
+    __declspec(dllexport) bool moveEntityLayerBatchUpByIndex(int layerIndex, int batchIndex);
+    __declspec(dllexport) bool moveEntityLayerBatchDownByIndex(int layerIndex, int batchIndex);
+    __declspec(dllexport) bool moveEntityLayerBatchToByIndex(int layerIndex, int batchIndex, int newIndex);
     // tool
     __declspec(dllexport) void setToolType(int toolType);
     __declspec(dllexport) int getToolType();
-
-    // entity selection
-    __declspec(dllexport) void setEntitySelectionChangedCallback(EntitySelectionChangedCallback callback);
-    __declspec(dllexport) int getEntitySelectionCount();
-    __declspec(dllexport) int getEntitySelectionInfo(int index, EntityStruct* outData);
-    __declspec(dllexport) bool selectEntityByUID(const char* uid);
-    __declspec(dllexport) bool selectEntityInLayerByUID(const char* layerName, const char* uid);
-    __declspec(dllexport) void deselectEntity();
 }
 
 #endif // EDITOR_NATIVE_H

@@ -1580,12 +1580,12 @@ class EditorState extends State {
         var layer = getLayerByName(layerName);
         if (layer == null) {
             trace("Layer not found: " + layerName);
-            return;
+            false return;
         }
         
         if (!Std.isOfType(layer, TilemapLayer)) {
             trace("Layer is not a tilemap layer: " + layerName);
-            return;
+            false return;
         }
         
         var tilemapLayer:TilemapLayer = cast layer;
@@ -1593,7 +1593,7 @@ class EditorState extends State {
         
         if (newTileset == null) {
             trace("New tileset not found: " + newTilesetName);
-            return;
+            false return;
         }
         
         // Update the layer's tileset reference
@@ -1612,12 +1612,8 @@ class EditorState extends State {
         // Mark buffers as needing update to reflect changes
         tilemapLayer.managedTileBatch.needsBufferUpdate = true;
         
-        trace("Replaced tileset for layer: " + layerName + " with new tileset: " + newTilesetName);
-        trace("New tilemap layer has regions: " + tilemapLayer.managedTileBatch.getRegionCount());
-        // for (i in 0...tilemapLayer.managedTileBatch.getRegionCount() - 1) {
-        //     var region = tilemapLayer.managedTileBatch.getRegion(i);
-        //     //trace("Region " + i + ": atlasX=" + region.u1 + ", atlasY=" + region.v1 + ", width=" + (region.u2 - region.u1) + ", height=" + (region.v2 - region.v1));
-        // }
+        
+        return true;
     }
 
     

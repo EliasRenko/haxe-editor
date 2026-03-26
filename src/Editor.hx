@@ -416,7 +416,7 @@ class Editor {
                     var name:String = tilesetData.name;
                     var path:String = tilesetData.texturePath;
                     var err = Editor.createTileset(path, name);
-                        if (err != null) {
+                        if (err == false) {
                             app.log.error(LogCategory.APP, "Editor: Warning — could not load tileset '" + name + "': " + err);
                         }
                 }
@@ -526,9 +526,6 @@ class Editor {
     public static function exportMap(filePath:String):Bool {
         try {
             var success = editorState.exportToJSON(filePath);
-
-            
-
 
             if (success) {
                 app.log.info(LogCategory.APP, "Editor: Exported map to: " + filePath);
@@ -698,106 +695,7 @@ class Editor {
         return true;
     }
 
-    // ===== TILESET MANAGEMENT =====
-
-    @:keep public static function createTileset(texturePath:String, tilesetName:String):String {
-        var error:String = null;
-
-        if (!app.resources.cached(texturePath)) {
-            app.log.info(LogCategory.APP, "Loading texture: " + texturePath);
-            app.resources.loadTexture(texturePath, false);
-        }
-
-        if (tilesetManager.exists(tilesetName)) {
-            error = "Tileset with the name " + tilesetName + " already exists";
-            app.log.info(LogCategory.APP, error);
-            return error;
-        }
-        
-        var glTexture:Texture = app.renderer.uploadTexture(app.resources.getTexture(texturePath, false));
-        tilesetManager.setTileset(glTexture, tilesetName, texturePath);
-
-        return null;
-    }
-
-    @:keep public static function deleteTileset(name:String):String {
-        if (!tilesetManager.exists(name))
-            return "Cannot delete tileset '" + name + "': does not exist";
-        // Remove from shared manager, then mark entity batches as missing in all states.
-        // Entity definitions are intentionally kept so instances can be seen in the editor
-        // as red silhouettes, and the definitions remain available for re-linking later.
-        tilesetManager.deleteTileset(name);
-        for (s in app.states) (cast s:EditorState).removeTilesetReferences(name);
-        return null;
-    }
-
-    /**
-     * Get the count of loaded tilesets
-     * @return Number of tilesets loaded
-     */
-    @:keep
-    public static function getTilesetCount():Int {
-        return tilesetManager != null ? tilesetManager.getTilesetCount() : 0;
-    }
-
-    /**
-     * Get tileset information by name
-     * @param tilesetName Name of the tileset (e.g., "devTiles")
-     * @param outInfo Pointer to TilesetInfoStruct to fill
-     * @return 1 if successful, 0 if tileset not found
-     */
-    @:keep
-    public static function getTileset(tilesetName:String, outInfo:Pointer<TilesetInfoStruct>):Int {
-        if (tilesetManager == null) return 0;
-        var et = tilesetManager.getTilesetInfo(tilesetName);
-        if (et == null) { log("Editor: Tileset not found: " + tilesetName); return 0; }
-        var ref:Reference<TilesetInfoStruct> = outInfo.ref;
-        ref.name = et.name;
-        ref.texturePath = et.texturePath;
-        return 1;
-    }
-
-    @:keep
-    public static function getTilesetAt(index:Int, outInfo:Pointer<TilesetInfoStruct>):Int {
-        var et = tilesetManager != null ? tilesetManager.getTilesetInfoAt(index) : null;
-        if (et == null) { log("Editor: Tileset not found at index: " + index); return 0; }
-        var ref:Reference<TilesetInfoStruct> = outInfo.ref;
-        ref.name = et.name;
-        ref.texturePath = et.texturePath;
-        return 1;
-    }
-
-    /**
-     * Set the current active tileset for drawing
-     * @param tilesetName Name of the tileset to make active
-     * @return 1 if tileset was found and set, 0 otherwise
-     */
-    @:keep
-    public static function setActiveTileset(tilesetName:String):Int {
-        if (app == null || !initialized) {
-            log("Editor: Cannot set tileset - engine not initialized");
-            return 0;
-        }
-
-        if (editorState == null) {
-            log("Editor: EditorState not loaded");
-            return 0;
-        }
-
-        try {
-            var result = editorState.tilesetManager.setActiveTileset(tilesetName);
-            if (result) {
-                log("Editor: Active tileset set to: " + tilesetName);
-                return 1;
-            } else {
-                log("Editor: Tileset not found: " + tilesetName);
-                return 0;
-            }
-        } catch (e:Dynamic) {
-            log("Editor: Error setting tileset: " + e);
-            return 0;
-        }
-    }
+    // ===== TEXTURE MANAGEMENT =====
 
     /**
      * Get texture data by resource path
@@ -840,23 +738,111 @@ class Editor {
         ref.transparent = textureData.transparent ? 1 : 0;
     }
 
+    // ===== TILESET MANAGEMENT =====
+
+    @:keep public static function createTileset(texturePath:String, tilesetName:String):Bool {
+        try {
+            if (!app.resources.cached(texturePath)) {
+                app.log.info(LogCategory.APP, "Loading texture: " + texturePath);
+                app.resources.loadTexture(texturePath, false);
+            }
+
+            if (tilesetManager.exists(tilesetName)) {
+                app.log.info(LogCategory.APP, "Tileset with the name " + tilesetName + " already exists");
+                return true;
+            }
+            
+            var glTexture:Texture = app.renderer.uploadTexture(app.resources.getTexture(texturePath, false));
+            tilesetManager.setTileset(glTexture, tilesetName, texturePath);
+
+        } catch (e:Dynamic) {
+            app.log.error(LogCategory.APP, "Editor: Error creating tileset '" + tilesetName + "': " + e);
+            return false;
+        }
+
+        return true;
+    }
+
+    @:keep public static function deleteTileset(name:String):Bool {
+        // Remove from shared manager, then mark entity batches as missing in all states.
+        // Entity definitions are intentionally kept so instances can be seen in the editor
+        // as red silhouettes, and the definitions remain available for re-linking later.
+        tilesetManager.deleteTileset(name);
+        for (s in app.states) (cast s:EditorState).removeTilesetReferences(name);
+        return true;
+    }
+
+	/**
+	 * Get tileset information by name
+	 * @param tilesetName Name of the tileset (e.g., "devTiles")
+	 * @param outInfo Pointer to TilesetInfoStruct to fill
+	 * @return 1 if successful, 0 if tileset not found
+	 */
+	@:keep
+	public static function getTileset(tilesetName:String, outInfo:Pointer<TilesetInfoStruct>):Bool {
+		if (tilesetManager == null)
+			return false;
+		var et = tilesetManager.getTilesetInfo(tilesetName);
+		if (et == null) {
+			log("Editor: Tileset not found: " + tilesetName);
+			return false;
+		}
+		var ref:Reference<TilesetInfoStruct> = outInfo.ref;
+		ref.name = et.name;
+		ref.texturePath = et.texturePath;
+		return true;
+	}
+
+    @:keep
+    public static function getTilesetAt(index:Int, outInfo:Pointer<TilesetInfoStruct>):Bool {
+        var et = tilesetManager != null ? tilesetManager.getTilesetInfoAt(index) : null;
+        if (et == null) { log("Editor: Tileset not found at index: " + index); return false; }
+        var ref:Reference<TilesetInfoStruct> = outInfo.ref;
+        ref.name = et.name;
+        ref.texturePath = et.texturePath;
+        return true;
+    }
+
+    /**
+     * Get the count of loaded tilesets
+     * @return Number of tilesets loaded
+     */
+    @:keep
+    public static function getTilesetCount():Int {
+        return tilesetManager != null ? tilesetManager.getTilesetCount() : 0;
+    }
+
+    /**
+     * Set the current active tileset for drawing
+     * @param tilesetName Name of the tileset to make active
+     * @return 1 if tileset was found and set, 0 otherwise
+     */
+    @:keep
+    public static function setActiveTileset(tilesetName:String):Bool {
+        return editorState.tilesetManager.setActiveTileset(tilesetName);
+    }
+
+    
+    @:keep
+    public static function getActiveTile():Int {
+        return editorState.getActiveTile();
+    }
+
+    @:keep
+    public static function setActiveTile(tileRegionId:Int):Void {
+        editorState.setActiveTile(tileRegionId);
+    }
+
     // ===== ENTITY DEFINITIONS =====
 
     @:keep
-    public static function createEntityDef(entityName:String, data:Pointer<EntityDataStruct>):String {
-        if (entityManager == null) {
-            return "Cannot create entity '" + entityName + "': editor not initialized";
-        }
-
+    public static function createEntityDef(entityName:String, data:Pointer<EntityDataStruct>):Bool {
         var ref:Reference<EntityDataStruct> = data.ref;
         var tilesetName:String = ref.tilesetName;
 
-        if (tilesetName != null && tilesetName != "" && !tilesetManager.exists(tilesetName)) {
-            return "Cannot create entity '" + entityName + "': tileset '" + tilesetName + "' does not exist";
-        }
-
         if (entityManager.exists(entityName)) {
-            return "Cannot create entity '" + entityName + "': definition already exists";
+            app.log.error(LogCategory.APP, "Cannot create entity '" + entityName + "': definition already exists");
+            return false;
         }
 
         var rX = ref.regionX;
@@ -878,19 +864,19 @@ class Editor {
             ref.pivotX, ref.pivotY
         );
 
-        return null;
+        return true;
     }
 
     @:keep
-    public static function editEntityDef(entityName:String, data:Pointer<EntityDataStruct>):String {
-        if (!entityManager.exists(entityName))
-            return "Cannot edit entity '" + entityName + "': definition does not exist";
+    public static function editEntityDef(entityName:String, data:Pointer<EntityDataStruct>):Bool {
         var ref:Reference<EntityDataStruct> = data.ref;
         var tilesetName:String = ref.tilesetName;
         // tilesetName null/empty means "no tileset" — allowed.
         // Non-null/empty names must exist in the manager.
-        if (tilesetName != null && tilesetName != "" && !tilesetManager.exists(tilesetName))
-            return "Cannot edit entity '" + entityName + "': tileset '" + tilesetName + "' does not exist";
+        if (tilesetName != null && tilesetName != "" && !tilesetManager.exists(tilesetName)) {
+            app.log.error(LogCategory.APP, "Cannot edit entity '" + entityName + "': tileset '" + tilesetName + "' does not exist");
+            return false;
+        }
         // Update the shared manager record.
         // When there's no tileset, use the entity's own dimensions as the render region
         // so the red silhouette is sized correctly.
@@ -911,41 +897,53 @@ class Editor {
             @:privateAccess state.collectEntityLayers(state.entities, allEntityLayers);
             for (el in allEntityLayers) el.applyDefinitionUpdate(def, ts, app.renderer, programInfo);
         }
-        return null;
+        return true;
     }
 
     @:keep
-    public static function getEntityDef(entityName:String, outData:Pointer<EntityDataStruct>):String {
+    public static function deleteEntityDef(entityName:String):Bool {
+        if (entityManager == null || !entityManager.exists(entityName)) {
+            app.log.error(LogCategory.APP, "Cannot delete entity '" + entityName + "': definition does not exist");
+            return false;
+        }
+        // Remove placed instances from all states, then delete from shared manager
+        for (s in app.states) (cast s:EditorState).removeEntityInstances(entityName);
+        entityManager.deleteEntityDefinition(entityName);
+        return true;
+    }
+
+    @:keep
+    public static function getEntityDef(entityName:String, outData:Pointer<EntityDataStruct>):Bool {
         var entityDef = entityManager != null ? entityManager.getEntityDefinition(entityName) : null;
         if (entityDef == null) {
             var error = "Editor: No entity definition found: " + entityName;
             app.log.warn(LogCategory.APP, error);
-            return error;
+            return false;
         }
         try { populateEntityDataStruct(entityDef, outData); }
         catch (e:Dynamic) {
             var error = "Editor: Failed to retrieve data for entity '" + entityName + "': " + e;
             app.log.error(LogCategory.APP, error);
-            return error;
+            return false;
         }
-        return null;
+        return true;
     }
 
     @:keep
-    public static function getEntityDefAt(index:Int, outData:Pointer<EntityDataStruct>):String {
+    public static function getEntityDefAt(index:Int, outData:Pointer<EntityDataStruct>):Bool {
         var entityDef = entityManager != null ? entityManager.getEntityDefinitionAt(index) : null;
         if (entityDef == null) {
             var error = "Editor: No entity definition found at index: " + index;
             app.log.warn(LogCategory.APP, error);
-            return error;
+            return false;
         }
         try { populateEntityDataStruct(entityDef, outData); }
         catch (e:Dynamic) {
             var error = "Editor: Failed to retrieve data for entity at index '" + index + "': " + e;
             app.log.error(LogCategory.APP, error);
-            return error;
+            return false;
         }
-        return null;
+        return true;
     }
 
     @:keep
@@ -954,18 +952,8 @@ class Editor {
     }
 
     @:keep
-    public static function setActiveEntityDef(entityName:String):Int {
-        return editorState.setActiveEntity(entityName) ? 1 : 0;
-    }
-
-    @:keep
-    public static function deleteEntityDef(entityName:String):String {
-        if (entityManager == null || !entityManager.exists(entityName))
-            return "Cannot delete entity '" + entityName + "': definition does not exist";
-        // Remove placed instances from all states, then delete from shared manager
-        for (s in app.states) (cast s:EditorState).removeEntityInstances(entityName);
-        entityManager.deleteEntityDefinition(entityName);
-        return null;
+    public static function setActiveEntityDef(entityName:String):Bool {
+        return editorState.setActiveEntity(entityName);
     }
 
     @:keep @:noExport
@@ -986,6 +974,27 @@ class Editor {
     // ===== ENTITY SELECTION & TOOLS =====
 
     @:keep
+    public static function getEntitySelectionCount():Int {
+        return editorState.selectedEntities.length;
+    }
+
+    @:keep
+    public static function getEntitySelectionInfo(index:Int, outData:cpp.Pointer<EntityStruct>):Bool {
+        if (index < 0 || index >= editorState.selectedEntities.length) return false;
+        var ent = editorState.selectedEntities[index];
+        var ref:cpp.Reference<EntityStruct> = outData.ref;
+        var entUid:String = ent.uid;
+        untyped __cpp__("{0}.uid = {1}.__s", ref, entUid);
+        var entName:String = ent.name;
+        untyped __cpp__("{0}.name = {1}.__s", ref, entName);
+        ref.x = Std.int(ent.x);
+        ref.y = Std.int(ent.y);
+        ref.width = Std.int(ent.width);
+        ref.height = Std.int(ent.height);
+        return true;
+    }
+
+    @:keep
     public static function selectEntityByUID(uid:String):Bool {
         return editorState.selectEntityByUID(uid);
     }
@@ -998,47 +1007,6 @@ class Editor {
     @:keep
     public static function deselectEntity():Void {
         editorState.deselectEntity();
-    }
-
-    @:keep
-    public static function getEntitySelectionCount():Int {
-        return editorState.selectedEntities.length;
-    }
-
-    @:keep
-    public static function getEntitySelectionInfo(index:Int, outData:cpp.Pointer<EntityStruct>):Int {
-        if (index < 0 || index >= editorState.selectedEntities.length) return 0;
-        var ent = editorState.selectedEntities[index];
-        var ref:cpp.Reference<EntityStruct> = outData.ref;
-        var entUid:String = ent.uid;
-        untyped __cpp__("{0}.uid = {1}.__s", ref, entUid);
-        var entName:String = ent.name;
-        untyped __cpp__("{0}.name = {1}.__s", ref, entName);
-        ref.x = Std.int(ent.x);
-        ref.y = Std.int(ent.y);
-        ref.width = Std.int(ent.width);
-        ref.height = Std.int(ent.height);
-        return 1;
-    }
-
-    @:keep
-    public static function getActiveTile():Int {
-        return editorState.getActiveTile();
-    }
-
-    @:keep
-    public static function setActiveTile(tileRegionId:Int):Void {
-        editorState.setActiveTile(tileRegionId);
-    }
-
-    @:keep
-    public static function setToolType(toolType:Int):Void {
-        editorState.toolType = toolType;
-    }
-
-    @:keep
-    public static function getToolType():Int {
-        return editorState.toolType;
     }
 
     // ===== LAYER MANAGEMENT =====
@@ -1059,104 +1027,19 @@ class Editor {
     }
 
     @:keep
-    public static function setActiveLayer(layerName:String):Int {
-        return editorState.setActiveLayer(layerName) ? 1 : 0;
-    }
-
-    @:keep
-    public static function setActiveLayerAt(index:Int):Int {
-        return editorState.setActiveLayerAt(index) ? 1 : 0;
-    }
-
-    @:keep
-    public static function removeLayer(layerName:String):Int {
-        return editorState.removeLayer(layerName) ? 1 : 0;
-    }
-
-    @:keep
-    public static function removeLayerByIndex(index:Int):Int {
-        return editorState.removeLayerByIndex(index) ? 1 : 0;
-    }
-
-    @:keep
-    public static function moveLayerUp(layerName:String):Int {
-        return editorState.moveLayerUp(layerName) ? 1 : 0;
-    }
-
-    @:keep
-    public static function moveLayerDown(layerName:String):Int {
-        return editorState.moveLayerDown(layerName) ? 1 : 0;
-    }
-
-    @:keep
-    public static function moveLayerTo(layerName:String, newIndex:Int):Int {
-        return editorState.moveLayerTo(layerName, newIndex) ? 1 : 0;
-    }
-
-    @:keep
-    public static function moveLayerUpByIndex(index:Int):Int {
-       return editorState.moveLayerUpByIndex(index) ? 1 : 0;
-    }
-
-    @:keep
-    public static function moveLayerDownByIndex(index:Int):Int {
-        return editorState.moveLayerDownByIndex(index) ? 1 : 0;
-    }
-
-    @:keep
     public static function getLayerCount():Int {
         return editorState.getLayerCount();
     }
 
     @:keep
-	public static function getLayerInfoAt(index:Int, outInfo:Pointer<LayerInfoStruct>):Int {
-		var layer = editorState.getLayerAt(index);
-        var type:Int = 0;
-        var tilesetName:String = "";
-        var tileSize:Int = 0;
-
-		if (layer == null) {
-			app.log.error(LogCategory.APP, "Editor: No layer found at index: " + index);
-			return 0;
-		}
-
-		// Determine layer type
-		if (Std.isOfType(layer, layers.TilemapLayer)) {
-			type = 0;
-			var tilemapLayer:layers.TilemapLayer = cast layer;
-			tilesetName = tilemapLayer.editorTexture.name;
-			tileSize = tilemapLayer.tileSize;
-		} else if (Std.isOfType(layer, layers.EntityLayer)) {
-			type = 1;
-			var entityLayer:layers.EntityLayer = cast layer;
-            if (entityLayer.batches != null && entityLayer.batches.length > 0) {
-                var firstEntry = entityLayer.batches[0];
-                if (firstEntry.editorTexture != null)
-                    tilesetName = firstEntry.editorTexture.name;
-            }
-        }
-
-        // write result into the C struct via the pointer reference
-        var ref:Reference<LayerInfoStruct> = outInfo.ref;
-        ref.name = layer.id;
-        ref.type = type; // 0 = TilemapLayer, 1 = EntityLayer, 2 = FolderLayer
-        ref.tilesetName = tilesetName;
-        ref.tileSize = tileSize;
-        ref.visible = layer.visible ? 1 : 0;
-        ref.silhouette = layer.silhouette;
-        ref.silhouetteColor = layer.silhouetteColor.hexValue;
-        return 1;
-    }
-
-    @:keep
-    public static function getLayerInfo(layerName:String, outInfo:Pointer<LayerInfoStruct>):Int {
+    public static function getLayerInfo(layerName:String, outInfo:Pointer<LayerInfoStruct>):Bool {
 		var layer = editorState.getLayerByName(layerName);
         var type:Int = 0;
         var tilesetName:String = "";
         var tileSize:Int = 0;
 		if (layer == null) {
 			app.log.error(LogCategory.APP, "Editor: Layer not found: " + layerName);
-			return 0;
+			return false;
 		}
 
 		//Determine layer type
@@ -1184,27 +1067,124 @@ class Editor {
         ref.visible = layer.visible ? 1 : 0;
         ref.silhouette = layer.silhouette;
         ref.silhouetteColor = layer.silhouetteColor.hexValue;
-        return 1;
+        return true;
     }
 
     @:keep
-    public static function setLayerProperties(layerName:String, properties:Pointer<LayerInfoStruct>):Void {
+	public static function getLayerInfoAt(index:Int, outInfo:Pointer<LayerInfoStruct>):Bool {
+		var layer = editorState.getLayerAt(index);
+        var type:Int = 0;
+        var tilesetName:String = "";
+        var tileSize:Int = 0;
+
+		if (layer == null) {
+			app.log.error(LogCategory.APP, "Editor: No layer found at index: " + index);
+			return false;
+		}
+
+		// Determine layer type
+		if (Std.isOfType(layer, layers.TilemapLayer)) {
+			type = 0;
+			var tilemapLayer:layers.TilemapLayer = cast layer;
+			tilesetName = tilemapLayer.editorTexture.name;
+			tileSize = tilemapLayer.tileSize;
+		} else if (Std.isOfType(layer, layers.EntityLayer)) {
+			type = 1;
+			var entityLayer:layers.EntityLayer = cast layer;
+            if (entityLayer.batches != null && entityLayer.batches.length > 0) {
+                var firstEntry = entityLayer.batches[0];
+                if (firstEntry.editorTexture != null)
+                    tilesetName = firstEntry.editorTexture.name;
+            }
+        }
+
+        // write result into the C struct via the pointer reference
+        var ref:Reference<LayerInfoStruct> = outInfo.ref;
+        ref.name = layer.id;
+        ref.type = type; // 0 = TilemapLayer, 1 = EntityLayer, 2 = FolderLayer
+        ref.tilesetName = tilesetName;
+        ref.tileSize = tileSize;
+        ref.visible = layer.visible ? 1 : 0;
+        ref.silhouette = layer.silhouette;
+        ref.silhouetteColor = layer.silhouetteColor.hexValue;
+        return true;
+    }
+
+    @:keep
+	public static function replaceLayerTileset(layerName:String, newTilesetName:String):Bool {
+		return editorState.replaceLayerTileset(layerName, newTilesetName);
+	}
+
+    @:keep
+    public static function setActiveLayer(layerName:String):Bool {
+        return editorState.setActiveLayer(layerName);
+    }
+
+    @:keep
+    public static function setActiveLayerAt(index:Int):Bool {
+        return editorState.setActiveLayerAt(index);
+    }
+
+    @:keep
+    public static function setLayerProperties(layerName:String, properties:Pointer<LayerInfoStruct>):Bool {
         var ref:Reference<LayerInfoStruct> = properties.ref;
-	    editorState.setLayerProperties(layerName, ref.name, ref.type, ref.tilesetName, ref.visible != 0, ref.silhouette, ref.silhouetteColor);
+        try {
+	        editorState.setLayerProperties(layerName, ref.name, ref.type, ref.tilesetName, ref.visible != 0, ref.silhouette, ref.silhouetteColor);
+            return true;
+        } catch (e:Dynamic) {
+            app.log.error(LogCategory.APP, "Editor: Failed to set layer properties for layer: " + layerName + " - " + e);
+            return false;
+        }
 	}
 
 	@:keep
-	public static function setLayerPropertiesAt(index:Int, properties:Pointer<LayerInfoStruct>):Void {
+	public static function setLayerPropertiesAt(index:Int, properties:Pointer<LayerInfoStruct>):Bool {
         var ref:Reference<LayerInfoStruct> = properties.ref;
-		editorState.setLayerPropertiesAt(index, ref.name, ref.type, ref.tilesetName, ref.visible != 0, ref.silhouette, ref.silhouetteColor);
-	}
+        try {
+		    editorState.setLayerPropertiesAt(index, ref.name, ref.type, ref.tilesetName, ref.visible != 0, ref.silhouette, ref.silhouetteColor);
+            return true;
+        } catch (e:Dynamic) {
+            app.log.error(LogCategory.APP, "Editor: Failed to set layer properties at index: " + index + " - " + e);
+            return false;
+        }
+    }
 
-	@:keep
-	public static function replaceLayerTileset(layerName:String, newTilesetName:String):Void {
-		editorState.replaceLayerTileset(layerName, newTilesetName);
-	}
+    @:keep
+    public static function removeLayer(layerName:String):Bool {
+        return editorState.removeLayer(layerName);
+    }
 
-    // ===== ENTITY LAYER BATCHES =====
+    @:keep
+    public static function removeLayerByIndex(index:Int):Bool {
+        return editorState.removeLayerByIndex(index);
+    }
+
+    @:keep
+    public static function moveLayerUp(layerName:String):Bool {
+        return editorState.moveLayerUp(layerName);
+    }
+
+    @:keep
+    public static function moveLayerDown(layerName:String):Bool {
+        return editorState.moveLayerDown(layerName);
+    }
+
+    @:keep
+    public static function moveLayerTo(layerName:String, newIndex:Int):Bool {
+        return editorState.moveLayerTo(layerName, newIndex);
+    }
+
+    @:keep
+    public static function moveLayerUpByIndex(index:Int):Bool {
+       return editorState.moveLayerUpByIndex(index);
+    }
+
+    @:keep
+    public static function moveLayerDownByIndex(index:Int):Bool {
+        return editorState.moveLayerDownByIndex(index);
+    }
+
+    // ===== Batch management =====
 
     @:keep
     public static function getEntityLayerBatchCount(layerName:String):Int {
@@ -1281,32 +1261,42 @@ class Editor {
     }
 
     @:keep
-    public static function moveEntityLayerBatchUp(layerName:String, batchIndex:Int):Int {
-        return editorState.moveEntityLayerBatchUp(layerName, batchIndex) ? 1 : 0;
+    public static function moveEntityLayerBatchUp(layerName:String, batchIndex:Int):Bool {
+        return editorState.moveEntityLayerBatchUp(layerName, batchIndex);
     }
 
     @:keep
-    public static function moveEntityLayerBatchDown(layerName:String, batchIndex:Int):Int {
-        return editorState.moveEntityLayerBatchDown(layerName, batchIndex) ? 1 : 0;
+    public static function moveEntityLayerBatchDown(layerName:String, batchIndex:Int):Bool {
+        return editorState.moveEntityLayerBatchDown(layerName, batchIndex);
     }
 
     @:keep
-    public static function moveEntityLayerBatchTo(layerName:String, batchIndex:Int, newIndex:Int):Int {
-        return editorState.moveEntityLayerBatchTo(layerName, batchIndex, newIndex) ? 1 : 0;
+    public static function moveEntityLayerBatchTo(layerName:String, batchIndex:Int, newIndex:Int):Bool {
+        return editorState.moveEntityLayerBatchTo(layerName, batchIndex, newIndex);
     }
 
     @:keep
-    public static function moveEntityLayerBatchUpByIndex(layerIndex:Int, batchIndex:Int):Int {
-        return editorState.moveEntityLayerBatchUpByLayerIndex(layerIndex, batchIndex) ? 1 : 0;
+    public static function moveEntityLayerBatchUpByIndex(layerIndex:Int, batchIndex:Int):Bool {
+        return editorState.moveEntityLayerBatchUpByLayerIndex(layerIndex, batchIndex);
     }
 
     @:keep
-    public static function moveEntityLayerBatchDownByIndex(layerIndex:Int, batchIndex:Int):Int {
-        return editorState.moveEntityLayerBatchDownByLayerIndex(layerIndex, batchIndex) ? 1 : 0;
+    public static function moveEntityLayerBatchDownByIndex(layerIndex:Int, batchIndex:Int):Bool {
+        return editorState.moveEntityLayerBatchDownByLayerIndex(layerIndex, batchIndex);
     }
 
     @:keep
-    public static function moveEntityLayerBatchToByIndex(layerIndex:Int, batchIndex:Int, newIndex:Int):Int {
-        return editorState.moveEntityLayerBatchToByLayerIndex(layerIndex, batchIndex, newIndex) ? 1 : 0;
+    public static function moveEntityLayerBatchToByIndex(layerIndex:Int, batchIndex:Int, newIndex:Int):Bool {
+        return editorState.moveEntityLayerBatchToByLayerIndex(layerIndex, batchIndex, newIndex);
+    }
+
+    @:keep
+    public static function setToolType(toolType:Int):Void {
+        editorState.toolType = toolType;
+    }
+
+    @:keep
+    public static function getToolType():Int {
+        return editorState.toolType;
     }
 }
