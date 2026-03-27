@@ -7,7 +7,6 @@ import App;
 import Renderer;
 import display.Grid;
 import display.ManagedTileBatch;
-import Editor;
 import display.MapFrame;
 import display.LineBatch;
 import display.Selection;
@@ -1576,16 +1575,16 @@ class EditorState extends State {
         return layer;
     }
 
-    public function replaceLayerTileset(layerName:String, newTilesetName:String):Void {
+    public function replaceLayerTileset(layerName:String, newTilesetName:String):Bool {
         var layer = getLayerByName(layerName);
         if (layer == null) {
             trace("Layer not found: " + layerName);
-            false return;
+            return false;
         }
         
         if (!Std.isOfType(layer, TilemapLayer)) {
             trace("Layer is not a tilemap layer: " + layerName);
-            false return;
+            return false;
         }
         
         var tilemapLayer:TilemapLayer = cast layer;
@@ -1593,7 +1592,7 @@ class EditorState extends State {
         
         if (newTileset == null) {
             trace("New tileset not found: " + newTilesetName);
-            false return;
+            return false;
         }
         
         // Update the layer's tileset reference
@@ -1611,7 +1610,6 @@ class EditorState extends State {
         
         // Mark buffers as needing update to reflect changes
         tilemapLayer.managedTileBatch.needsBufferUpdate = true;
-        
         
         return true;
     }

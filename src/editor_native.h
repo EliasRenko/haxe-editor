@@ -193,7 +193,7 @@ extern "C" {
     __declspec(dllexport) bool moveEntityLayerBatchUpByIndex(int layerIndex, int batchIndex);
     __declspec(dllexport) bool moveEntityLayerBatchDownByIndex(int layerIndex, int batchIndex);
     __declspec(dllexport) bool moveEntityLayerBatchToByIndex(int layerIndex, int batchIndex, int newIndex);
-    // tool
+    
     __declspec(dllexport) void setToolType(int toolType);
     __declspec(dllexport) int getToolType();
 }
