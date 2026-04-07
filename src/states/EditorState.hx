@@ -15,6 +15,7 @@ import layers.TilemapLayer;
 import layers.EntityLayer;
 import layers.EntityLayer.Entity;
 import display.BitmapFont;
+import math.Matrix;
 import EditorTexture;
 import layers.FolderLayer;
 import manager.TilesetManager;
@@ -28,9 +29,11 @@ class EditorState extends State {
     private var worldAxes:LineBatch;
     private var quadtreeDebug:LineBatch;
     private var selection:Selection;
-    /** Shared BitmapFont for entity name labels. */
+    /** Shared BitmapFont for entity name labels. Tiles are placed in screen space
+     *  each frame so labels always render at a stable pixel size regardless of zoom. */
     private var entityLabelFont:BitmapFont = null;
     private var _labelDebugFrames:Int = 0;
+    private var _labelsVisible:Bool = true;
 
     /** Absolute path to the project this map belongs to, or null if standalone. */
     public var projectFilePath:Null<String> = null;
@@ -2132,9 +2135,12 @@ class EditorState extends State {
         // Draw entity name labels on top of all entity sprites.
         // Tiles are rebuilt fresh every frame so they always reflect current entity positions
         // regardless of whether entities came from JSON import or interactive placement.
-        if (entityLabelFont != null) {
+        if (entityLabelFont != null && _labelsVisible) {
             buildEntityLabels();
-            renderer.renderDisplayObject(entityLabelFont, viewProjectionMatrix);
+            // Render labels with a screen-space ortho so glyph sizes are always
+            // in screen pixels, unaffected by camera zoom.
+            var screenMatrix = Matrix.createOrthoMatrix(0, size.x, size.y, 0, -1, 1);
+            renderer.renderDisplayObject(entityLabelFont, screenMatrix);
         }
 
         // Draw selection outline on top of everything
@@ -2143,6 +2149,15 @@ class EditorState extends State {
         }
     }
     
+    /**
+     * Enable or disable entity name label rendering across all entity layers.
+     * When disabled the font batch is not rebuilt or drawn; existing tile data
+     * is left intact so re-enabling has zero warm-up cost.
+     */
+    public function toggleLabels(enable:Bool):Void {
+        _labelsVisible = enable;
+    }
+
     /**
      * Rebuild all entity label font tiles fresh each frame.
      * This approach is immune to timing issues (JSON import vs. interactive placement)
@@ -2153,6 +2168,11 @@ class EditorState extends State {
         // Remove all tiles from previous frame
         entityLabelFont.clear();
 
+        var size = app.window.size;
+        var zoom = camera.zoom;
+        var zoomCX = camera.zoomCenterX != null ? camera.zoomCenterX : size.x * 0.5;
+        var zoomCY = camera.zoomCenterY != null ? camera.zoomCenterY : size.y * 0.5;
+
         for (entity in entities) {
             var el = Std.downcast(entity, EntityLayer);
             if (el == null || !el.visible) continue;
@@ -2161,9 +2181,19 @@ class EditorState extends State {
                 for (ent in entry.entities) {
                     var renderX = ent.x - ent.pivotX * ent.width;
                     var renderY = ent.y - ent.pivotY * ent.height;
+
+                    // Convert the entity's center-top anchor to screen pixels.
+                    // All world-to-screen offsets must be applied here so that glyph
+                    // positions (which are in screen pixels) stay zoom-independent.
+                    var entityCenterWorldX = renderX + ent.width * 0.5;
+                    var entityTopWorldY    = renderY;
+                    var entityCenterScreenX = (entityCenterWorldX - camera.x - zoomCX) * zoom + zoomCX;
+                    var entityTopScreenY    = (entityTopWorldY    - camera.y - zoomCY) * zoom + zoomCY;
+
+                    // Offset in screen pixels: center the text, place it above the sprite.
                     var textWidth = entityLabelFont.measureTextWidth(ent.name);
-                    var cursorX:Float = Math.round(renderX + ent.width * 0.5 - textWidth * 0.5);
-                    var cursorY:Float = Math.round(renderY - entityLabelFont.fontData.lineHeight - 2);
+                    var cursorX:Float = Math.round(entityCenterScreenX - textWidth * 0.5);
+                    var cursorY:Float = Math.round(entityTopScreenY - entityLabelFont.fontData.lineHeight - 2);
 
                     for (i in 0...ent.name.length) {
                         var charCode = ent.name.charCodeAt(i);

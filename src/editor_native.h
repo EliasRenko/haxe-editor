@@ -199,6 +199,8 @@ extern "C" {
     
     __declspec(dllexport) void setToolType(int toolType);
     __declspec(dllexport) int getToolType();
+
+    __declspec(dllexport) void toggleLabels(bool enable);
 }
 
 #endif // EDITOR_NATIVE_H

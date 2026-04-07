@@ -1312,4 +1312,9 @@ class Editor {
     public static function getToolType():Int {
         return editorState.toolType;
     }
+
+    @:keep
+    public static function toggleLabels(enable:Bool):Void {
+        editorState.toggleLabels(enable);
+    }
 }

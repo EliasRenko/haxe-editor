@@ -12,6 +12,7 @@ import utils.EntityQuadtree.EntityBounds;
 import utils.UIDGenerator;
 import display.BitmapFont;
 import display.Text;
+import Renderer;
 
 typedef Entity = {
     uid:String,
