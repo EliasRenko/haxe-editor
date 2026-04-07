@@ -35,6 +35,7 @@ class TilemapLayer extends Layer implements ITilesLayer {
         if (visible && managedTileBatch != null && managedTileBatch.visible) {
             
             managedTileBatch.uniforms.set("silhouette", false);
+            managedTileBatch.uniforms.set("uAlpha", 1.0);
             renderer.renderDisplayObject(managedTileBatch, viewProjectionMatrix); // automatically calls updateBuffers() and render()
 
             if (silhouette) {

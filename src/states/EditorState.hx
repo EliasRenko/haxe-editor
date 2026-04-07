@@ -92,6 +92,9 @@ class EditorState extends State {
 
     // Fired whenever the selection changes (added, cleared, etc.)
     public var onEntitySelectionChanged:()->Void = null;
+
+    // Placement ghost cursor overlay (tile/entity preview that follows the mouse)
+    private var _placementPreview:PlacementPreview = null;
     
     public function new(app:App, tilesetManager:TilesetManager, entityManager:EntityManager) {
         super("EditorState", app);
@@ -149,6 +152,9 @@ class EditorState extends State {
             selection = new Selection(lineProgramInfo);
             selection.init(app.renderer);
         }
+
+        // Initialise the placement ghost cursor overlay
+        _placementPreview = new PlacementPreview();
 
         // Create default programInfo
         //var textureVertShader = app.resources.getText("shaders/texture.vert");
@@ -524,8 +530,16 @@ class EditorState extends State {
         var screenX = mouse.x;
         var screenY = mouse.y;
 
+        // Convert screen position to world position using camera
+        // (computed before the pan check so the preview can still follow the cursor)
+        var worldPos = screenToWorld(screenX, screenY);
+
         // ── Photoshop-style pan: Space held OR middle mouse held ──────────────
         var panActive = keyboard.check(32) || mouse.check(2); // 32 = SPACE, 2 = middle button
+
+        // Update placement ghost — suppress it during pan and resize interactions
+        _updatePlacementPreview(worldPos.x, worldPos.y, panActive || resizeMode != null);
+
         if (panActive) {
             if (_isPanning) {
                 var dx = screenX - _panLastX;
@@ -540,9 +554,6 @@ class EditorState extends State {
         } else {
             _isPanning = false;
         }
-
-        // Convert screen position to world position using camera
-        var worldPos = screenToWorld(screenX, screenY);
 
         // Handle resize drag (if in resize mode)
         if (resizeMode != null) {
@@ -622,6 +633,122 @@ class EditorState extends State {
         return null;
     }
     
+    /**
+     * Update the placement ghost cursor for the current frame.
+     * Called from handleInput() every frame.
+     * @param worldX  World-space X of the current mouse cursor.
+     * @param worldY  World-space Y of the current mouse cursor.
+     * @param suppress  When true (panning / resizing) the ghost is hidden.
+     */
+    private function _updatePlacementPreview(worldX:Float, worldY:Float, suppress:Bool):Void {
+        if (_placementPreview == null) return;
+
+        if (suppress || activeLayer == null) {
+            _placementPreview.visible = false;
+            return;
+        }
+
+        var programInfo = app.renderer.getProgramInfo("texture");
+        if (programInfo == null) { _placementPreview.visible = false; return; }
+
+        // ── Tile draw tool on a TilemapLayer ──────────────────────────────────
+        if (toolType == ToolType.TILE_DRAW && Std.isOfType(activeLayer, TilemapLayer)) {
+            var tilemapLayer:TilemapLayer = cast activeLayer;
+            if (tilemapLayer.editorTexture == null || tilemapLayer.managedTileBatch == null) {
+                _placementPreview.visible = false;
+                return;
+            }
+
+            // Snap cursor to tile grid
+            var snappedX = Math.floor(worldX / tileSizeX) * tileSizeX;
+            var snappedY = Math.floor(worldY / tileSizeY) * tileSizeY;
+
+            // Only show the ghost when the cursor is inside the map bounds
+            if (snappedX < mapX || snappedX >= mapX + mapWidth ||
+                snappedY < mapY || snappedY >= mapY + mapHeight) {
+                _placementPreview.visible = false;
+                return;
+            }
+
+            var editorTexture = tilemapLayer.editorTexture;
+
+            // Create the preview batch lazily; swap its texture if the tileset changed
+            if (_placementPreview.batch == null) {
+                var previewBatch = new display.ManagedTileBatch(programInfo, editorTexture.textureId);
+                previewBatch.depthTest = false;
+                previewBatch.init(app.renderer);
+                _placementPreview.batch = previewBatch;
+                _placementPreview.currentTexture = editorTexture;
+            } else if (_placementPreview.currentTexture != editorTexture) {
+                _placementPreview.batch.setTexture(editorTexture.textureId);
+                _placementPreview.currentTexture = editorTexture;
+            }
+
+            // Rebuild the single-tile ghost each frame
+            _placementPreview.batch.clear();
+            _placementPreview.batch.clearRegions();
+            var srcRegion = tilemapLayer.managedTileBatch.getRegion(tilemapLayer.selectedTileRegion);
+            if (srcRegion == null) { _placementPreview.visible = false; return; }
+            var regionId = _placementPreview.batch.defineRegion(
+                srcRegion.x, srcRegion.y, srcRegion.width, srcRegion.height
+            );
+            _placementPreview.batch.addTile(snappedX, snappedY, tileSizeX, tileSizeY, regionId);
+            _placementPreview.batch.needsBufferUpdate = true;
+            _placementPreview.visible = true;
+
+        // ── Entity add tool on an EntityLayer ─────────────────────────────────
+        } else if (toolType == ToolType.ENTITY_ADD && Std.isOfType(activeLayer, layers.EntityLayer)) {
+            if (entityManager.selectedEntityName == null || entityManager.selectedEntityName == ""
+                    || !entityManager.exists(entityManager.selectedEntityName)) {
+                _placementPreview.visible = false;
+                return;
+            }
+
+            var entityDef = entityManager.getEntityDefinition(entityManager.selectedEntityName);
+            var editorTexture:EditorTexture = (entityDef.tilesetName != null && entityDef.tilesetName != "")
+                ? tilesetManager.tilesets.get(entityDef.tilesetName) : null;
+
+            if (editorTexture == null) { _placementPreview.visible = false; return; }
+
+            // Only show inside map bounds
+            if (worldX < mapX || worldX >= mapX + mapWidth ||
+                worldY < mapY || worldY >= mapY + mapHeight) {
+                _placementPreview.visible = false;
+                return;
+            }
+
+            // Offset render position by the entity's pivot
+            var renderX = worldX - entityDef.pivotX * entityDef.width;
+            var renderY = worldY - entityDef.pivotY * entityDef.height;
+
+            // Create / swap batch when the entity definition's tileset changes
+            if (_placementPreview.batch == null) {
+                var previewBatch = new display.ManagedTileBatch(programInfo, editorTexture.textureId);
+                previewBatch.depthTest = false;
+                previewBatch.init(app.renderer);
+                _placementPreview.batch = previewBatch;
+                _placementPreview.currentTexture = editorTexture;
+            } else if (_placementPreview.currentTexture != editorTexture) {
+                _placementPreview.batch.setTexture(editorTexture.textureId);
+                _placementPreview.currentTexture = editorTexture;
+            }
+
+            // Rebuild the single-entity ghost each frame
+            _placementPreview.batch.clear();
+            _placementPreview.batch.clearRegions();
+            var regionId = _placementPreview.batch.defineRegion(
+                entityDef.regionX, entityDef.regionY,
+                entityDef.regionWidth, entityDef.regionHeight
+            );
+            _placementPreview.batch.addTile(renderX, renderY, entityDef.width, entityDef.height, regionId);
+            _placementPreview.batch.needsBufferUpdate = true;
+            _placementPreview.visible = true;
+
+        } else {
+            _placementPreview.visible = false;
+        }
+    }
+
     /**
      * Handle resize dragging with constraints
      */
@@ -2132,6 +2259,13 @@ class EditorState extends State {
             i--;
         }
 
+        // Draw placement preview ghost (60 % alpha) on top of all layers, below labels
+        if (_placementPreview != null && _placementPreview.visible && _placementPreview.batch != null) {
+            _placementPreview.batch.uniforms.set("silhouette", false);
+            _placementPreview.batch.uniforms.set("uAlpha", PlacementPreview.ALPHA);
+            renderDisplayObject(renderer, viewProjectionMatrix, _placementPreview.batch);
+        }
+
         // Draw entity name labels on top of all entity sprites.
         // Tiles are rebuilt fresh every frame so they always reflect current entity positions
         // regardless of whether entities came from JSON import or interactive placement.
@@ -2225,6 +2359,7 @@ class EditorState extends State {
     override public function release():Void {
         // Layers are entities and will be cleaned up by super.release()
         activeLayer = null;
+        _placementPreview = null;
         super.release();
     }
 }

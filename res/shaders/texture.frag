@@ -6,6 +6,7 @@ out vec4 FragColor;
 uniform sampler2D uTexture;
 uniform bool silhouette;         
 uniform vec4 silhouetteColor;
+uniform float uAlpha;            // global alpha multiplier; 1.0 = fully opaque
 const float checkerSize = 16.0; // Checker size in screen pixels
 
 void main() {
@@ -27,6 +28,7 @@ void main() {
         vec4 darkColor = silhouetteColor * vec4(0.2, 0.2, 0.2, 1.0); // 20% brightness
         FragColor = isEven ? silhouetteColor : darkColor;
     } else {
-        FragColor = texture(uTexture, TexCoord);
+        vec4 texColor = texture(uTexture, TexCoord);
+        FragColor = vec4(texColor.rgb, texColor.a * uAlpha);
     }
 }

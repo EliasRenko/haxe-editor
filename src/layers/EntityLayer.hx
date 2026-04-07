@@ -101,6 +101,7 @@ class EntityLayer extends Layer implements ITilesLayer {
             // persist across draw calls, so a previous TilemapLayer that rendered with
             // silhouette=true would otherwise bleed into entity rendering.
             mb.uniforms.set("silhouette", false);
+            mb.uniforms.set("uAlpha", 1.0);
 
             // Skip the normal texture render when the tileset is missing; the GPU
             // texture has been freed and sampling it would produce undefined output.
