@@ -1,5 +1,6 @@
 package;
 
+import haxe.io.Path;
 import data.TextureData;
 import Log.LogCategory;
 import states.EditorState;
@@ -22,6 +23,7 @@ import utils.UIDGenerator;
  *  Tileset and entity-definition data live in the shared managers, not here. */
 typedef ProjectData = {
     var projectFilePath:Null<String>;
+    var projectDir:Null<String>;
     var projectId:String;
     var projectName:String;
     var defaultTileSizeX:Int;
@@ -351,6 +353,7 @@ class Editor {
             if (_projectData == null) {
                 _projectData = {
                     projectFilePath:  filePath,
+                    projectDir:     Path.directory(filePath),
                     projectId:        projectId,
                     projectName:      projectName,
                     defaultTileSizeX: editorState.tileSizeX,
@@ -360,6 +363,7 @@ class Editor {
                 _projectData.projectFilePath = filePath;
                 _projectData.projectId       = projectId;
                 _projectData.projectName     = projectName;
+                _projectData.projectDir      = Path.directory(filePath);
             }
 
             app.log.info(LogCategory.APP, "Editor: Exported project '" + projectName + "' with " + entitiesArray.length + " entity definitions to: " + filePath);
@@ -388,6 +392,10 @@ class Editor {
 
             tilesetManager = new TilesetManager();
             entityManager  = new EntityManager();
+
+            // Set the resource manager's base path to the project directory so tileset paths resolve correctly.
+            var projectDir = Path.directory(filePath);
+            app.resources.preDefinedPath = projectDir + "/res";
 
             // One blank state wired to the new managers — keeps the renderer alive.
             var blankState = new EditorState(app, tilesetManager, entityManager);
@@ -448,6 +456,7 @@ class Editor {
             _projectData = {
                 projectFilePath:  filePath,
                 projectId:        projectId,
+                projectDir:     Path.directory(filePath),
                 projectName:      projectData.projectName != null ? projectData.projectName : "",
                 defaultTileSizeX: tileSizeX,
                 defaultTileSizeY: tileSizeY
@@ -474,7 +483,9 @@ class Editor {
         var fp:String = _projectData.projectFilePath != null ? _projectData.projectFilePath : "";
         var pid:String = _projectData.projectId != null ? _projectData.projectId : "";
         var pn:String = _projectData.projectName;
+        var pd:String = _projectData.projectDir != null ? _projectData.projectDir : "";
         ref.filePath         = fp;
+        ref.projectDir      = pd;
         ref.projectId        = pid;
         ref.projectName      = pn;
         ref.defaultTileSizeX = _projectData.defaultTileSizeX;
@@ -493,9 +504,11 @@ class Editor {
         if (_projectData == null) return false;
         var ref:Reference<ProjectProps> = inProps.ref;
         var fp:String = ref.filePath;
+        var pd:String = ref.projectDir;
         var pid:String = ref.projectId;
         var pn:String = ref.projectName;
         _projectData.projectFilePath  = fp != null && fp != "" ? fp : _projectData.projectFilePath;
+        _projectData.projectDir       = pd != null && pd != "" ? pd : _projectData.projectDir;
         _projectData.projectId        = pid != null && pid != "" ? pid : _projectData.projectId;
         _projectData.projectName      = pn;
         _projectData.defaultTileSizeX = ref.defaultTileSizeX;
@@ -704,7 +717,7 @@ class Editor {
      */
     @:keep
     public static function getTextureData(path:String, outData:Pointer<TextureDataStruct>):Void {
-        var textureData:TextureData = app.resources.getTexture(path, false);
+        var textureData:TextureData = app.resources.getTexture(path);
         if (textureData == null) {
             log("Editor: Texture not found: " + path);
             return;
@@ -740,11 +753,11 @@ class Editor {
 
     // ===== TILESET MANAGEMENT =====
 
-    @:keep public static function createTileset(texturePath:String, tilesetName:String):Bool {
+    @:keep public static function createTileset(relativePath:String, tilesetName:String):Bool {
         try {
-            if (!app.resources.cached(texturePath)) {
-                app.log.info(LogCategory.APP, "Loading texture: " + texturePath);
-                app.resources.loadTexture(texturePath, false);
+            if (!app.resources.cached(relativePath)) {
+                app.log.info(LogCategory.APP, "Loading texture: " + relativePath);
+                app.resources.loadTexture(relativePath, true);
             }
 
             if (tilesetManager.exists(tilesetName)) {
@@ -752,8 +765,8 @@ class Editor {
                 return true;
             }
             
-            var glTexture:Texture = app.renderer.uploadTexture(app.resources.getTexture(texturePath, false));
-            tilesetManager.setTileset(glTexture, tilesetName, texturePath);
+            var glTexture:Texture = app.renderer.uploadTexture(app.resources.getTexture(relativePath));
+            tilesetManager.setTileset(glTexture, tilesetName, relativePath);
 
         } catch (e:Dynamic) {
             app.log.error(LogCategory.APP, "Editor: Error creating tileset '" + tilesetName + "': " + e);
@@ -1012,8 +1025,8 @@ class Editor {
     // ===== LAYER MANAGEMENT =====
 
     @:keep
-    public static function createTilemapLayer(layerName:String, tilesetName:String, tileSize:Int, index:Int = -1):Void {
-        editorState.createTilemapLayer(layerName, tilesetName, index, tileSize);
+    public static function createTilemapLayer(layerName:String, tilesetName:String, tileSize:Int, index:Int = -1):Bool {
+        return editorState.createTilemapLayer(layerName, tilesetName, index, tileSize) != null;
     }
 
     @:keep

@@ -1513,44 +1513,51 @@ class EditorState extends State {
      * @param index Position in the hierarchy (-1 to append at the end, 0 for first layer position)
      */
     public function createTilemapLayer(name:String, tilesetName:String, index:Int = -1, tileSize:Int = 64):TilemapLayer {
-        //TODO:FIX THIS
-        var tileset = tilesetManager.tilesets.get(tilesetName);
-        if (tileset == null) {
-            trace("Cannot create tilemap layer: tileset not found: " + tilesetName);
+        
+        try {
+            //TODO:FIX THIS
+            var tileset = tilesetManager.tilesets.get(tilesetName);
+            if (tileset == null) {
+                app.log.error(LogCategory.APP, "Cannot create tilemap layer: tileset not found: " + tilesetName);
+                return null;
+            }
+            
+            // Get texture program
+            var textureProgramInfo = app.renderer.getProgramInfo("texture");
+            
+            // Create a new tile batch for this layer
+            var batch = new ManagedTileBatch(textureProgramInfo, tileset.textureId);
+            batch.debugName = "TilemapLayer:" + name;
+            batch.depthTest = false;
+            batch.init(app.renderer);
+            
+            // Compute atlas dimensions from texture size and tileSize
+            var tilesPerRow = Std.int(tileset.textureId.width / tileSize);
+            var tilesPerCol = Std.int(tileset.textureId.height / tileSize);
+            
+            // Define tile regions in the batch
+            for (row in 0...tilesPerCol) {
+                for (col in 0...tilesPerRow) {
+                    batch.defineRegion(
+                        col * tileSize,  // atlasX
+                        row * tileSize,  // atlasY
+                        tileSize,        // width
+                        tileSize         // height
+                    );
+                }
+            }
+            
+            // Create the layer with tileset reference
+            var layer = new TilemapLayer(name, tileset, batch, tileSize, tilesPerRow, tilesPerCol);
+            addLayerAtIndex(layer, index);
+            
+            //trace("Created tilemap layer: " + name + " with tileset: " + tilesetName + " at index: " + index);
+            return layer;
+
+        } catch (e:Dynamic) {
+            app.log.error(LogCategory.APP, "Error creating tilemap layer '" + name + "' with tileset '" + tilesetName + "': " + e);
             return null;
         }
-        
-        // Get texture program
-        var textureProgramInfo = app.renderer.getProgramInfo("texture");
-        
-        // Create a new tile batch for this layer
-        var batch = new ManagedTileBatch(textureProgramInfo, tileset.textureId);
-        batch.debugName = "TilemapLayer:" + name;
-        batch.depthTest = false;
-        batch.init(app.renderer);
-        
-        // Compute atlas dimensions from texture size and tileSize
-        var tilesPerRow = Std.int(tileset.textureId.width / tileSize);
-        var tilesPerCol = Std.int(tileset.textureId.height / tileSize);
-        
-        // Define tile regions in the batch
-        for (row in 0...tilesPerCol) {
-            for (col in 0...tilesPerRow) {
-                batch.defineRegion(
-                    col * tileSize,  // atlasX
-                    row * tileSize,  // atlasY
-                    tileSize,        // width
-                    tileSize         // height
-                );
-            }
-        }
-        
-        // Create the layer with tileset reference
-        var layer = new TilemapLayer(name, tileset, batch, tileSize, tilesPerRow, tilesPerCol);
-        addLayerAtIndex(layer, index);
-        
-        trace("Created tilemap layer: " + name + " with tileset: " + tilesetName + " at index: " + index);
-        return layer;
     }
     
     /**
@@ -1561,7 +1568,7 @@ class EditorState extends State {
         // placing the first entity (tileset is determined by the entity definition)
         var layer = new EntityLayer(name);
         addLayer(layer);
-        trace("Created empty entity layer: " + name);
+        app.log.info(LogCategory.APP, "Created empty entity layer: " + name);
         return layer;
     }
     
@@ -1571,19 +1578,19 @@ class EditorState extends State {
     public function createFolderLayer(name:String):FolderLayer {
         var layer = new FolderLayer(name);
         addLayer(layer);
-        trace("Created folder layer: " + name);
+        app.log.info(LogCategory.APP, "Created folder layer: " + name);
         return layer;
     }
 
     public function replaceLayerTileset(layerName:String, newTilesetName:String):Bool {
         var layer = getLayerByName(layerName);
         if (layer == null) {
-            trace("Layer not found: " + layerName);
+            app.log.error(LogCategory.APP, "Layer not found: " + layerName);
             return false;
         }
         
         if (!Std.isOfType(layer, TilemapLayer)) {
-            trace("Layer is not a tilemap layer: " + layerName);
+            app.log.error(LogCategory.APP, "Layer is not a tilemap layer: " + layerName);
             return false;
         }
         
@@ -1591,7 +1598,7 @@ class EditorState extends State {
         var newTileset = tilesetManager.tilesets.get(newTilesetName);
         
         if (newTileset == null) {
-            trace("New tileset not found: " + newTilesetName);
+            app.log.error(LogCategory.APP, "New tileset not found: " + newTilesetName);
             return false;
         }
         

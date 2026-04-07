@@ -72,6 +72,7 @@ typedef struct {
     const char* filePath;
     const char* projectId;
     const char* projectName;
+    const char* projectDir;
     int defaultTileSizeX;
     int defaultTileSizeY;
 } ProjectProps;
@@ -118,6 +119,8 @@ extern "C" {
     __declspec(dllexport) bool importProject(const char* filePath);
     __declspec(dllexport) bool getProjectProps(ProjectProps* outProps);
     __declspec(dllexport) bool editProject(ProjectProps* inProps);
+    __declspec(dllexport) bool copyResources(const char* filePath, const char* subfolder);
+    //__declspec(dllexport) bool closeProject();
     
     // Map management
     __declspec(dllexport) bool exportMap(const char* filePath);
@@ -156,7 +159,7 @@ extern "C" {
     __declspec(dllexport) void deselectEntity();
 
     // Layer management
-    __declspec(dllexport) void createTilemapLayer(const char* layerName, const char* tilesetName, int tileSize, int index);
+    __declspec(dllexport) bool createTilemapLayer(const char* layerName, const char* tilesetName, int tileSize, int index);
     __declspec(dllexport) void createEntityLayer(const char* layerName);
     __declspec(dllexport) void createFolderLayer(const char* layerName);
 
