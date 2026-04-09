@@ -67,6 +67,8 @@ class Grid extends Transform {
         // Grid typically renders behind other objects
         depthTest = true;
         depthWrite = false; // Don't write to depth buffer so other objects render on top
+
+        // ---
     }
 
     /**

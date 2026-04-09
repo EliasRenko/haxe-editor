@@ -1,40 +1,37 @@
 ﻿package states;
 
-import type.ToolType;
-import Log.LogCategory;
-import State;
 import App;
-import Renderer;
+import display.BitmapFont;
 import display.Grid;
+import display.LineBatch;
 import display.ManagedTileBatch;
 import display.MapFrame;
-import display.LineBatch;
 import display.Selection;
-import layers.Layer;
-import layers.TilemapLayer;
+import EditorTexture;
 import layers.EntityLayer;
 import layers.EntityLayer.Entity;
-import display.BitmapFont;
-import math.Matrix;
-import EditorTexture;
 import layers.FolderLayer;
-import manager.TilesetManager;
+import layers.Layer;
+import layers.TilemapLayer;
+import Log.LogCategory;
 import manager.EntityManager;
 import manager.LayerManager;
+import manager.TilesetManager;
+import math.Matrix;
+import Renderer;
+import State;
+import type.ToolType;
 
 class EditorState extends State {
 
     public var grid:Grid;
-    private var tileBatch:ManagedTileBatch;
+    public var entityLabelFont:BitmapFont = null;
+    private var _labelDebugFrames:Int = 0;
+    private var _labelsVisible:Bool = true;
     private var mapFrame:MapFrame;
     private var worldAxes:LineBatch;
     private var quadtreeDebug:LineBatch;
     private var selection:Selection;
-    /** Shared BitmapFont for entity name labels. Tiles are placed in screen space
-     *  each frame so labels always render at a stable pixel size regardless of zoom. */
-    public var entityLabelFont:BitmapFont = null;
-    private var _labelDebugFrames:Int = 0;
-    private var _labelsVisible:Bool = true;
 
     /** Absolute path to the project this map belongs to, or null if standalone. */
     public var projectFilePath:Null<String> = null;
@@ -123,10 +120,6 @@ class EditorState extends State {
         grid.subGridSizeY = tileSizeY;
         grid.gridSizeX = tileSizeX * 4.0;
         grid.gridSizeY = tileSizeY * 4.0;
-        //grid.setGridColor(0.2, 0.4, 0.6); // Blue-ish grid lines
-        //grid.setBackgroundColor(0.05, 0.05, 0.1); // Dark blue background
-        //grid.gridColor = new Color(0xFF336699); // Blue-ish grid lines
-        //grid.backgroundColor = new Color(0xFF0D0D1A); // Dark blue background
         grid.fadeDistance = 3000.0;
         grid.z = 0.0;
         grid.depthTest = false;
@@ -156,7 +149,6 @@ class EditorState extends State {
         _placementPreview = new PlacementPreview();
 
         // Create default programInfo
-        //var textureVertShader = app.resources.getText("shaders/texture.vert");
         var textureFragShader = app.resources.getText("shaders/texture.frag");
         app.renderer.createProgramInfo("texture", null, textureFragShader);
 
