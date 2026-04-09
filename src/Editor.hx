@@ -33,7 +33,7 @@ typedef ProjectData = {
 @:headerCode('#include "editor_native.h"')
 @:build(macro.NativeExportMacro.build())
 
-class Editor {
+class Editor extends CExterns {
 
     private static var app:App = null;
     private static var initialized:Bool = false;

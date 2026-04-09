@@ -20,6 +20,7 @@ import EditorTexture;
 import layers.FolderLayer;
 import manager.TilesetManager;
 import manager.EntityManager;
+import manager.LayerManager;
 
 class EditorState extends State {
 
@@ -31,7 +32,7 @@ class EditorState extends State {
     private var selection:Selection;
     /** Shared BitmapFont for entity name labels. Tiles are placed in screen space
      *  each frame so labels always render at a stable pixel size regardless of zoom. */
-    private var entityLabelFont:BitmapFont = null;
+    public var entityLabelFont:BitmapFont = null;
     private var _labelDebugFrames:Int = 0;
     private var _labelsVisible:Bool = true;
 
@@ -56,8 +57,11 @@ class EditorState extends State {
     public var tileSizeY:Int = 64; // Height of each tile in pixels
     //private var tileRegions:Array<Int> = []; // Available tile regions (for backward compatibility)
     
-    // Layer management (layers are stored in entities array)
-    private var activeLayer:Layer = null;
+    // Layer management delegated to LayerManager
+    public var layerManager:LayerManager;
+    /** Read-only alias — actual value lives in layerManager.activeLayer. */
+    private var activeLayer(get, never):Layer;
+    private inline function get_activeLayer():Layer { return layerManager.activeLayer; }
     //public var selectedTileRegion:Int = 0;
     
     // Map properties
@@ -100,6 +104,7 @@ class EditorState extends State {
         super("EditorState", app);
         this.tilesetManager = tilesetManager;
         this.entityManager = entityManager;
+        layerManager = new LayerManager(this);
     }
     
     override public function init():Void {
@@ -1034,8 +1039,7 @@ class EditorState extends State {
         }
         
         var tilemapLayer:TilemapLayer = cast activeLayer;
-        trace("Placing tile on layer: " + tilemapLayer.id + ", tileset: " + tilemapLayer.editorTexture.name);
-        
+
         // Snap to grid (tiles are positioned by top-left corner)
         var tileX = Std.int(Math.floor(worldX / tileSizeX) * tileSizeX);
         var tileY = Std.int(Math.floor(worldY / tileSizeY) * tileSizeY);
@@ -1150,416 +1154,27 @@ class EditorState extends State {
         return removed;
     }
     
-    // ===== LAYER MANAGEMENT =====
-    
-    /**
-     * Add a layer to the entity system (internal use)
-     */
-    private function addLayer(layer:Layer):Void {
-        if (layer != null) {
-            addEntity(layer);
+    // ===== LAYER MANAGEMENT (delegated to LayerManager) =====
 
-            // Initialise quadtree bounds for any new entity layer
-            var el = Std.downcast(layer, EntityLayer);
-            if (el != null) {
-                el.setWorldBounds(mapX + mapWidth * 0.5, mapY + mapHeight * 0.5, mapWidth, mapHeight);
-                el.labelFont = entityLabelFont;
-                el.log = app.log;
-                app.log.info(LogCategory.APP, "[LabelFont] addLayer '" + el.id + "': labelFont set, isNull=" + (entityLabelFont == null));
-            }
+    /** Internal: push a layer at the end and wire up its dependencies. */
+    private function addLayer(layer:Layer):Void { layerManager.add(layer); }
 
-            // If this is the first layer, make it active
-            if (activeLayer == null) {
-                activeLayer = layer;
-
-                // Auto-switch tileset if it's a tilemap layer
-                if (Std.isOfType(layer, TilemapLayer)) {
-                    var tilemapLayer:TilemapLayer = cast layer;
-                    tilesetManager.setActiveTileset(tilemapLayer.editorTexture.name);
-                }
-            }
-        }
-    }
+    /** Internal: insert a layer at a specific layer-index, wire up its dependencies. */
+    private function addLayerAtIndex(layer:Layer, index:Int):Void { layerManager.addAtIndex(layer, index); }
     
-    /**
-     * Add a layer at a specific position in the entity system
-     * @param layer The layer to add
-     * @param index Position to insert (-1 to append at end, 0 for first layer position)
-     */
-    private function addLayerAtIndex(layer:Layer, index:Int):Void {
-        if (layer == null) return;
-        
-        layer.state = this;
-        
-        // If index is -1 or out of bounds, append to end
-        if (index < 0 || index >= entities.length) {
-            entities.push(layer);
-        } else {
-            // Find the actual entity index for the Nth layer
-            var layerCount = 0;
-            var insertIndex = 0;
-            
-            for (i in 0...entities.length) {
-                if (Std.isOfType(entities[i], Layer)) {
-                    if (layerCount == index) {
-                        insertIndex = i;
-                        break;
-                    }
-                    layerCount++;
-                }
-                insertIndex = i + 1; // Insert after last checked entity
-            }
-            
-            entities.insert(insertIndex, layer);
-        }
-        
-        // If this is the first layer, make it active
-        if (activeLayer == null) {
-            activeLayer = layer;
-        }
-
-        // Initialise quadtree bounds for entity layers added at an index
-        var elIdx = Std.downcast(layer, EntityLayer);
-        if (elIdx != null) {
-            elIdx.setWorldBounds(mapX + mapWidth * 0.5, mapY + mapHeight * 0.5, mapWidth, mapHeight);
-            elIdx.labelFont = entityLabelFont;
-            elIdx.log = app.log;
-        }
-
-        // Auto-switch tileset if it's a tilemap layer and this is the first/active layer
-        if (activeLayer == layer && Std.isOfType(layer, TilemapLayer)) {
-            var tilemapLayer:TilemapLayer = cast layer;
-            tilesetManager.setActiveTileset(tilemapLayer.editorTexture.name);
-        }
-    }
+    public function removeLayer(layerName:String):Bool    { return layerManager.remove(layerName); }
+    public function removeLayerByIndex(index:Int):Bool    { return layerManager.removeAt(index); }
+    public function setActiveLayer(layerName:String):Bool { return layerManager.setActive(layerName); }
+    public function setActiveLayerAt(index:Int):Bool      { return layerManager.setActiveAt(index); }
+    public function getActiveLayer():Layer                { return layerManager.activeLayer; }
     
-    /**
-     * Remove a layer from the layer list by name
-     * @param layerName Name of the layer to remove
-     * @return True if layer was found and removed, false otherwise
-     */
-    public function removeLayer(layerName:String):Bool {
-        var layer = getLayerByName(layerName);
-        if (layer == null) {
-            trace("Layer not found: " + layerName);
-            return false;
-        }
-        
-        removeEntity(layer);
-        layer.cleanup(null);
-        
-        // If we removed the active layer, set a new one
-        if (activeLayer == layer) {
-            activeLayer = getFirstLayer();
-            
-            // Update tileset if new active layer is a tilemap
-            if (activeLayer != null && Std.isOfType(activeLayer, TilemapLayer)) {
-                var tilemapLayer:TilemapLayer = cast activeLayer;
-                tilesetManager.setActiveTileset(tilemapLayer.editorTexture.name);
-            }
-        }
-        
-        return true;
-    }
+    public function getLayerByName(name:String):Layer { return layerManager.getByName(name); }
+    public function getLayerCount():Int               { return layerManager.count(); }
+    public function getLayerAt(index:Int):Layer       { return layerManager.getAt(index); }
     
-    /**
-     * Remove a layer from the layer list by index
-     * @param index Index of the layer to remove
-     * @return True if layer was found and removed, false otherwise
-     */
-    public function removeLayerByIndex(index:Int):Bool {
-        var layer = getLayerAt(index);
-        if (layer == null) {
-            trace("Layer not found at index: " + index);
-            return false;
-        }
-        
-        removeEntity(layer);
-        layer.cleanup(null);
-        
-        // If we removed the active layer, set a new one
-        if (activeLayer == layer) {
-            activeLayer = getFirstLayer();
-            
-            // Update tileset if new active layer is a tilemap
-            if (activeLayer != null && Std.isOfType(activeLayer, TilemapLayer)) {
-                var tilemapLayer:TilemapLayer = cast activeLayer;
-                tilesetManager.setActiveTileset(tilemapLayer.editorTexture.name);
-            }
-        }
-        
-        return true;
-    }
-    
-    /**
-     * Set the active layer by name
-     * Automatically switches to the layer's tileset if it's a TilemapLayer
-     * @param layerName Name of the layer to make active
-     * @return True if layer was found and set, false otherwise
-     */
-    public function setActiveLayer(layerName:String):Bool {
-        var layer = getLayerByName(layerName);
-        if (layer == null) {
-            trace("Layer not found: " + layerName);
-            return false;
-        }
-        
-        activeLayer = layer;
-        
-        // If it's a tilemap layer, automatically switch to its tileset
-        if (Std.isOfType(layer, TilemapLayer)) {
-            var tilemapLayer:TilemapLayer = cast layer;
-            return tilesetManager.setActiveTileset(tilemapLayer.editorTexture.name);
-        }
-        
-        return true;
-    }
-    
-    /**
-     * Set the active layer by index
-     * @param index Index of the layer to make active
-     * @return True if layer was found and set, false otherwise
-     */
-    public function setActiveLayerAt(index:Int):Bool {
-        var layer = getLayerAt(index);
-        if (layer == null) {
-            trace("Layer not found at index: " + index);
-            return false;
-        }
-        
-        activeLayer = layer;
-        
-        // If it's a tilemap layer, automatically switch to its tileset
-        if (Std.isOfType(layer, TilemapLayer)) {
-            var tilemapLayer:TilemapLayer = cast layer;
-            return tilesetManager.setActiveTileset(tilemapLayer.editorTexture.name);
-        }
-        
-        return true;
-    }
-    
-    /**
-     * Get the active layer
-     */
-    public function getActiveLayer():Layer {
-        return activeLayer;
-    }
-    
-    /**
-     * Get layer by name
-     */
-    public function getLayerByName(name:String):Layer {
-        for (entity in entities) {
-            if (Std.isOfType(entity, Layer)) {
-                var layer:Layer = cast entity;
-                if (layer.id == name) {
-                    return layer;
-                }
-                
-                // Search in folder layers
-                if (Std.isOfType(layer, FolderLayer)) {
-                    var folder:FolderLayer = cast layer;
-                    var found = folder.findLayerByName(name);
-                    if (found != null) {
-                        return found;
-                    }
-                }
-            }
-        }
-        return null;
-    }
-    
-    /**
-     * Get the number of layers
-     */
-    public function getLayerCount():Int {
-        var count = 0;
-        for (entity in entities) {
-            if (Std.isOfType(entity, Layer)) {
-                count++;
-            }
-        }
-        return count;
-    }
-    
-    /**
-     * Get layer at index (from layers only, not all entities)
-     */
-    public function getLayerAt(index:Int):Layer {
-        var i = 0;
-        for (entity in entities) {
-            if (Std.isOfType(entity, Layer)) {
-                if (i == index) {
-                    return cast entity;
-                }
-                i++;
-            }
-        }
-        return null;
-    }
-    
-    /**
-     * Get the first layer (helper for setting activeLayer)
-     */
-    private function getFirstLayer():Layer {
-        for (entity in entities) {
-            if (Std.isOfType(entity, Layer)) {
-                return cast entity;
-            }
-        }
-        return null;
-    }
-    
-    /**
-     * Move layer up in rendering order (earlier in the list = rendered first/behind)
-     * @param layerName Name of the layer to move
-     * @return True if layer was moved, false otherwise
-     */
-    public function moveLayerUp(layerName:String):Bool {
-        var layer = getLayerByName(layerName);
-        if (layer == null) {
-            trace("Layer not found: " + layerName);
-            return false;
-        }
-        
-        // Find the layer's position in entities array
-        var currentIndex = -1;
-        for (i in 0...entities.length) {
-            if (entities[i] == layer) {
-                currentIndex = i;
-                break;
-            }
-        }
-        
-        if (currentIndex <= 0) {
-            trace("Layer is already at the top or not found");
-            return false;
-        }
-        
-        // Find the previous Layer entity (skip non-layer entities like grid, mapFrame)
-        var targetIndex = -1;
-        for (i in 0...currentIndex) {
-            var prevIndex = currentIndex - 1 - i;
-            if (Std.isOfType(entities[prevIndex], Layer)) {
-                targetIndex = prevIndex;
-                break;
-            }
-        }
-        
-        if (targetIndex == -1) {
-            trace("No layer above to swap with");
-            return false;
-        }
-        
-        // Swap positions
-        var temp = entities[currentIndex];
-        entities[currentIndex] = entities[targetIndex];
-        entities[targetIndex] = temp;
-        
-        return true;
-    }
-    
-    /**
-     * Move layer down in rendering order (later in the list = rendered last/on top)
-     * @param layerName Name of the layer to move
-     * @return True if layer was moved, false otherwise
-     */
-    public function moveLayerDown(layerName:String):Bool {
-        var layer = getLayerByName(layerName);
-        if (layer == null) {
-            trace("Layer not found: " + layerName);
-            return false;
-        }
-        
-        // Find the layer's position in entities array
-        var currentIndex = -1;
-        for (i in 0...entities.length) {
-            if (entities[i] == layer) {
-                currentIndex = i;
-                break;
-            }
-        }
-        
-        if (currentIndex == -1 || currentIndex >= entities.length - 1) {
-            trace("Layer is already at the bottom or not found");
-            return false;
-        }
-        
-        // Find the next Layer entity (skip non-layer entities)
-        var targetIndex = -1;
-        for (i in (currentIndex + 1)...entities.length) {
-            if (Std.isOfType(entities[i], Layer)) {
-                targetIndex = i;
-                break;
-            }
-        }
-        
-        if (targetIndex == -1) {
-            trace("No layer below to swap with");
-            return false;
-        }
-        
-        // Swap positions
-        var temp = entities[currentIndex];
-        entities[currentIndex] = entities[targetIndex];
-        entities[targetIndex] = temp;
-        
-        return true;
-    }
-
-	public function moveLayerTo(layerName:String, newIndex:Int):Bool {
-		var layer = getLayerByName(layerName);
-		if (layer == null) {
-			trace("Layer not found: " + layerName);
-			return false;
-		}
-		// Find the layer's position in entities array
-		var currentIndex = -1;
-		for (i in 0...entities.length) {
-			if (entities[i] == layer) {
-				currentIndex = i;
-				break;
-			}
-		}
-		if (currentIndex == -1) {
-			trace("Layer not found in entities array");
-			return false;
-		}
-		// Count only Layer entities for bounds
-		var layerCount = getLayerCount();
-		if (newIndex < 0)
-			newIndex = 0;
-		if (newIndex >= layerCount)
-			newIndex = layerCount - 1;
-		// If already at position, nothing to do
-		var currentLayerIndex = 0;
-		for (i in 0...entities.length) {
-			if (Std.isOfType(entities[i], Layer)) {
-				if (entities[i] == layer)
-					break;
-				currentLayerIndex++;
-			}
-		}
-		if (currentLayerIndex == newIndex)
-			return true;
-		// Remove from entities
-		entities.remove(layer);
-		// Find the actual entity index for the Nth layer
-		var insertIndex = 0;
-		var count = 0;
-		for (i in 0...entities.length) {
-			if (Std.isOfType(entities[i], Layer)) {
-				if (count == newIndex) {
-					insertIndex = i;
-					break;
-				}
-				count++;
-			}
-			insertIndex = i + 1;
-		}
-		entities.insert(insertIndex, layer);
-		return true;
-	}
+    public function moveLayerUp(layerName:String):Bool               { return layerManager.moveUp(layerName); }
+    public function moveLayerDown(layerName:String):Bool             { return layerManager.moveDown(layerName); }
+    public function moveLayerTo(layerName:String, newIndex:Int):Bool { return layerManager.moveTo(layerName, newIndex); }
     
     
     /** move batch up within an entity layer identified by name */
@@ -1620,135 +1235,16 @@ class EditorState extends State {
         return el.moveBatchTo(entry, newIndex);
     }
 
-    public function moveLayerUpByIndex(index:Int):Bool {
-        var layer = getLayerAt(index);
-        if (layer == null) {
-            return false;
-        }
-        return moveLayerUp(layer.id);
-    }
-
-    public function moveLayerDownByIndex(index:Int):Bool {
-        var layer = getLayerAt(index);
-        if (layer == null) {
-            return false;
-        }
-        return moveLayerDown(layer.id);
-    }
+    public function moveLayerUpByIndex(index:Int):Bool   { return layerManager.moveUpByIndex(index); }
+    public function moveLayerDownByIndex(index:Int):Bool { return layerManager.moveDownByIndex(index); }
     
-    /**
-     * Create a new tilemap layer using a tileset
-     * @param name Name for the new layer
-     * @param tilesetName Name of the tileset to use
-     * @param index Position in the hierarchy (-1 to append at the end, 0 for first layer position)
-     */
     public function createTilemapLayer(name:String, tilesetName:String, index:Int = -1, tileSize:Int = 64):TilemapLayer {
-        
-        try {
-            //TODO:FIX THIS
-            var tileset = tilesetManager.tilesets.get(tilesetName);
-            if (tileset == null) {
-                app.log.error(LogCategory.APP, "Cannot create tilemap layer: tileset not found: " + tilesetName);
-                return null;
-            }
-            
-            // Get texture program
-            var textureProgramInfo = app.renderer.getProgramInfo("texture");
-            
-            // Create a new tile batch for this layer
-            var batch = new ManagedTileBatch(textureProgramInfo, tileset.textureId);
-            batch.debugName = "TilemapLayer:" + name;
-            batch.depthTest = false;
-            batch.init(app.renderer);
-            
-            // Compute atlas dimensions from texture size and tileSize
-            var tilesPerRow = Std.int(tileset.textureId.width / tileSize);
-            var tilesPerCol = Std.int(tileset.textureId.height / tileSize);
-            
-            // Define tile regions in the batch
-            for (row in 0...tilesPerCol) {
-                for (col in 0...tilesPerRow) {
-                    batch.defineRegion(
-                        col * tileSize,  // atlasX
-                        row * tileSize,  // atlasY
-                        tileSize,        // width
-                        tileSize         // height
-                    );
-                }
-            }
-            
-            // Create the layer with tileset reference
-            var layer = new TilemapLayer(name, tileset, batch, tileSize, tilesPerRow, tilesPerCol);
-            addLayerAtIndex(layer, index);
-            
-            //trace("Created tilemap layer: " + name + " with tileset: " + tilesetName + " at index: " + index);
-            return layer;
-
-        } catch (e:Dynamic) {
-            app.log.error(LogCategory.APP, "Error creating tilemap layer '" + name + "' with tileset '" + tilesetName + "': " + e);
-            return null;
-        }
+        return layerManager.createTilemap(name, tilesetName, index, tileSize);
     }
-    
-    /**
-     * Create a new entity layer
-     */
-    public function createEntityLayer(name:String):EntityLayer {
-        // factory for a new entity layer; caller is responsible for adding batches later when
-        // placing the first entity (tileset is determined by the entity definition)
-        var layer = new EntityLayer(name);
-        addLayer(layer);
-        app.log.info(LogCategory.APP, "Created empty entity layer: " + name);
-        return layer;
-    }
-    
-    /**
-     * Create a new folder layer
-     */
-    public function createFolderLayer(name:String):FolderLayer {
-        var layer = new FolderLayer(name);
-        addLayer(layer);
-        app.log.info(LogCategory.APP, "Created folder layer: " + name);
-        return layer;
-    }
-
+    public function createEntityLayer(name:String):EntityLayer   { return layerManager.createEntity(name); }
+    public function createFolderLayer(name:String):FolderLayer   { return layerManager.createFolder(name); }
     public function replaceLayerTileset(layerName:String, newTilesetName:String):Bool {
-        var layer = getLayerByName(layerName);
-        if (layer == null) {
-            app.log.error(LogCategory.APP, "Layer not found: " + layerName);
-            return false;
-        }
-        
-        if (!Std.isOfType(layer, TilemapLayer)) {
-            app.log.error(LogCategory.APP, "Layer is not a tilemap layer: " + layerName);
-            return false;
-        }
-        
-        var tilemapLayer:TilemapLayer = cast layer;
-        var newTileset = tilesetManager.tilesets.get(newTilesetName);
-        
-        if (newTileset == null) {
-            app.log.error(LogCategory.APP, "New tileset not found: " + newTilesetName);
-            return false;
-        }
-        
-        // Update the layer's tileset reference
-        tilemapLayer.editorTexture = newTileset;
-        
-        // Update the tile batch's texture ID to match the new tileset
-        tilemapLayer.managedTileBatch.setTexture(newTileset.textureId);
-        
-        // Recompute atlas dimensions using the layer's existing tileSize and new texture
-        tilemapLayer.tilesPerRow = Std.int(newTileset.textureId.width / tilemapLayer.tileSize);
-        tilemapLayer.tilesPerCol = Std.int(newTileset.textureId.height / tilemapLayer.tileSize);
-        
-        // Redefine tile regions in the batch based on the new tileset
-        tilemapLayer.redefineRegions();
-        
-        // Mark buffers as needing update to reflect changes
-        tilemapLayer.managedTileBatch.needsBufferUpdate = true;
-        
-        return true;
+        return layerManager.replaceTileset(layerName, newTilesetName);
     }
 
     
@@ -1787,7 +1283,8 @@ class EditorState extends State {
                 if (tileset == null) continue;
 
                 var layerTiles:Array<Dynamic> = [];
-                for (tileId in 0...1000) {
+                for (gridKey in tilemapLayer.tileGrid.keys()) {
+                    var tileId = tilemapLayer.tileGrid.get(gridKey);
                     var tile = tilemapLayer.managedTileBatch.getTile(tileId);
                     if (tile != null) {
                         layerTiles.push({
@@ -2136,7 +1633,7 @@ class EditorState extends State {
             entities.remove(layer);
         }
 
-        activeLayer = null;
+        layerManager.activeLayer = null;
     }
 
     private function setCurrentTileset(name:String):Void {
@@ -2358,7 +1855,7 @@ class EditorState extends State {
 
     override public function release():Void {
         // Layers are entities and will be cleaned up by super.release()
-        activeLayer = null;
+        layerManager.activeLayer = null;
         _placementPreview = null;
         super.release();
     }
