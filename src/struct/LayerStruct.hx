@@ -1,9 +1,9 @@
 package struct;
 
-@:native("LayerInfoStruct")
+@:native("LayerStruct")
 @:struct
 @:structAccess
-extern class LayerInfoStruct {
+extern class LayerStruct {
     var name:cpp.ConstCharStar;
     var type:Int; // 0 = TilemapLayer, 1 = EntityLayer, 2 = FolderLayer
     var tilesetName:cpp.ConstCharStar;

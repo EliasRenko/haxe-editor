@@ -1,9 +1,9 @@
 package struct;
 
-@:native("MapProps")
+@:native("MapStruct")
 @:struct
 @:structAccess
-extern class MapProps {
+extern class MapStruct {
 	var idd:cpp.ConstCharStar;
 	var name:cpp.ConstCharStar;
 	var worldx:Int;

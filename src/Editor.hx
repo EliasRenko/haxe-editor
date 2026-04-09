@@ -6,21 +6,19 @@ import Log.LogCategory;
 import states.EditorState;
 import math.Vec2;
 import layers.TilemapLayer;
-import struct.MapProps;
-import struct.ProjectProps;
-import struct.EntityDataStruct;
+import struct.MapStruct;
+import struct.ProjectStruct;
+import struct.EntityDefStruct;
 import struct.EntityStruct;
 import struct.TextureDataStruct;
-import struct.TilesetInfoStruct;
-import struct.LayerInfoStruct;
+import struct.TextureDefStruct ;
+import struct.LayerStruct;
 import cpp.Pointer;
 import cpp.Reference;
 import manager.TilesetManager;
 import manager.EntityManager;
 import utils.UIDGenerator;
 
-/** Project-level metadata shared across all maps.
- *  Tileset and entity-definition data live in the shared managers, not here. */
 typedef ProjectData = {
     var projectFilePath:Null<String>;
     var projectDir:Null<String>;
@@ -476,10 +474,10 @@ class Editor extends CExterns {
      * @return 1 if a project is loaded, 0 if not.
      */
     @:keep
-    public static function getProjectProps(outProps:Pointer<ProjectProps>):Bool {
+    public static function getProjectProps(outProps:Pointer<ProjectStruct>):Bool {
         if (_projectData == null) return false;
 
-        var ref:Reference<ProjectProps> = outProps.ref;
+        var ref:Reference<ProjectStruct> = outProps.ref;
         var fp:String = _projectData.projectFilePath != null ? _projectData.projectFilePath : "";
         var pid:String = _projectData.projectId != null ? _projectData.projectId : "";
         var pn:String = _projectData.projectName;
@@ -500,9 +498,9 @@ class Editor extends CExterns {
      * @return false if no project is loaded.
      */
     @:keep
-    public static function editProject(inProps:Pointer<ProjectProps>):Bool {
+    public static function editProject(inProps:Pointer<ProjectStruct>):Bool {
         if (_projectData == null) return false;
-        var ref:Reference<ProjectProps> = inProps.ref;
+        var ref:Reference<ProjectStruct> = inProps.ref;
         var fp:String = ref.filePath;
         var pd:String = ref.projectDir;
         var pid:String = ref.projectId;
@@ -655,11 +653,11 @@ class Editor extends CExterns {
     }
 
     @:keep
-	public static function getMapProps(outInfo:Pointer<MapProps>):Bool {
+	public static function getMapProps(outInfo:Pointer<MapStruct>):Bool {
         var error:String = null;
 
 		try {
-			var ref:Reference<MapProps> = outInfo.ref;
+			var ref:Reference<MapStruct> = outInfo.ref;
 			ref.idd = editorState.iid;
 			ref.name = editorState.name;
 			ref.worldx = Std.int(editorState.mapX);
@@ -683,11 +681,11 @@ class Editor extends CExterns {
 	}
 
     @:keep
-    public static function setMapProps(info:Pointer<MapProps>):Bool {
+    public static function setMapProps(info:Pointer<MapStruct>):Bool {
         var error:String = null;
 
         try {
-            var ref:Reference<MapProps> = info.ref;
+            var ref:Reference<MapStruct> = info.ref;
             editorState.grid.gridColor.hexValue = ref.gridColor;
             editorState.grid.backgroundColor.hexValue = ref.bgColor;
             if (ref.tileSizeX != editorState.tileSizeX || ref.tileSizeY != editorState.tileSizeY) {
@@ -788,11 +786,11 @@ class Editor extends CExterns {
 	/**
 	 * Get tileset information by name
 	 * @param tilesetName Name of the tileset (e.g., "devTiles")
-	 * @param outInfo Pointer to TilesetInfoStruct to fill
+	 * @param outInfo Pointer to TextureInfoStruct to fill
 	 * @return 1 if successful, 0 if tileset not found
 	 */
 	@:keep
-	public static function getTileset(tilesetName:String, outInfo:Pointer<TilesetInfoStruct>):Bool {
+	public static function getTileset(tilesetName:String, outInfo:Pointer<TextureDefStruct>):Bool {
 		if (tilesetManager == null)
 			return false;
 		var et = tilesetManager.getTilesetInfo(tilesetName);
@@ -800,17 +798,17 @@ class Editor extends CExterns {
 			log("Editor: Tileset not found: " + tilesetName);
 			return false;
 		}
-		var ref:Reference<TilesetInfoStruct> = outInfo.ref;
+		var ref:Reference<TextureDefStruct> = outInfo.ref;
 		ref.name = et.name;
 		ref.texturePath = et.texturePath;
 		return true;
 	}
 
     @:keep
-    public static function getTilesetAt(index:Int, outInfo:Pointer<TilesetInfoStruct>):Bool {
+    public static function getTilesetAt(index:Int, outInfo:Pointer<TextureDefStruct>):Bool {
         var et = tilesetManager != null ? tilesetManager.getTilesetInfoAt(index) : null;
         if (et == null) { log("Editor: Tileset not found at index: " + index); return false; }
-        var ref:Reference<TilesetInfoStruct> = outInfo.ref;
+        var ref:Reference<TextureDefStruct> = outInfo.ref;
         ref.name = et.name;
         ref.texturePath = et.texturePath;
         return true;
@@ -849,8 +847,8 @@ class Editor extends CExterns {
     // ===== ENTITY DEFINITIONS =====
 
     @:keep
-    public static function createEntityDef(entityName:String, data:Pointer<EntityDataStruct>):Bool {
-        var ref:Reference<EntityDataStruct> = data.ref;
+    public static function createEntityDef(entityName:String, data:Pointer<EntityDefStruct>):Bool {
+        var ref:Reference<EntityDefStruct> = data.ref;
         var tilesetName:String = ref.tilesetName;
 
         if (entityManager.exists(entityName)) {
@@ -881,8 +879,8 @@ class Editor extends CExterns {
     }
 
     @:keep
-    public static function editEntityDef(entityName:String, data:Pointer<EntityDataStruct>):Bool {
-        var ref:Reference<EntityDataStruct> = data.ref;
+    public static function editEntityDef(entityName:String, data:Pointer<EntityDefStruct>):Bool {
+        var ref:Reference<EntityDefStruct> = data.ref;
         var tilesetName:String = ref.tilesetName;
         // tilesetName null/empty means "no tileset" — allowed.
         // Non-null/empty names must exist in the manager.
@@ -926,7 +924,7 @@ class Editor extends CExterns {
     }
 
     @:keep
-    public static function getEntityDef(entityName:String, outData:Pointer<EntityDataStruct>):Bool {
+    public static function getEntityDef(entityName:String, outData:Pointer<EntityDefStruct>):Bool {
         var entityDef = entityManager != null ? entityManager.getEntityDefinition(entityName) : null;
         if (entityDef == null) {
             var error = "Editor: No entity definition found: " + entityName;
@@ -943,7 +941,7 @@ class Editor extends CExterns {
     }
 
     @:keep
-    public static function getEntityDefAt(index:Int, outData:Pointer<EntityDataStruct>):Bool {
+    public static function getEntityDefAt(index:Int, outData:Pointer<EntityDefStruct>):Bool {
         var entityDef = entityManager != null ? entityManager.getEntityDefinitionAt(index) : null;
         if (entityDef == null) {
             var error = "Editor: No entity definition found at index: " + index;
@@ -970,8 +968,8 @@ class Editor extends CExterns {
     }
 
     @:keep @:noExport
-    public static function populateEntityDataStruct(entityDef:EntityDefinition, outData:Pointer<EntityDataStruct>):Void {
-        var ref:Reference<EntityDataStruct> = outData.ref;
+    public static function populateEntityDataStruct(entityDef:EntityDefinition, outData:Pointer<EntityDefStruct>):Void {
+        var ref:Reference<EntityDefStruct> = outData.ref;
 		ref.name = entityDef.name;
 		ref.width = entityDef.width;
 		ref.height = entityDef.height;
@@ -1045,7 +1043,7 @@ class Editor extends CExterns {
     }
 
     @:keep
-    public static function getLayerInfo(layerName:String, outInfo:Pointer<LayerInfoStruct>):Bool {
+    public static function getLayerInfo(layerName:String, outInfo:Pointer<LayerStruct>):Bool {
 		var layer = editorState.getLayerByName(layerName);
         var type:Int = 0;
         var tilesetName:String = "";
@@ -1072,7 +1070,7 @@ class Editor extends CExterns {
         }
 
         // write result into the C struct via the pointer reference
-        var ref:Reference<LayerInfoStruct> = outInfo.ref;
+        var ref:Reference<LayerStruct> = outInfo.ref;
         ref.name = layer.id;
         ref.type = type; // 0 = TilemapLayer, 1 = EntityLayer, 2 = FolderLayer
         ref.tilesetName = tilesetName;
@@ -1084,7 +1082,7 @@ class Editor extends CExterns {
     }
 
     @:keep
-	public static function getLayerInfoAt(index:Int, outInfo:Pointer<LayerInfoStruct>):Bool {
+	public static function getLayerInfoAt(index:Int, outInfo:Pointer<LayerStruct>):Bool {
 		var layer = editorState.getLayerAt(index);
         var type:Int = 0;
         var tilesetName:String = "";
@@ -1112,7 +1110,7 @@ class Editor extends CExterns {
         }
 
         // write result into the C struct via the pointer reference
-        var ref:Reference<LayerInfoStruct> = outInfo.ref;
+        var ref:Reference<LayerStruct> = outInfo.ref;
         ref.name = layer.id;
         ref.type = type; // 0 = TilemapLayer, 1 = EntityLayer, 2 = FolderLayer
         ref.tilesetName = tilesetName;
@@ -1139,8 +1137,8 @@ class Editor extends CExterns {
     }
 
     @:keep
-    public static function setLayerProperties(layerName:String, properties:Pointer<LayerInfoStruct>):Bool {
-        var ref:Reference<LayerInfoStruct> = properties.ref;
+    public static function setLayerProperties(layerName:String, properties:Pointer<LayerStruct>):Bool {
+        var ref:Reference<LayerStruct> = properties.ref;
         try {
 	        editorState.setLayerProperties(layerName, ref.name, ref.type, ref.tilesetName, ref.visible != 0, ref.silhouette, ref.silhouetteColor);
             return true;
@@ -1151,8 +1149,8 @@ class Editor extends CExterns {
 	}
 
 	@:keep
-	public static function setLayerPropertiesAt(index:Int, properties:Pointer<LayerInfoStruct>):Bool {
-        var ref:Reference<LayerInfoStruct> = properties.ref;
+	public static function setLayerPropertiesAt(index:Int, properties:Pointer<LayerStruct>):Bool {
+        var ref:Reference<LayerStruct> = properties.ref;
         try {
 		    editorState.setLayerPropertiesAt(index, ref.name, ref.type, ref.tilesetName, ref.visible != 0, ref.silhouette, ref.silhouetteColor);
             return true;

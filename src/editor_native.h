@@ -18,7 +18,7 @@ typedef struct {
 typedef struct {
     const char* name;
     const char* texturePath;
-} TilesetInfoStruct;
+} TextureDefStruct;
 
 typedef struct {
     const char* name;
@@ -31,7 +31,7 @@ typedef struct {
     int regionHeight;
     float pivotX; /* default normalised pivot X (0=left, 0.5=centre, 1=right) */
     float pivotY; /* default normalised pivot Y (0=top,  0.5=centre, 1=bottom) */
-} EntityDataStruct;
+} EntityDefStruct;
 
 typedef struct {
     const char* name;
@@ -41,7 +41,7 @@ typedef struct {
     int visible;             // 0 = hidden, 1 = visible
     bool silhouette;          // 0 = no silhouette, 1 = silhouette enabled
     int silhouetteColor;  // RGBA color for silhouette 
-} LayerInfoStruct;
+} LayerStruct;
 
 typedef struct EntityStruct {
     const char* uid;
@@ -66,7 +66,7 @@ typedef struct {
     const char* projectFilePath; // null / empty if map is not linked to a project
     const char* projectId;       // null / empty if map is not linked to a project
     const char* projectName;     // null / empty if map is not linked to a project
-} MapProps;
+} MapStruct;
 
 typedef struct {
     const char* filePath;
@@ -75,7 +75,7 @@ typedef struct {
     const char* projectDir;
     int defaultTileSizeX;
     int defaultTileSizeY;
-} ProjectProps;
+} ProjectStruct;
 
 typedef void (__cdecl *CustomCallback)(const char* priority, const char* category, const char* message);
 typedef void (__cdecl *EntitySelectionChangedCallback)(); // fired when selection changes
@@ -117,16 +117,16 @@ extern "C" {
     // Project management
     __declspec(dllexport) bool exportProject(const char* filePath, const char* projectName);
     __declspec(dllexport) bool importProject(const char* filePath);
-    __declspec(dllexport) bool getProjectProps(ProjectProps* outProps);
-    __declspec(dllexport) bool editProject(ProjectProps* inProps);
+    __declspec(dllexport) bool getProjectProps(ProjectStruct* outProps);
+    __declspec(dllexport) bool editProject(ProjectStruct* inProps);
     __declspec(dllexport) bool copyResources(const char* filePath, const char* subfolder);
     //__declspec(dllexport) bool closeProject();
     
     // Map management
     __declspec(dllexport) bool exportMap(const char* filePath);
     __declspec(dllexport) int importMap(const char* filePath);
-    __declspec(dllexport) bool getMapProps(MapProps* outInfo);
-    __declspec(dllexport) bool setMapProps(MapProps* info);
+    __declspec(dllexport) bool getMapProps(MapStruct* outInfo);
+    __declspec(dllexport) bool setMapProps(MapStruct* info);
 
     // Texture management
     __declspec(dllexport) void getTextureData(const char* path, TextureDataStruct* outData);
@@ -134,19 +134,19 @@ extern "C" {
     // Tileset management
     __declspec(dllexport) bool createTileset(const char* texturePath, const char* name);
     __declspec(dllexport) bool deleteTileset(const char* name);
-    __declspec(dllexport) bool getTileset(const char* tilesetName, TilesetInfoStruct* outInfo);
-    __declspec(dllexport) bool getTilesetAt(int index, TilesetInfoStruct* outInfo);
+    __declspec(dllexport) bool getTileset(const char* tilesetName, TextureDefStruct* outInfo);
+    __declspec(dllexport) bool getTilesetAt(int index, TextureDefStruct* outInfo);
     __declspec(dllexport) int getTilesetCount();
     __declspec(dllexport) bool setActiveTileset(const char* tilesetName);
     __declspec(dllexport) int getActiveTile();
     __declspec(dllexport) void setActiveTile(int tileRegionId);
 
     // Entity definition management
-    __declspec(dllexport) bool createEntityDef(const char* entityName, EntityDataStruct* data);
-    __declspec(dllexport) bool editEntityDef(const char* entityName, EntityDataStruct* data);
+    __declspec(dllexport) bool createEntityDef(const char* entityName, EntityDefStruct* data);
+    __declspec(dllexport) bool editEntityDef(const char* entityName, EntityDefStruct* data);
     __declspec(dllexport) bool deleteEntityDef(const char* entityName);
-    __declspec(dllexport) bool getEntityDef(const char* entityName, EntityDataStruct* outData);
-    __declspec(dllexport) bool getEntityDefAt(int index, EntityDataStruct* outData);
+    __declspec(dllexport) bool getEntityDef(const char* entityName, EntityDefStruct* outData);
+    __declspec(dllexport) bool getEntityDefAt(int index, EntityDefStruct* outData);
     __declspec(dllexport) int getEntityDefCount();
     __declspec(dllexport) bool setActiveEntityDef(const char* entityName);
 
@@ -164,15 +164,15 @@ extern "C" {
     __declspec(dllexport) void createFolderLayer(const char* layerName);
 
     __declspec(dllexport) int getLayerCount();
-    __declspec(dllexport) bool getLayerInfo(const char* layerName, LayerInfoStruct* outInfo);
-    __declspec(dllexport) bool getLayerInfoAt(int index, LayerInfoStruct* outInfo);
+    __declspec(dllexport) bool getLayerInfo(const char* layerName, LayerStruct* outInfo);
+    __declspec(dllexport) bool getLayerInfoAt(int index, LayerStruct* outInfo);
 
     __declspec(dllexport) bool replaceLayerTileset(const char* layerName, const char* newTilesetName);
 
     __declspec(dllexport) bool setActiveLayer(const char* layerName);
     __declspec(dllexport) bool setActiveLayerAt(int index);
-    __declspec(dllexport) bool setLayerProperties(const char* layerName, LayerInfoStruct* properties);
-    __declspec(dllexport) bool setLayerPropertiesAt(int index, LayerInfoStruct* properties);
+    __declspec(dllexport) bool setLayerProperties(const char* layerName, LayerStruct* properties);
+    __declspec(dllexport) bool setLayerPropertiesAt(int index, LayerStruct* properties);
     __declspec(dllexport) bool removeLayer(const char* layerName);
     __declspec(dllexport) bool removeLayerByIndex(int index);
 

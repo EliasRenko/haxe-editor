@@ -1,9 +1,9 @@
 package struct;
 
-@:native("EntityDataStruct")
+@:native("EntityDefStruct")
 @:struct
 @:structAccess
-extern class EntityDataStruct {
+extern class EntityDefStruct {
     var name:cpp.ConstCharStar;
     var width:Int;
     var height:Int;

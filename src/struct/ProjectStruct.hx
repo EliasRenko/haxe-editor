@@ -1,9 +1,9 @@
 package struct;
 
-@:native("ProjectProps")
+@:native("ProjectStruct")
 @:struct
 @:structAccess
-extern class ProjectProps {
+extern class ProjectStruct {
     var filePath:cpp.ConstCharStar;
     var projectId:cpp.ConstCharStar;
     var projectName:cpp.ConstCharStar;

@@ -156,4 +156,106 @@ class MapFrame {
             height: handleSize
         };
     }
+
+    // ── Resize state ─────────────────────────────────────────────────────────
+
+    /** Currently active resize handle ("top"/"bottom"/"left"/"right"), or null when not resizing. */
+    public var resizeMode:String = null;
+
+    /** Minimum dimension (px) the map can be resized to (default: 10 × 32 px tile). */
+    public var minMapSize:Float = 320.0;
+
+    private var _resizeDragStart:{x:Float, y:Float} = null;
+    private var _resizeOriginalBounds:{x:Float, y:Float, width:Float, height:Float} = null;
+
+    /**
+     * Hit-test a world position against the four resize handles.
+     * Returns "top", "bottom", "left", "right", or null.
+     */
+    public function getHandleAt(worldX:Float, worldY:Float):String {
+        var handles = [
+            {name: "top",    bounds: getTopHandle()},
+            {name: "bottom", bounds: getBottomHandle()},
+            {name: "left",   bounds: getLeftHandle()},
+            {name: "right",  bounds: getRightHandle()}
+        ];
+        for (handle in handles) {
+            var b = handle.bounds;
+            if (worldX >= b.x && worldX <= b.x + b.width &&
+                worldY >= b.y && worldY <= b.y + b.height) {
+                return handle.name;
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Begin a resize drag: record the active handle and the initial world cursor
+     * position so computeResizeBounds() can calculate deltas each frame.
+     */
+    public function startResize(handle:String, worldX:Float, worldY:Float):Void {
+        resizeMode            = handle;
+        _resizeDragStart      = {x: worldX, y: worldY};
+        _resizeOriginalBounds = {x: x, y: y, width: width, height: height};
+    }
+
+    /** End / cancel the current resize drag. */
+    public function cancelResize():Void {
+        resizeMode            = null;
+        _resizeDragStart      = null;
+        _resizeOriginalBounds = null;
+    }
+
+    /**
+     * Compute new map bounds for the current drag world position.
+     * Pure computation — does NOT apply the result.
+     * Pass the returned bounds to EditorState.updateMapBounds().
+     */
+    public function computeResizeBounds(worldX:Float, worldY:Float,
+                                        tileSizeX:Float, tileSizeY:Float)
+                                        :{x:Float, y:Float, width:Float, height:Float} {
+        if (resizeMode == null || _resizeDragStart == null || _resizeOriginalBounds == null)
+            return {x: x, y: y, width: width, height: height};
+
+        var deltaX = worldX - _resizeDragStart.x;
+        var deltaY = worldY - _resizeDragStart.y;
+
+        // Snap delta to tile grid
+        deltaX = Math.round(deltaX / tileSizeX) * tileSizeX;
+        deltaY = Math.round(deltaY / tileSizeY) * tileSizeY;
+
+        var newX      = _resizeOriginalBounds.x;
+        var newY      = _resizeOriginalBounds.y;
+        var newWidth  = _resizeOriginalBounds.width;
+        var newHeight = _resizeOriginalBounds.height;
+
+        switch (resizeMode) {
+            case "top":
+                // Move top edge up/down (changes Y and height)
+                newY      = _resizeOriginalBounds.y + deltaY;
+                newHeight = _resizeOriginalBounds.height - deltaY;
+            case "bottom":
+                // Move bottom edge up/down (changes height only)
+                newHeight = _resizeOriginalBounds.height + deltaY;
+            case "left":
+                // Move left edge left/right (changes X and width)
+                newX     = _resizeOriginalBounds.x + deltaX;
+                newWidth = _resizeOriginalBounds.width - deltaX;
+            case "right":
+                // Move right edge left/right (changes width only)
+                newWidth = _resizeOriginalBounds.width + deltaX;
+        }
+
+        // Enforce minimum size
+        if (newWidth < minMapSize) {
+            if (resizeMode == "left") newX = newX + (newWidth - minMapSize);
+            newWidth = minMapSize;
+        }
+        if (newHeight < minMapSize) {
+            if (resizeMode == "top") newY = newY + (newHeight - minMapSize);
+            newHeight = minMapSize;
+        }
+
+        return {x: newX, y: newY, width: newWidth, height: newHeight};
+    }
 }

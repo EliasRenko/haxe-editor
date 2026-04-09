@@ -51,7 +51,7 @@ class NativeExportMacro {
                         var innerC = toCType(inner);
                         (innerC == "Void" || innerC == "void") ? "void*" : innerC + "*";
                     default:
-                        // Struct externs: MapProps, TilesetInfoStruct, etc.
+                        // Struct externs: MapProps, TextureInfoStruct, etc.
                         p.name;
                 }
             default: "void";

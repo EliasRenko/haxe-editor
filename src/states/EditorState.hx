@@ -73,12 +73,6 @@ class EditorState extends State {
     public var mapWidth:Float = 1024; // 32x32 tiles
     public var mapHeight:Float = 1024;
     
-    // Resize state
-    private var resizeMode:String = null; // "top", "bottom", "left", "right", or null
-    private var resizeDragStart:{x:Float, y:Float} = null;
-    private var resizeOriginalBounds:{x:Float, y:Float, width:Float, height:Float} = null;
-    private var minMapSize:Float = 320.0; // 10 tiles minimum (10 * 32px)
-
     // Pan state (space or middle-mouse drag — Photoshop-style)
     private var _isPanning:Bool = false;
     private var _panLastX:Float = 0;
@@ -543,7 +537,7 @@ class EditorState extends State {
         var panActive = keyboard.check(32) || mouse.check(2); // 32 = SPACE, 2 = middle button
 
         // Update placement ghost — suppress it during pan and resize interactions
-        _updatePlacementPreview(worldPos.x, worldPos.y, panActive || resizeMode != null);
+        _updatePlacementPreview(worldPos.x, worldPos.y, panActive || (mapFrame != null && mapFrame.resizeMode != null));
 
         if (panActive) {
             if (_isPanning) {
@@ -561,15 +555,15 @@ class EditorState extends State {
         }
 
         // Handle resize drag (if in resize mode)
-        if (resizeMode != null) {
+        if (mapFrame != null && mapFrame.resizeMode != null) {
             if (mouse.check(1)) {
-                // Continue dragging
-                handleResizeDrag(worldPos.x, worldPos.y);
+                // Continue dragging — MapFrame computes new bounds, EditorState applies them
+                var nb = mapFrame.computeResizeBounds(worldPos.x, worldPos.y, tileSizeX, tileSizeY);
+                updateMapBounds(nb.x, nb.y, nb.width, nb.height);
+                if (deleteOutOfBoundsTilesOnResize) cleanupTilesOutsideBounds();
             } else {
                 // Released mouse - end resize
-                resizeMode = null;
-                resizeDragStart = null;
-                resizeOriginalBounds = null;
+                mapFrame.cancelResize();
             }
             return; // Skip tile placement while resizing
         }
@@ -577,17 +571,10 @@ class EditorState extends State {
         // Left click - check for resize handle first, then place tile
         if (mouse.pressed(1)) { // Button just pressed
             // Check if clicking on a resize handle
-            var handle = getHandleAt(worldPos.x, worldPos.y);
+            var handle = mapFrame != null ? mapFrame.getHandleAt(worldPos.x, worldPos.y) : null;
             if (handle != null) {
-                // Start resize
-                resizeMode = handle;
-                resizeDragStart = {x: worldPos.x, y: worldPos.y};
-                resizeOriginalBounds = {
-                    x: mapX,
-                    y: mapY,
-                    width: mapWidth,
-                    height: mapHeight
-                };
+                // Start resize — MapFrame records the drag origin and original bounds
+                mapFrame.startResize(handle, worldPos.x, worldPos.y);
                 return;
             }
         }
@@ -610,32 +597,6 @@ class EditorState extends State {
                 default:
             }
         }
-    }
-    
-    /**
-     * Check if world position is over a resize handle
-     * Returns: "top", "bottom", "left", "right", or null
-     */
-    private function getHandleAt(worldX:Float, worldY:Float):String {
-        if (mapFrame == null) return null;
-        
-        // Check each handle
-        var handles = [
-            {name: "top", bounds: mapFrame.getTopHandle()},
-            {name: "bottom", bounds: mapFrame.getBottomHandle()},
-            {name: "left", bounds: mapFrame.getLeftHandle()},
-            {name: "right", bounds: mapFrame.getRightHandle()}
-        ];
-        
-        for (handle in handles) {
-            var b = handle.bounds;
-            if (worldX >= b.x && worldX <= b.x + b.width &&
-                worldY >= b.y && worldY <= b.y + b.height) {
-                return handle.name;
-            }
-        }
-        
-        return null;
     }
     
     /**
@@ -754,69 +715,6 @@ class EditorState extends State {
         }
     }
 
-    /**
-     * Handle resize dragging with constraints
-     */
-    private function handleResizeDrag(worldX:Float, worldY:Float):Void {
-        if (resizeMode == null || resizeDragStart == null || resizeOriginalBounds == null) return;
-        
-        var deltaX = worldX - resizeDragStart.x;
-        var deltaY = worldY - resizeDragStart.y;
-        
-        // Snap delta to grid
-        deltaX = Math.round(deltaX / tileSizeX) * tileSizeX;
-        deltaY = Math.round(deltaY / tileSizeY) * tileSizeY;
-        
-        var newX = resizeOriginalBounds.x;
-        var newY = resizeOriginalBounds.y;
-        var newWidth = resizeOriginalBounds.width;
-        var newHeight = resizeOriginalBounds.height;
-        
-        switch (resizeMode) {
-            case "top":
-                // Move top edge up/down (changes Y and height)
-                newY = resizeOriginalBounds.y + deltaY;
-                newHeight = resizeOriginalBounds.height - deltaY;
-                
-            case "bottom":
-                // Move bottom edge up/down (changes height only)
-                newHeight = resizeOriginalBounds.height + deltaY;
-                
-            case "left":
-                // Move left edge left/right (changes X and width)
-                newX = resizeOriginalBounds.x + deltaX;
-                newWidth = resizeOriginalBounds.width - deltaX;
-                
-            case "right":
-                // Move right edge left/right (changes width only)
-                newWidth = resizeOriginalBounds.width + deltaX;
-        }
-        
-        // Apply minimum size constraint
-        if (newWidth < minMapSize) {
-            if (resizeMode == "left") {
-                // Adjust X to maintain right edge position
-                newX = newX + (newWidth - minMapSize);
-            }
-            newWidth = minMapSize;
-        }
-        if (newHeight < minMapSize) {
-            if (resizeMode == "top") {
-                // Adjust Y to maintain bottom edge position
-                newY = newY + (newHeight - minMapSize);
-            }
-            newHeight = minMapSize;
-        }
-        
-        // Update map bounds (also syncs EntityLayer quadtrees, grid, and mapFrame)
-        updateMapBounds(newX, newY, newWidth, newHeight);
-        
-        // Optionally delete tiles outside new bounds
-        if (deleteOutOfBoundsTilesOnResize) {
-            cleanupTilesOutsideBounds();
-        }
-    }
-    
     /**
      * Convert screen coordinates to world coordinates
      */
