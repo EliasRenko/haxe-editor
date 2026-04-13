@@ -1,6 +1,5 @@
 package display;
 
-import ProgramInfo;
 import Renderer;
 import math.Matrix;
 import display.LineBatch;
@@ -25,15 +24,16 @@ class MapFrame {
     private var frameColor:Array<Float> = [1.0, 1.0, 0.0, 1.0]; // Yellow frame
     private var handleColor:Array<Float> = [1.0, 0.5, 0.0, 1.0]; // Orange handles
     
-    public function new(programInfo:ProgramInfo, x:Float, y:Float, width:Float, height:Float) {
+    public function new(renderer:Renderer, x:Float, y:Float, width:Float, height:Float) {
         this.x = x;
         this.y = y;
         this.width = width;
         this.height = height;
         
         // Create persistent line batch for the frame
-        lineBatch = new LineBatch(programInfo, true);
+        lineBatch = new LineBatch(renderer, true);
         lineBatch.depthTest = false;
+        rebuildFrame();
     }
     
     /**
@@ -89,11 +89,6 @@ class MapFrame {
         lineBatch.addLine(x2, y2, z, x1, y2, z, handleColor, handleColor);
         // Left
         lineBatch.addLine(x1, y2, z, x1, y1, z, handleColor, handleColor);
-    }
-    
-    public function init(renderer:Renderer):Void {
-        lineBatch.init(renderer);
-        rebuildFrame();
     }
     
     public function render(viewProjectionMatrix:Matrix, renderer:Renderer):Void {

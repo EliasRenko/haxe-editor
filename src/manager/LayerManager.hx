@@ -253,10 +253,9 @@ class LayerManager {
                 return null;
             }
             var programInfo = state.app.renderer.getProgramInfo("texture");
-            var batch = new ManagedTileBatch(programInfo, tileset.textureId);
+            var batch = new ManagedTileBatch(state.app.renderer, programInfo, tileset.textureId);
             batch.debugName = "TilemapLayer:" + name;
             batch.depthTest = false;
-            batch.init(state.app.renderer);
             var tilesPerRow = Std.int(tileset.textureId.width / tileSize);
             var tilesPerCol = Std.int(tileset.textureId.height / tileSize);
             for (row in 0...tilesPerCol)

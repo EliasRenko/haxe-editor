@@ -724,7 +724,7 @@ class Editor extends CExterns {
         var ref:Reference<TextureDataStruct> = outData.ref;
         ref.width = textureData.width;
         ref.height = textureData.height;
-            // take address of first byte; cast the element to cpp.UInt8 so
+        // take address of first byte; cast the element to cpp.UInt8 so
         // RawPointer<T> is instantiated with the correct type
         // reinterpret the UInt8Array as a generic ArrayBufferView to
         // access its underlying Bytes buffer, then take the address of the

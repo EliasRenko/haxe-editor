@@ -1,6 +1,5 @@
 package display;
 
-import ProgramInfo;
 import Renderer;
 import math.Matrix;
 import display.LineBatch;
@@ -21,13 +20,9 @@ class Selection {
     /** Z depth — render slightly above the layers. */
     private static inline var Z:Float = 0.2;
 
-    public function new(programInfo:ProgramInfo) {
-        lineBatch = new LineBatch(programInfo, true); // persistent
+    public function new(renderer:Renderer) {
+        lineBatch = new LineBatch(renderer, true); // persistent
         lineBatch.depthTest = false;
-    }
-
-    public function init(renderer:Renderer):Void {
-        lineBatch.init(renderer);
     }
 
     /**

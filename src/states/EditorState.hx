@@ -110,12 +110,12 @@ class EditorState extends State {
         camera.x = windowWidth * 0.5;
         camera.y = windowHeight * 0.5;
         
-        // Create infinite grid for visual reference
+        // Pre-register the grid shader so Grid's constructor finds it cached.
         var gridVertShader = app.resources.getText("shaders/grid.vert");
         var gridFragShader = app.resources.getText("shaders/grid.frag");
-        var gridProgramInfo = app.renderer.createProgramInfo("grid", gridVertShader, gridFragShader);
+        app.renderer.createProgramInfo("grid", gridVertShader, gridFragShader);
         
-        grid = new Grid(gridProgramInfo, 5000.0); // 5000 unit quad
+        grid = new Grid(app.renderer, 5000.0); // 5000 unit quad
         grid.subGridSizeX = tileSizeX;
         grid.subGridSizeY = tileSizeY;
         grid.gridSizeX = tileSizeX * 4.0;
@@ -123,7 +123,6 @@ class EditorState extends State {
         grid.fadeDistance = 3000.0;
         grid.z = 0.0;
         grid.depthTest = false;
-        grid.init(app.renderer);
         
         // Clip grid to map bounds
         grid.setBounds(mapX, mapY, mapX + mapWidth, mapY + mapHeight);
@@ -135,15 +134,11 @@ class EditorState extends State {
         setupWorldAxes(app.renderer);
 
         // Setup quadtree debug batch (non-persistent — repopulated every frame)
-        var lineProgramInfo = app.renderer.getProgramInfo("line");
-        if (lineProgramInfo != null) {
-            quadtreeDebug = new LineBatch(lineProgramInfo, false);
-            quadtreeDebug.depthTest = false;
-            quadtreeDebug.init(app.renderer);
+        // "line" shader is pre-registered in setupMapFrame; LineBatch auto-resolves it.
+        quadtreeDebug = new LineBatch(app.renderer, false);
+        quadtreeDebug.depthTest = false;
 
-            selection = new Selection(lineProgramInfo);
-            selection.init(app.renderer);
-        }
+        selection = new Selection(app.renderer);
 
         // Initialise the placement ghost cursor overlay
         _placementPreview = new PlacementPreview();
@@ -172,10 +167,9 @@ class EditorState extends State {
             } else {
                 app.log.info(LogCategory.APP, "[LabelFont] text program reused");
             }
-            entityLabelFont = new BitmapFont(textProgramInfo, fontTexture, fontData);
+            entityLabelFont = new BitmapFont(app.renderer, textProgramInfo, fontTexture, fontData);
             entityLabelFont.depthTest = false;
             entityLabelFont.uniforms.set("uColor", [1.0, 1.0, 1.0, 1.0]);
-            entityLabelFont.init(app.renderer);
             app.log.info(LogCategory.APP, "[LabelFont] BitmapFont ready, regions=" + Lambda.count(entityLabelFont.atlasRegions));
         } catch(e:Dynamic) {
             app.log.info(LogCategory.APP, "[LabelFont] FAILED at init: " + e);
@@ -426,13 +420,11 @@ class EditorState extends State {
      * Setup the map frame (visual boundary)
      */
     private function setupMapFrame(renderer:Renderer):Void {
-        // Load line shader for frame rendering
+        // Pre-register the "line" shader so LineBatch (used by MapFrame) finds it cached.
         var lineFragShader = app.resources.getText("shaders/line.frag");
+        renderer.createProgramInfo("line", null, lineFragShader);
         
-        var lineProgramInfo = renderer.createProgramInfo("line", null, lineFragShader);
-        
-        mapFrame = new MapFrame(lineProgramInfo, mapX, mapY, mapWidth, mapHeight);
-        mapFrame.init(renderer);
+        mapFrame = new MapFrame(renderer, mapX, mapY, mapWidth, mapHeight);
         
         // MapFrame renders its own LineBatch internally
         // No need to add it as an entity
@@ -444,19 +436,11 @@ class EditorState extends State {
      */
     private function setupWorldAxes(renderer:Renderer):Void {
         
-        var lineProgramInfo = app.renderer.getProgramInfo("line");
-        if (lineProgramInfo == null) {
-            return;
-        }
-        
-        worldAxes = new LineBatch(lineProgramInfo, true);
+        worldAxes = new LineBatch(renderer, true);
         worldAxes.depthTest = false;
         worldAxes.visible = showWorldAxes;
         
-        // Initialize first (creates buffers)
-        worldAxes.init(renderer);
-        
-        // THEN add the lines
+        // Add the lines
         var axisLength = 10000.0;
         var z = 0.05;
         
@@ -632,9 +616,8 @@ class EditorState extends State {
 
             // Create the preview batch lazily; swap its texture if the tileset changed
             if (_placementPreview.batch == null) {
-                var previewBatch = new display.ManagedTileBatch(programInfo, editorTexture.textureId);
+                var previewBatch = new display.ManagedTileBatch(app.renderer, programInfo, editorTexture.textureId);
                 previewBatch.depthTest = false;
-                previewBatch.init(app.renderer);
                 _placementPreview.batch = previewBatch;
                 _placementPreview.currentTexture = editorTexture;
             } else if (_placementPreview.currentTexture != editorTexture) {
@@ -681,9 +664,8 @@ class EditorState extends State {
 
             // Create / swap batch when the entity definition's tileset changes
             if (_placementPreview.batch == null) {
-                var previewBatch = new display.ManagedTileBatch(programInfo, editorTexture.textureId);
+                var previewBatch = new display.ManagedTileBatch(app.renderer, programInfo, editorTexture.textureId);
                 previewBatch.depthTest = false;
-                previewBatch.init(app.renderer);
                 _placementPreview.batch = previewBatch;
                 _placementPreview.currentTexture = editorTexture;
             } else if (_placementPreview.currentTexture != editorTexture) {
