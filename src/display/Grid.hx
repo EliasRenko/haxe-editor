@@ -4,19 +4,17 @@ import utils.Color;
 import data.Indices;
 import data.Vertices;
 import GL;
-import ProgramInfo;
 import Renderer;
 import math.Matrix;
 
 /**
  * Grid - An infinite grid display object rendered using GLSL shaders (FIXED VERSION)
- * 
+ *
  * FIX: Removed UV coordinates - grid shader only needs position (x,y,z)
  * The shader calculates grid pattern from world position, not texture coords
  */
-class Grid extends Transform {
-
-    // Grid properties
+@:shader("grid")
+class Grid extends DisplayObject {
     public var gridSizeX:Float = 100.0;
     public var gridSizeY:Float = 100.0;
     public var subGridSizeX:Float = 25.0;
@@ -39,7 +37,7 @@ class Grid extends Transform {
      * @param programInfo Shader program (should use grid.vert and grid.frag)
      * @param size Size of the grid quad (should be large enough to cover visible area)
      */
-    public function new(programInfo:ProgramInfo, size:Float = 10000.0) {
+    public function new(renderer:Renderer, size:Float = 10000.0) {
         var halfSize = size / 2.0;
 
         // Create a large quad to render the grid on
@@ -57,7 +55,7 @@ class Grid extends Transform {
 
         var indices:Indices = [0, 1, 2, 0, 2, 3]; // Two triangles to make a quad
 
-        super(programInfo, vertices, indices);
+        super(renderer, vertices, indices);
 
         // Set OpenGL properties
         mode = GL.TRIANGLES;

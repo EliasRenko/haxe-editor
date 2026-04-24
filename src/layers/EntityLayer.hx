@@ -171,8 +171,7 @@ class EntityLayer extends Layer implements ITilesLayer {
         }
         if (entry == null) {
             if (editorTexture != null) {
-                var mb = new ManagedTileBatch(programInfo, editorTexture.textureId);
-                mb.init(renderer);
+                var mb = new ManagedTileBatch(renderer, editorTexture.textureId);
                 entry = new BatchEntry(editorTexture, mb);
             } else {
                 // No tileset available. If a fallback texture exists, back the orphan batch
@@ -180,8 +179,7 @@ class EntityLayer extends Layer implements ITilesLayer {
                 // The fallback texture content is irrelevant — the silhouette shader ignores it.
                 // entry.editorTexture stays null to mark this batch as orphaned.
                 if (fallbackTexture != null) {
-                    var mb = new ManagedTileBatch(programInfo, fallbackTexture.textureId);
-                    mb.init(renderer);
+                    var mb = new ManagedTileBatch(renderer, fallbackTexture.textureId);
                     entry = new BatchEntry(null, mb);
                 } else {
                     entry = new BatchEntry(null, null);
@@ -348,16 +346,14 @@ class EntityLayer extends Layer implements ITilesLayer {
             }
             if (targetEntry == null) {
                 if (newEditorTexture != null) {
-                    var mb = new ManagedTileBatch(programInfo, newEditorTexture.textureId);
-                    mb.init(renderer);
+                    var mb = new ManagedTileBatch(renderer, newEditorTexture.textureId);
                     targetEntry = new BatchEntry(newEditorTexture, mb);
                 } else {
                     // Migrating to no-tileset — back with a fallback GPU batch for silhouette rendering.
                     var fallbackTex:EditorTexture = null;
                     for (e in batches) { if (e.editorTexture != null) { fallbackTex = e.editorTexture; break; } }
                     if (fallbackTex != null) {
-                        var mb = new ManagedTileBatch(programInfo, fallbackTex.textureId);
-                        mb.init(renderer);
+                        var mb = new ManagedTileBatch(renderer, fallbackTex.textureId);
                         targetEntry = new BatchEntry(null, mb);
                     } else {
                         targetEntry = new BatchEntry(null, null);

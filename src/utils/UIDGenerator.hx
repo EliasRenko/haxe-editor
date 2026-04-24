@@ -19,7 +19,11 @@ class UIDGenerator {
      * Generate a new unique string ID.
      */
     public static function generate():String {
+        #if js
+        var t = Std.int(js.lib.Date.now()) & 0x7FFFFFFF;
+        #else
         var t = Std.int(Sys.time() * 1000) & 0x7FFFFFFF;
+        #end
         _counter = (_counter + 1) & 0xFFFF;
         return "e_" + StringTools.hex(t, 8) + "_" + StringTools.hex(_counter, 4);
     }

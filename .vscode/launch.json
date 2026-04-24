@@ -1,0 +1,44 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Debug Haxe Engine",
+            "type": "hxcpp",
+            "request": "launch",
+            "program": "${workspaceFolder}/bin/debug/Main-debug.exe",
+            "internalConsoleOptions": "openOnSessionStart"
+        },
+        {
+            "name": "Electron: Main Process",
+            "type": "node",
+            "request": "launch",
+            "cwd": "${workspaceFolder}/bin/web",
+            "runtimeExecutable": "${workspaceFolder}/bin/web/node_modules/.bin/electron",
+            "windows": {
+                "runtimeExecutable": "${workspaceFolder}/bin/web/node_modules/.bin/electron.cmd"
+            },
+            "runtimeArgs": [
+                ".",
+                "--remote-debugging-port=9222"
+            ],
+            "outputCapture": "std",
+            "serverReadyAction": {
+                "action": "startDebugging",
+                "name": "Electron: Renderer",
+                "pattern": "."
+            }
+        },
+        {
+            "name": "Electron: Renderer",
+            "type": "chrome",
+            "request": "attach",
+            "port": 9222,
+            "webRoot": "${workspaceFolder}/bin/web",
+            "timeout": 30000,
+            "sourceMaps": true,
+            "sourceMapPathOverrides": {
+                "file:///C:/*": "C:/*"
+            }
+        }
+    ]
+}

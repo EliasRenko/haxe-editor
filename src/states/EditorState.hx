@@ -115,15 +115,14 @@ class EditorState extends State {
         var gridFragShader = app.resources.getText("shaders/grid.frag");
         var gridProgramInfo = app.renderer.createProgramInfo("grid", gridVertShader, gridFragShader);
         
-        grid = new Grid(gridProgramInfo, 5000.0); // 5000 unit quad
+        grid = new Grid(app.renderer, 5000.0); // 5000 unit quad
         grid.subGridSizeX = tileSizeX;
         grid.subGridSizeY = tileSizeY;
         grid.gridSizeX = tileSizeX * 4.0;
         grid.gridSizeY = tileSizeY * 4.0;
         grid.fadeDistance = 3000.0;
-        grid.z = 0.0;
+        //grid.z = 0.0;
         grid.depthTest = false;
-        grid.init(app.renderer);
         
         // Clip grid to map bounds
         grid.setBounds(mapX, mapY, mapX + mapWidth, mapY + mapHeight);
@@ -137,11 +136,10 @@ class EditorState extends State {
         // Setup quadtree debug batch (non-persistent — repopulated every frame)
         var lineProgramInfo = app.renderer.getProgramInfo("line");
         if (lineProgramInfo != null) {
-            quadtreeDebug = new LineBatch(lineProgramInfo, false);
+            quadtreeDebug = new LineBatch(app.renderer, false);
             quadtreeDebug.depthTest = false;
-            quadtreeDebug.init(app.renderer);
 
-            selection = new Selection(lineProgramInfo);
+            selection = new Selection(app.renderer);
             selection.init(app.renderer);
         }
 
@@ -172,10 +170,9 @@ class EditorState extends State {
             } else {
                 app.log.info(LogCategory.APP, "[LabelFont] text program reused");
             }
-            entityLabelFont = new BitmapFont(textProgramInfo, fontTexture, fontData);
+            entityLabelFont = new BitmapFont(app.renderer, fontTexture, fontData);
             entityLabelFont.depthTest = false;
             entityLabelFont.uniforms.set("uColor", [1.0, 1.0, 1.0, 1.0]);
-            entityLabelFont.init(app.renderer);
             app.log.info(LogCategory.APP, "[LabelFont] BitmapFont ready, regions=" + Lambda.count(entityLabelFont.atlasRegions));
         } catch(e:Dynamic) {
             app.log.info(LogCategory.APP, "[LabelFont] FAILED at init: " + e);
@@ -431,7 +428,7 @@ class EditorState extends State {
         
         var lineProgramInfo = renderer.createProgramInfo("line", null, lineFragShader);
         
-        mapFrame = new MapFrame(lineProgramInfo, mapX, mapY, mapWidth, mapHeight);
+        mapFrame = new MapFrame(renderer, mapX, mapY, mapWidth, mapHeight);
         mapFrame.init(renderer);
         
         // MapFrame renders its own LineBatch internally
@@ -449,13 +446,10 @@ class EditorState extends State {
             return;
         }
         
-        worldAxes = new LineBatch(lineProgramInfo, true);
+        worldAxes = new LineBatch(renderer, true);
         worldAxes.depthTest = false;
         worldAxes.visible = showWorldAxes;
-        
-        // Initialize first (creates buffers)
-        worldAxes.init(renderer);
-        
+
         // THEN add the lines
         var axisLength = 10000.0;
         var z = 0.05;
@@ -632,9 +626,8 @@ class EditorState extends State {
 
             // Create the preview batch lazily; swap its texture if the tileset changed
             if (_placementPreview.batch == null) {
-                var previewBatch = new display.ManagedTileBatch(programInfo, editorTexture.textureId);
+                var previewBatch = new display.ManagedTileBatch(app.renderer, programInfo, editorTexture.textureId);
                 previewBatch.depthTest = false;
-                previewBatch.init(app.renderer);
                 _placementPreview.batch = previewBatch;
                 _placementPreview.currentTexture = editorTexture;
             } else if (_placementPreview.currentTexture != editorTexture) {
@@ -681,9 +674,8 @@ class EditorState extends State {
 
             // Create / swap batch when the entity definition's tileset changes
             if (_placementPreview.batch == null) {
-                var previewBatch = new display.ManagedTileBatch(programInfo, editorTexture.textureId);
+                var previewBatch = new display.ManagedTileBatch(app.renderer, programInfo, editorTexture.textureId);
                 previewBatch.depthTest = false;
-                previewBatch.init(app.renderer);
                 _placementPreview.batch = previewBatch;
                 _placementPreview.currentTexture = editorTexture;
             } else if (_placementPreview.currentTexture != editorTexture) {
@@ -1272,7 +1264,11 @@ class EditorState extends State {
 
         var jsonString = haxe.Json.stringify(data, null, "  ");
         try {
+            #if js
+            app.saveBytes(filePath, jsonString);
+            #else
             sys.io.File.saveContent(filePath, jsonString);
+            #end
             trace("Exported " + totalTileCount + " tiles in " + layersData.length + " layers to: " + filePath);
             return totalTileCount;
         } catch (e:Dynamic) {

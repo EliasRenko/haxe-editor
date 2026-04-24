@@ -1,0 +1,27 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# haxe-editor  ›  build/build-web.hxml
+#
+# Compiles EditorWeb.hx → JavaScript for the Electron/web editor shell.
+# Output lands in haxe-application/bin/web/editor.js alongside index.html.
+# ─────────────────────────────────────────────────────────────────────────────
+
+# Copy editor resources (shaders, fonts, textures) to the web output folder
+--macro Sys.command("cmd", ["/c", ".\\bat\\copy-files.bat", "res", "..\\haxe-application\\bin\\web\\res"])
+
+# Libraries — order matters: haxe-native first (provides GL/Renderer/Runtime),
+# then haxe-application (App, State, Input, Resources, …)
+-lib haxe-native
+-lib haxe-application
+
+# haxe-editor source overrides any conflicting classes from the libraries above
+-cp src
+
+# Entry point
+-main EditorWeb
+
+# JavaScript output
+--js bin/web/editor.js
+
+# Build flags
+-debug
+-dce full
