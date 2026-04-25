@@ -1,7 +1,6 @@
 package display;
 
 import GL;
-import ProgramInfo;
 import Renderer;
 import Texture;
 import data.Vertices;
@@ -12,6 +11,7 @@ import data.Indices;
  * Used for entities that reference a region in a tileset
  * Much more efficient than creating a batch per entity
  */
+@:shader("texture")
 class TileObject extends Transform {
     
     // Tile properties
@@ -28,7 +28,7 @@ class TileObject extends Transform {
     private var textureWidth:Int = 0;
     private var textureHeight:Int = 0;
     
-    public function new(programInfo:ProgramInfo, texture:Texture, textureWidth:Int, textureHeight:Int) {
+    public function new(renderer:Renderer, texture:Texture, textureWidth:Int, textureHeight:Int) {
         // Create initial quad vertices (will be updated in render())
         var vertices:Vertices = [
             0.0, 0.0, 0.0, 0.0, 0.0,
@@ -39,7 +39,7 @@ class TileObject extends Transform {
         
         var indices:Indices = [0, 1, 2, 2, 3, 0];
         
-        super(programInfo, vertices, indices);
+        super(renderer, vertices, indices);
         
         setTexture(texture);
         this.textureWidth = textureWidth;
@@ -69,13 +69,6 @@ class TileObject extends Transform {
         this.tileWidth = width;
         this.tileHeight = height;
         needsBufferUpdate = true;
-    }
-    
-    /**
-     * Initialize OpenGL buffers
-     */
-    override public function init(renderer:Renderer):Void {
-        super.init(renderer);
     }
     
     /**

@@ -110,10 +110,10 @@ class EditorState extends State {
         camera.x = windowWidth * 0.5;
         camera.y = windowHeight * 0.5;
         
-        // Create infinite grid for visual reference
+        // Pre-register the grid shader so Grid's constructor finds it cached.
         var gridVertShader = app.resources.getText("shaders/grid.vert");
         var gridFragShader = app.resources.getText("shaders/grid.frag");
-        var gridProgramInfo = app.renderer.createProgramInfo("grid", gridVertShader, gridFragShader);
+        app.renderer.createProgramInfo("grid", gridVertShader, gridFragShader);
         
         grid = new Grid(app.renderer, 5000.0); // 5000 unit quad
         grid.subGridSizeX = tileSizeX;
@@ -423,8 +423,9 @@ class EditorState extends State {
      * Setup the map frame (visual boundary)
      */
     private function setupMapFrame(renderer:Renderer):Void {
-        // Load line shader for frame rendering
+        // Pre-register the "line" shader so LineBatch (used by MapFrame) finds it cached.
         var lineFragShader = app.resources.getText("shaders/line.frag");
+        renderer.createProgramInfo("line", null, lineFragShader);
         
         var lineProgramInfo = renderer.createProgramInfo("line", null, lineFragShader);
         

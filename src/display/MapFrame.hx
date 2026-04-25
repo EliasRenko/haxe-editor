@@ -33,6 +33,7 @@ public function new(renderer:Renderer, x:Float, y:Float, width:Float, height:Flo
         // Create persistent line batch for the frame
         lineBatch = new LineBatch(renderer, true);
         lineBatch.depthTest = false;
+        rebuildFrame();
     }
     
     /**

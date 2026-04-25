@@ -724,7 +724,7 @@ class Editor extends CExterns {
         var ref:Reference<TextureDataStruct> = outData.ref;
         ref.width = textureData.width;
         ref.height = textureData.height;
-            // take address of first byte; cast the element to cpp.UInt8 so
+        // take address of first byte; cast the element to cpp.UInt8 so
         // RawPointer<T> is instantiated with the correct type
         // reinterpret the UInt8Array as a generic ArrayBufferView to
         // access its underlying Bytes buffer, then take the address of the
@@ -751,23 +751,23 @@ class Editor extends CExterns {
 
     // ===== TILESET MANAGEMENT =====
 
-    @:keep public static function createTileset(relativePath:String, tilesetName:String):Bool {
+    @:keep public static function createTileset(fileName:String, relativePath:String):Bool {
         try {
             if (!app.resources.cached(relativePath)) {
                 app.log.info(LogCategory.APP, "Loading texture: " + relativePath);
-                app.resources.loadTexture(relativePath, true);
+                app.resources.loadTexture(relativePath);
             }
 
-            if (tilesetManager.exists(tilesetName)) {
-                app.log.info(LogCategory.APP, "Tileset with the name " + tilesetName + " already exists");
+            if (tilesetManager.exists(relativePath)) {
+                app.log.info(LogCategory.APP, "Tileset with the path " + relativePath + " already exists");
                 return true;
             }
             
             var glTexture:Texture = app.renderer.uploadTexture(app.resources.getTexture(relativePath));
-            tilesetManager.setTileset(glTexture, tilesetName, relativePath);
+            tilesetManager.setTileset(glTexture, relativePath, relativePath);
 
         } catch (e:Dynamic) {
-            app.log.error(LogCategory.APP, "Editor: Error creating tileset '" + tilesetName + "': " + e);
+            app.log.error(LogCategory.APP, "Editor: Error creating tileset '" + relativePath + "': " + e);
             return false;
         }
 
