@@ -752,6 +752,9 @@ class Editor extends CExterns {
     // ===== TILESET MANAGEMENT =====
 
     @:keep public static function createTileset(fileName:String, relativePath:String):Bool {
+        // Normalize: forward slashes, strip any leading slash
+        relativePath = StringTools.replace(relativePath, "\\", "/");
+        if (relativePath.charAt(0) == "/") relativePath = relativePath.substr(1);
         try {
             if (!app.resources.cached(relativePath)) {
                 app.log.info(LogCategory.APP, "Loading texture: " + relativePath);

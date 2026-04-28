@@ -18,6 +18,7 @@ import layers.TilemapLayer;
 import manager.TilesetManager;
 import manager.EntityManager;
 import utils.UIDGenerator;
+import components.Components;
 
 typedef ProjectData = {
     var projectFilePath:Null<String>;
@@ -46,7 +47,9 @@ class EditorWeb {
     }
 
     /** Entry point — unused on web (app.run() starts the loop). */
-    public static function main():Void {}
+    public static function main():Void {
+        Components.registerAll();
+    }
 
     // =========================================================================
     // LIFECYCLE
@@ -440,6 +443,9 @@ class EditorWeb {
 
     @:keep
     public static function createTileset(relativePath:String, tilesetName:String):Bool {
+        // Normalize: forward slashes, strip any leading slash
+        relativePath = StringTools.replace(relativePath, "\\", "/");
+        if (relativePath.charAt(0) == "/") relativePath = relativePath.substr(1);
         try {
             if (!app.resources.cached(relativePath)) app.resources.loadTexture(relativePath, true);
             if (tilesetManager.exists(tilesetName)) return true;
@@ -474,6 +480,61 @@ class EditorWeb {
     @:keep
     public static function getTilesetCount():Int {
         return tilesetManager != null ? tilesetManager.getTilesetCount() : 0;
+    }
+
+    /**
+     * Returns dimensional and path metadata for a tileset's texture.
+     * Result: { name, texturePath, width, height, bpp }  or null.
+     */
+    @:keep
+    public static function getTextureInfo(tilesetName:String):Dynamic {
+        if (tilesetManager == null) return null;
+        var et = tilesetManager.getTilesetInfo(tilesetName);
+        if (et == null) return null;
+        var td:data.TextureData = null;
+        try { td = app.resources.getTexture(et.texturePath); } catch (_:Dynamic) {}
+        if (td != null) {
+            return { name: et.name, texturePath: et.texturePath, width: td.width, height: td.height, bpp: td.bytesPerPixel };
+        }
+        return { name: et.name, texturePath: et.texturePath, width: 0, height: 0, bpp: 0 };
+    }
+
+    /**
+     * Encodes a tileset's texture as a PNG data URL suitable for <img src>.
+     * Pixel bytes are converted from RGB/RGBA/grayscale to canvas RGBA.
+     * Returns null if the texture is not cached.
+     */
+    @:keep
+    public static function getTextureDataUrl(tilesetName:String):String {
+        if (tilesetManager == null) return null;
+        var et = tilesetManager.getTilesetInfo(tilesetName);
+        if (et == null) return null;
+        var td:data.TextureData = null;
+        try { td = app.resources.getTexture(et.texturePath); } catch (_:Dynamic) {}
+        if (td == null) return null;
+
+        var w   = td.width;
+        var h   = td.height;
+        var bpp = td.bytesPerPixel;
+        var src = td.bytes;
+        var n   = w * h;
+
+        // Build an RGBA Haxe Array that JS will treat as a plain Array<Int>
+        var rgba:Array<Int> = new Array<Int>();
+        for (i in 0...n) {
+            var si = i * bpp;
+            rgba.push(src.get(si));
+            rgba.push(bpp > 1 ? src.get(si + 1) : src.get(si));
+            rgba.push(bpp > 2 ? src.get(si + 2) : src.get(si));
+            rgba.push(bpp > 3 ? src.get(si + 3) : 255);
+        }
+
+        return js.Syntax.code("(function(w,h,px){
+            var u8=new Uint8ClampedArray(px);
+            var cv=document.createElement('canvas'); cv.width=w; cv.height=h;
+            cv.getContext('2d').putImageData(new ImageData(u8,w,h),0,0);
+            return cv.toDataURL('image/png');
+        })({0},{1},{2})", w, h, rgba);
     }
 
     @:keep
@@ -653,6 +714,11 @@ class EditorWeb {
     @:keep
     public static function moveLayerDown(layerName:String):Bool {
         return editorState != null ? editorState.moveLayerDown(layerName) : false;
+    }
+
+    @:keep
+    public static function renameLayer(oldName:String, newName:String):Bool {
+        return editorState != null ? editorState.renameLayer(oldName, newName) : false;
     }
 
     // =========================================================================

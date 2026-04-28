@@ -1,0 +1,20 @@
+<style>
+    :host { display: block; overflow: auto; height: 100%; }
+    table { width: 100%; border-collapse: collapse; }
+    tr    { border-bottom: 1px solid var(--border, #3F3F46); height: 22px; }
+    .cat td {
+        background: var(--window-bg, #2D2D2D); color: var(--text, #D4D4D4);
+        font-weight: 600; padding: 2px 6px; font-size: 11px;
+    }
+    .name {
+        padding: 2px 6px; color: var(--text, #D4D4D4); width: 50%;
+        border-right: 1px solid var(--border, #3F3F46);
+        white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .val {
+        padding: 2px 6px; color: #9CDCFE; width: 50%;
+        white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+        background: var(--input-bg, #3C3C3C);
+    }
+</style>
+<table id="t"></table>

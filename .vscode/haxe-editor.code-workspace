@@ -1,0 +1,14 @@
+{
+	"folders": [
+		{
+			"path": ".."
+		},
+		{
+			"path": "../../haxe-application"
+		},
+		{
+			"path": "../../haxe-native"
+		}
+	],
+	"settings": {}
+}

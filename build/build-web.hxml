@@ -8,6 +8,10 @@
 # Copy editor resources (shaders, fonts, textures) to the web output folder
 --macro Sys.command("cmd", ["/c", ".\\bat\\copy-files.bat", "res", "..\\haxe-application\\bin\\web\\res"])
 
+# Embed all src/components/templates/*.html files as Haxe resources.
+# Components load them at runtime via haxe.Resource.getString("ClassName").
+--macro macro.EmbedTemplates.run()
+
 # Libraries — order matters: haxe-native first (provides GL/Renderer/Runtime),
 # then haxe-application (App, State, Input, Resources, …)
 -lib haxe-native
@@ -25,3 +29,4 @@
 # Build flags
 -debug
 -dce full
+-D js-es=6

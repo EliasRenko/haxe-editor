@@ -1,0 +1,117 @@
+<style>
+    :host { display: flex; flex-direction: column; height: 100%; overflow: hidden; background: var(--panel-bg, #252526); }
+
+    .search-bar {
+        display: flex; align-items: center; height: 28px;
+        padding: 0 6px; gap: 4px;
+        border-bottom: 1px solid var(--border, #3F3F46); flex-shrink: 0;
+    }
+    .search-input {
+        flex: 1; background: var(--input-bg, #3C3C3C); color: var(--text, #D4D4D4);
+        border: 1px solid var(--border, #3F3F46); border-radius: 2px;
+        height: 20px; padding: 0 6px; font-size: 11px; outline: none;
+        font-family: inherit;
+    }
+    .search-input::placeholder { color: var(--muted, #858585); }
+
+    .main { flex: 1; display: flex; min-height: 0; }
+
+    /* ── Left: texture list ── */
+    .list-panel {
+        width: 190px; flex-shrink: 0;
+        border-right: 1px solid var(--border, #3F3F46);
+        display: flex; flex-direction: column; min-height: 0;
+    }
+    .list-header {
+        height: 22px; display: flex; align-items: center;
+        padding: 0 8px; font-size: 11px; font-weight: 600;
+        color: var(--muted, #858585); text-transform: uppercase; letter-spacing: .4px;
+        border-bottom: 1px solid var(--border, #3F3F46); flex-shrink: 0;
+        background: var(--window-bg, #2D2D30);
+    }
+    .list { flex: 1; overflow-y: auto; padding: 2px 0; }
+    .list-item {
+        display: flex; align-items: center; height: 22px;
+        padding: 0 8px; cursor: default; user-select: none;
+        font-size: 12px; color: var(--text, #D4D4D4);
+        white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .list-item:hover { background: rgba(255,255,255,.05); }
+    .list-item.selected { background: var(--accent, #0E639C); color: #fff; }
+    .list-empty {
+        padding: 10px 8px; font-size: 11px; color: var(--muted, #858585);
+        font-style: italic;
+    }
+
+    /* ── Right: viewer ── */
+    .viewer-panel {
+        flex: 1; display: flex; flex-direction: column; min-height: 0; min-width: 0;
+    }
+    .canvas-wrap {
+        flex: 1; background: #2A2A2A;
+        display: flex; align-items: center; justify-content: center;
+        min-height: 0; overflow: hidden; position: relative;
+    }
+    .canvas-wrap img {
+        max-width: 100%; max-height: 100%;
+        object-fit: contain; image-rendering: pixelated;
+        display: block;
+    }
+    .placeholder {
+        color: var(--muted, #858585); font-size: 11px; pointer-events: none;
+    }
+    .checkerboard {
+        position: absolute; inset: 0; z-index: 0;
+        background-image:
+            linear-gradient(45deg, #383838 25%, transparent 25%),
+            linear-gradient(-45deg, #383838 25%, transparent 25%),
+            linear-gradient(45deg, transparent 75%, #383838 75%),
+            linear-gradient(-45deg, transparent 75%, #383838 75%);
+        background-size: 16px 16px;
+        background-position: 0 0, 0 8px, 8px -8px, -8px 0;
+        pointer-events: none;
+    }
+    .canvas-img-wrap {
+        position: relative; z-index: 1;
+        max-width: 100%; max-height: 100%;
+        display: flex; align-items: center; justify-content: center;
+    }
+    .info-panel {
+        border-top: 1px solid var(--border, #3F3F46); flex-shrink: 0;
+        padding: 5px 8px;
+        display: grid; grid-template-columns: 56px 1fr; row-gap: 2px;
+        font-size: 11px; background: var(--panel-bg, #252526);
+    }
+    .info-label { color: var(--muted, #858585); line-height: 1.8; }
+    .info-value {
+        color: var(--text, #D4D4D4); line-height: 1.8;
+        white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .info-value.mono { font-family: Consolas, "Courier New", monospace; font-size: 10px; }
+</style>
+
+<div class="search-bar">
+    <input class="search-input" id="search" type="text" placeholder="Filter textures...">
+</div>
+
+<div class="main">
+    <div class="list-panel">
+        <div class="list-header">Textures</div>
+        <div class="list" id="list">
+            <div class="list-empty">No textures loaded</div>
+        </div>
+    </div>
+
+    <div class="viewer-panel">
+        <div class="canvas-wrap" id="canvas-wrap">
+            <div class="checkerboard"></div>
+            <span class="placeholder" id="placeholder">Select a texture</span>
+        </div>
+        <div class="info-panel">
+            <span class="info-label">Name</span>   <span class="info-value" id="info-name">—</span>
+            <span class="info-label">Path</span>   <span class="info-value mono" id="info-path">—</span>
+            <span class="info-label">Size</span>   <span class="info-value" id="info-size">—</span>
+            <span class="info-label">Format</span> <span class="info-value" id="info-fmt">—</span>
+        </div>
+    </div>
+</div>

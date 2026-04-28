@@ -1,0 +1,167 @@
+<style>
+    :host { display: flex; flex-direction: column; height: 100%; overflow: hidden; position: relative; }
+    .toolbar {
+        display: flex; align-items: center; height: 26px;
+        padding: 0 3px; gap: 1px;
+        border-bottom: 1px solid var(--border, #3F3F46); flex-shrink: 0;
+        position: relative;
+    }
+    .hier-btn {
+        width: 22px; height: 22px; background: transparent;
+        border: 1px solid transparent; border-radius: 2px;
+        cursor: pointer; display: flex; align-items: center;
+        justify-content: center; color: var(--text, #D4D4D4);
+    }
+    .hier-btn:hover { background: rgba(255,255,255,.1); border-color: var(--border, #3F3F46); }
+    .hier-btn svg  { width: 13px; height: 13px; }
+    .sep { width: 1px; height: 15px; background: var(--border, #3F3F46); margin: 0 2px; }
+    .tree { flex: 1; overflow: auto; padding: 2px 0; }
+    .root-node, .layer-node {
+        display: flex; align-items: center; height: 22px;
+        padding-left: 4px; cursor: default; user-select: none;
+        font-size: 12px; color: var(--text, #D4D4D4);
+    }
+    .root-node:hover, .layer-node:hover { background: rgba(255,255,255,.05); }
+    .root-node.selected, .layer-node.selected { background: var(--accent, #0E639C); }
+    .layer-node { padding-left: 22px; }
+    .exp  { width: 16px; font-size: 7px; color: var(--muted, #858585); flex-shrink: 0; }
+    .icon { width: 16px; margin-right: 4px; font-size: 11px; flex-shrink: 0; }
+    .lbl  { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .lbl.root { font-weight: bold; color: #4EC9B0; }
+    .tex-viewer {
+        height: 136px; border-top: 1px solid var(--border, #3F3F46);
+        display: flex; flex-direction: column; flex-shrink: 0;
+    }
+    .tex-toolbar {
+        display: flex; align-items: center; height: 24px;
+        padding: 0 4px; gap: 4px;
+        border-bottom: 1px solid var(--border, #3F3F46);
+        background: var(--panel-bg, #252526);
+    }
+    .tex-toolbar select {
+        background: var(--input-bg, #3C3C3C); color: var(--text, #D4D4D4);
+        border: 1px solid var(--border, #3F3F46); font-size: 11px;
+        height: 18px; padding: 0 3px; outline: none;
+    }
+    .tex-toolbar span { font-size: 11px; color: var(--muted, #858585); }
+    .tex-canvas {
+        flex: 1; background: #404040; display: flex;
+        align-items: center; justify-content: center;
+        color: var(--muted, #858585); font-size: 11px;
+    }
+    .add-menu {
+        position: absolute; top: 28px; left: 2px;
+        background: var(--panel-bg, #252526);
+        border: 1px solid var(--border, #3F3F46);
+        box-shadow: 3px 3px 10px rgba(0,0,0,.55);
+        z-index: 50; min-width: 160px; padding: 3px 0;
+    }
+    .add-menu-item {
+        padding: 5px 12px; cursor: default;
+        font-size: 12px; color: var(--text, #D4D4D4);
+        white-space: nowrap;
+    }
+    .add-menu-item:hover { background: var(--accent, #0E639C); color: #fff; }
+    /* ── Creation dialogs ─────────────────────────────────────────────────── */
+    .dialog-overlay { position: absolute; inset: 0; background: rgba(0,0,0,.45); display: none; align-items: center; justify-content: center; z-index: 100; }
+    .dialog-overlay.visible { display: flex; }
+    .dialog { background: var(--panel-bg, #252526); border: 1px solid var(--border, #3F3F46); box-shadow: 0 4px 16px rgba(0,0,0,.6); padding: 12px 14px 10px; min-width: 230px; }
+    .dialog-title { font-size: 12px; font-weight: bold; color: var(--text, #D4D4D4); margin-bottom: 10px; }
+    .dialog-row { display: flex; flex-direction: column; margin-bottom: 7px; }
+    .dialog-row label { font-size: 11px; color: var(--muted, #858585); margin-bottom: 3px; }
+    .dlg-input, .dlg-select { background: var(--input-bg, #3C3C3C); border: 1px solid var(--border, #3F3F46); color: var(--text, #D4D4D4); font-size: 12px; height: 22px; padding: 0 6px; outline: none; width: 100%; box-sizing: border-box; }
+    .dlg-input:focus, .dlg-select:focus { border-color: var(--accent, #0E639C); }
+    .dialog-footer { display: flex; justify-content: flex-end; gap: 6px; margin-top: 10px; }
+    .dlg-btn { height: 22px; padding: 0 10px; font-size: 12px; cursor: pointer; border-radius: 2px; }
+    .dlg-btn-cancel { background: transparent; border: 1px solid var(--border, #3F3F46); color: var(--text, #D4D4D4); }
+    .dlg-btn-cancel:hover { background: rgba(255,255,255,.08); }
+    .dlg-btn-ok { background: var(--accent, #0E639C); border: 1px solid var(--accent, #0E639C); color: #fff; }
+    .dlg-btn-ok:hover { background: #1177BB; border-color: #1177BB; }
+</style>
+
+<div class="toolbar">
+    <button class="hier-btn" id="btn-add" title="Add Layer">
+        <svg viewBox="0 0 13 13" fill="none">
+            <line x1="6.5" y1="2" x2="6.5" y2="11" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+            <line x1="2" y1="6.5" x2="11" y2="6.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+        </svg>
+    </button>
+    <button class="hier-btn" id="btn-remove" title="Remove Layer">
+        <svg viewBox="0 0 13 13" fill="none">
+            <line x1="2" y1="6.5" x2="11" y2="6.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+        </svg>
+    </button>
+    <button class="hier-btn" id="btn-edit" title="Edit Layer">
+        <svg viewBox="0 0 13 13" fill="none">
+            <path d="M8 2.5l2.5 2.5-6 6H2V8.5l6-6z" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round"/>
+        </svg>
+    </button>
+    <div class="sep"></div>
+    <button class="hier-btn" id="btn-up" title="Move Layer Up">
+        <svg viewBox="0 0 13 13" fill="none">
+            <polyline points="2.5,8.5 6.5,4 10.5,8.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+    </button>
+    <button class="hier-btn" id="btn-down" title="Move Layer Down">
+        <svg viewBox="0 0 13 13" fill="none">
+            <polyline points="2.5,4.5 6.5,9 10.5,4.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+    </button>
+</div>
+
+<div class="tree" id="tree">
+    <div class="root-node selected" data-id="state">
+        <span class="exp">&#9658;</span>
+        <span class="icon" style="color:#4EC9B0;">&#9744;</span>
+        <span class="lbl root">State</span>
+    </div>
+</div>
+
+<div class="tex-viewer">
+    <div class="tex-toolbar">
+        <span>Zoom:</span>
+        <select>
+            <option>100%</option><option>50%</option><option>75%</option>
+            <option>150%</option><option>200%</option><option>300%</option><option>400%</option>
+        </select>
+    </div>
+    <div class="tex-canvas">No tileset selected</div>
+</div>
+
+<!-- ── Entity Layer Dialog ───────────────────────────────────────── -->
+<div class="dialog-overlay" id="dlg-entity">
+    <div class="dialog">
+        <div class="dialog-title">New Entity Layer</div>
+        <div class="dialog-row">
+            <label>Name</label>
+            <input type="text" id="dlg-entity-name" class="dlg-input" autocomplete="off" />
+        </div>
+        <div class="dialog-footer">
+            <button class="dlg-btn dlg-btn-cancel" id="dlg-entity-cancel">Cancel</button>
+            <button class="dlg-btn dlg-btn-ok" id="dlg-entity-ok">Create</button>
+        </div>
+    </div>
+</div>
+
+<!-- ── Tilemap Layer Dialog ──────────────────────────────────────── -->
+<div class="dialog-overlay" id="dlg-tilemap">
+    <div class="dialog">
+        <div class="dialog-title">New Tilemap Layer</div>
+        <div class="dialog-row">
+            <label>Name</label>
+            <input type="text" id="dlg-tilemap-name" class="dlg-input" autocomplete="off" />
+        </div>
+        <div class="dialog-row">
+            <label>Tileset</label>
+            <select id="dlg-tilemap-tileset" class="dlg-select"></select>
+        </div>
+        <div class="dialog-row">
+            <label>Tile Size (px)</label>
+            <input type="number" id="dlg-tilemap-tilesize" class="dlg-input" value="64" min="1" max="512" autocomplete="off" />
+        </div>
+        <div class="dialog-footer">
+            <button class="dlg-btn dlg-btn-cancel" id="dlg-tilemap-cancel">Cancel</button>
+            <button class="dlg-btn dlg-btn-ok" id="dlg-tilemap-ok">Create</button>
+        </div>
+    </div>
+</div>

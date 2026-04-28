@@ -1058,6 +1058,15 @@ class EditorState extends State {
     public function moveLayerUp(layerName:String):Bool               { return layerManager.moveUp(layerName); }
     public function moveLayerDown(layerName:String):Bool             { return layerManager.moveDown(layerName); }
     public function moveLayerTo(layerName:String, newIndex:Int):Bool { return layerManager.moveTo(layerName, newIndex); }
+
+    public function renameLayer(oldName:String, newName:String):Bool {
+        if (getLayerByName(newName) != null) return false; // name already taken
+        var layer = getLayerByName(oldName);
+        if (layer == null) return false;
+        layer.id = newName;
+        if (layerManager.activeLayer == layer) layerManager.setActive(newName);
+        return true;
+    }
     
     
     /** move batch up within an entity layer identified by name */
