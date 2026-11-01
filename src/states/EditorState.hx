@@ -1,6 +1,7 @@
 ﻿package states;
 
 import App;
+import DisplayObject;
 import display.BitmapFont;
 import display.Grid;
 import display.LineBatch;
@@ -8,21 +9,29 @@ import display.ManagedTileBatch;
 import display.MapFrame;
 import display.Selection;
 import EditorTexture;
+import gui.Canvas;
+import ui.EditorUI;
 import layers.EntityLayer;
 import layers.EntityLayer.Entity;
 import layers.FolderLayer;
 import layers.Layer;
 import layers.TilemapLayer;
+import loaders.FontLoader;
 import Log.LogCategory;
 import manager.EntityManager;
 import manager.LayerManager;
 import manager.TilesetManager;
 import math.Matrix;
 import Renderer;
+import ScanCode;
 import State;
+import input.MouseControl;
 import type.ToolType;
 
 class EditorState extends State {
+
+    public var canvas:Canvas = null;
+    public var ui:EditorUI = null;
 
     public var grid:Grid;
     public var entityLabelFont:BitmapFont = null;
@@ -44,6 +53,8 @@ class EditorState extends State {
     public var showWorldAxes:Bool = true; // Show X/Y axes at origin (0,0)
     public var showQuadtreeDebug:Bool = true; // Visualise EntityLayer quadtree cell bounds
     public var deleteOutOfBoundsTilesOnResize:Bool = true; // Auto-delete tiles when shrinking frame
+    public var gridDisplayMode:String = "Colored";
+    private var _coloredGridColor:Null<Int> = null;
 
     // Managers — owned at Editor level, assigned via Editor.initState() before first use.
     public var tilesetManager:TilesetManager;
@@ -78,7 +89,7 @@ class EditorState extends State {
     // Zoom limits
     private static inline var ZOOM_MIN:Float = 0.1;
     private static inline var ZOOM_MAX:Float = 10.0;
-    private static inline var ZOOM_STEP:Float = 0.1; // multiplier increment per wheel tick
+    public static inline var ZOOM_STEP:Float = 0.1;
 
     public var toolType:ToolType = ToolType.TILE_DRAW;
 
@@ -111,9 +122,9 @@ class EditorState extends State {
         camera.y = windowHeight * 0.5;
         
         // Pre-register the grid shader so Grid's constructor finds it cached.
-        var gridVertShader = app.resources.getText("shaders/grid.vert");
-        var gridFragShader = app.resources.getText("shaders/grid.frag");
-        app.renderer.createProgramInfo("grid", gridVertShader, gridFragShader);
+        //var gridVertShader = app.resources.getText("shaders/grid.vert");
+        //var gridFragShader = app.resources.getText("shaders/grid.frag");
+        //app.renderer.createProgramInfo("grid", gridVertShader, gridFragShader);
         
         grid = new Grid(app.renderer, 5000.0); // 5000 unit quad
         grid.subGridSizeX = tileSizeX;
@@ -134,21 +145,18 @@ class EditorState extends State {
         setupWorldAxes(app.renderer);
 
         // Setup quadtree debug batch (non-persistent — repopulated every frame)
-        var lineProgramInfo = app.renderer.getProgramInfo("line");
-        if (lineProgramInfo != null) {
-            quadtreeDebug = new LineBatch(app.renderer, false);
-            quadtreeDebug.depthTest = false;
+        quadtreeDebug = new LineBatch(app.renderer, false);
+        quadtreeDebug.depthTest = false;
 
-            selection = new Selection(app.renderer);
-            selection.init(app.renderer);
-        }
+        selection = new Selection(app.renderer);
+        selection.init(app.renderer);
 
         // Initialise the placement ghost cursor overlay
         _placementPreview = new PlacementPreview();
 
         // Create default programInfo
-        var textureFragShader = app.resources.getText("shaders/texture.frag");
-        app.renderer.createProgramInfo("texture", null, textureFragShader);
+        //var textureFragShader = app.resources.getText("shaders/texture.frag");
+        //app.renderer.createProgramInfo("texture", null, textureFragShader);
 
         // Load pre-baked entity label font (gohufont) for entity name labels
         app.log.info(LogCategory.APP, "[LabelFont] Loading entity label font...");
@@ -161,22 +169,44 @@ class EditorState extends State {
             app.log.info(LogCategory.APP, "[LabelFont] Texture data: " + fontTextureData.width + "x" + fontTextureData.height);
             var fontTexture = app.renderer.uploadTexture(fontTextureData);
             app.log.info(LogCategory.APP, "[LabelFont] Texture uploaded, id=" + fontTexture.id);
-            var textProgramInfo = app.renderer.getProgramInfo("text");
-            if (textProgramInfo == null) {
-                //var tv = app.resources.getText("shaders/text.vert");
-                var tf = app.resources.getText("shaders/text.frag");
-                textProgramInfo = app.renderer.createProgramInfo("text", null, tf);
-                app.log.info(LogCategory.APP, "[LabelFont] text program created");
-            } else {
-                app.log.info(LogCategory.APP, "[LabelFont] text program reused");
-            }
+            //var textProgramInfo = app.renderer.getProgramInfo("text");
+            // if (textProgramInfo == null) {
+            //     //var tv = app.resources.getText("shaders/text.vert");
+            //     var tf = app.resources.getText("shaders/text.frag");
+            //     textProgramInfo = app.renderer.createProgramInfo("text", null, tf);
+            //     app.log.info(LogCategory.APP, "[LabelFont] text program created");
+            // } else {
+            //     app.log.info(LogCategory.APP, "[LabelFont] text program reused");
+            // }
             entityLabelFont = new BitmapFont(app.renderer, fontTexture, fontData);
-            entityLabelFont.depthTest = false;
-            entityLabelFont.uniforms.set("uColor", [1.0, 1.0, 1.0, 1.0]);
+            entityLabelFont.tileBatch.depthTest = false;
             app.log.info(LogCategory.APP, "[LabelFont] BitmapFont ready, regions=" + Lambda.count(entityLabelFont.atlasRegions));
         } catch(e:Dynamic) {
             app.log.info(LogCategory.APP, "[LabelFont] FAILED at init: " + e);
         }
+
+        _initCanvas();
+    }
+
+    private function _initCanvas():Void {
+        var renderer = app.renderer;
+
+        var spriteTexture = renderer.uploadTexture(app.resources.getTexture("textures/gui.tga"));
+        var fontTexture   = renderer.uploadTexture(app.resources.getTexture("textures/font_atlas.tga"));
+        var fontData      = FontLoader.load(app.resources.getText("fonts/gohu14.json"));
+
+        var ws = app.window.size;
+        canvas = new Canvas(this, ws.x, ws.y);
+        canvas.initializeGraphics(renderer, spriteTexture, fontTexture, fontData);
+        canvas.addFontFace(FontLoader.load(app.resources.getText("fonts/gohu11.json")));
+        canvas.addFontFace(FontLoader.load(app.resources.getText("fonts/nokia.json")));
+        canvas.setTint(0.588, 0.690, 0.518);
+        canvas.importSets(app.resources.getText("textures/gui.json"));
+
+        app.log.info(LogCategory.APP, "[Canvas] GUI canvas initialized.");
+
+        ui = new EditorUI(canvas, this);
+        ui.build();
     }
 
     // CHECKED!
@@ -245,12 +275,11 @@ class EditorState extends State {
                                     pivotX, pivotY);
         var def = entityManager.getEntityDefinition(entityName);
         var newTileset = tilesetManager.tilesets.get(tilesetName);
-        var programInfo = app.renderer.getProgramInfo("texture");
         // Collect all EntityLayers recursively (including those nested in FolderLayers)
         var allEntityLayers:Array<EntityLayer> = [];
         collectEntityLayers(entities, allEntityLayers);
         for (entityLayer in allEntityLayers) {
-            entityLayer.applyDefinitionUpdate(def, newTileset, app.renderer, programInfo);
+            entityLayer.applyDefinitionUpdate(def, newTileset, app.renderer);
         }
         return null;
     }
@@ -384,7 +413,6 @@ class EditorState extends State {
     //     return null;
     // }
     
-    // CHECKED!
     public function setEntityRegion(entityName:String, x:Int, y:Int, width:Int, height:Int):Void {
         entityManager.setEntityRegion(entityName, x, y, width, height, tileSizeX);
     }
@@ -424,10 +452,10 @@ class EditorState extends State {
      */
     private function setupMapFrame(renderer:Renderer):Void {
         // Pre-register the "line" shader so LineBatch (used by MapFrame) finds it cached.
-        var lineFragShader = app.resources.getText("shaders/line.frag");
-        renderer.createProgramInfo("line", null, lineFragShader);
+        //var lineFragShader = app.resources.getText("shaders/line.frag");
+        //renderer.createProgramInfo("line", null, lineFragShader);
         
-        var lineProgramInfo = renderer.createProgramInfo("line", null, lineFragShader);
+        //var lineProgramInfo = renderer.createProgramInfo("line", null, lineFragShader);
         
         mapFrame = new MapFrame(renderer, mapX, mapY, mapWidth, mapHeight);
         mapFrame.init(renderer);
@@ -441,12 +469,6 @@ class EditorState extends State {
      * Red = X axis (horizontal), Green = Y axis (vertical)
      */
     private function setupWorldAxes(renderer:Renderer):Void {
-        
-        var lineProgramInfo = app.renderer.getProgramInfo("line");
-        if (lineProgramInfo == null) {
-            return;
-        }
-        
         worldAxes = new LineBatch(renderer, true);
         worldAxes.depthTest = false;
         worldAxes.visible = showWorldAxes;
@@ -478,24 +500,63 @@ class EditorState extends State {
      * @param delta   Wheel delta: positive = zoom in, negative = zoom out
      */
     public function onMouseWheel(mouseX:Float, mouseY:Float, delta:Float):Void {
-        var oldZoom = camera.zoom;
-        var factor = 1.0 + ZOOM_STEP * Math.abs(delta);
-        var newZoom = delta > 0 ? oldZoom * factor : oldZoom / factor;
-        newZoom = Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, newZoom));
+        var amount = ZOOM_STEP * Math.abs(delta);
+        if (delta > 0) {
+            zoomIn(amount, mouseX, mouseY);
+        } else if (delta < 0) {
+            zoomOut(amount, mouseX, mouseY);
+        }
+    }
 
-        // Pin the world point under the cursor so it stays fixed on screen.
-        // World point before zoom:
-        //   wx = (mouseX - zoomCX) / oldZoom + zoomCX + camera.x
-        // We want the same wx after zoom:
-        //   wx = (mouseX - zoomCX) / newZoom + zoomCX + newCamX
-        // Solving for newCamX:
-        var zoomCX = camera.zoomCenterX != null ? camera.zoomCenterX : app.window.size.x * 0.5;
-        var zoomCY = camera.zoomCenterY != null ? camera.zoomCenterY : app.window.size.y * 0.5;
-        var wx = (mouseX - zoomCX) / oldZoom + zoomCX + camera.x;
-        var wy = (mouseY - zoomCY) / oldZoom + zoomCY + camera.y;
+    /**
+     * Zoom in by a fractional amount (0.1 means 10%), keeping the given screen
+     * position fixed. Defaults to the center of the viewport.
+     */
+    public function zoomIn(amount:Float, ?focusX:Float, ?focusY:Float):Void {
+        _zoomBy(amount, true, focusX, focusY);
+    }
+
+    /**
+     * Zoom out by a fractional amount (0.1 means 10%), keeping the given screen
+     * position fixed. Defaults to the center of the viewport.
+     */
+    public function zoomOut(amount:Float, ?focusX:Float, ?focusY:Float):Void {
+        _zoomBy(amount, false, focusX, focusY);
+    }
+
+    /** Reset zoom to 100%, anchored at the viewport center. */
+    public function resetZoom():Void {
+        var size = app.window.size;
+        _setZoom(1.0, size.x * 0.5, size.y * 0.5);
+    }
+
+    private function _zoomBy(
+        amount:Float,
+        zoomingIn:Bool,
+        focusX:Null<Float>,
+        focusY:Null<Float>
+    ):Void {
+        if (amount <= 0 || Math.isNaN(amount)) return;
+
+        var size = app.window.size;
+        var x = focusX != null ? focusX : size.x * 0.5;
+        var y = focusY != null ? focusY : size.y * 0.5;
+        var factor = 1.0 + amount;
+        var newZoom = zoomingIn ? camera.zoom * factor : camera.zoom / factor;
+        newZoom = Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, newZoom));
+        _setZoom(newZoom, x, y);
+    }
+
+    private function _setZoom(newZoom:Float, focusX:Float, focusY:Float):Void {
+        var size = app.window.size;
+        var zoomCX = camera.zoomCenterX != null ? camera.zoomCenterX : size.x * 0.5;
+        var zoomCY = camera.zoomCenterY != null ? camera.zoomCenterY : size.y * 0.5;
+        var worldX = (focusX - zoomCX) / camera.zoom + zoomCX + camera.x;
+        var worldY = (focusY - zoomCY) / camera.zoom + zoomCY + camera.y;
+
         camera.zoom = newZoom;
-        camera.x = wx - (mouseX - zoomCX) / newZoom - zoomCX;
-        camera.y = wy - (mouseY - zoomCY) / newZoom - zoomCY;
+        camera.x = worldX - (focusX - zoomCX) / newZoom - zoomCX;
+        camera.y = worldY - (focusY - zoomCY) / newZoom - zoomCY;
     }
 
     override public function update(deltaTime:Float):Void {
@@ -503,6 +564,8 @@ class EditorState extends State {
         
         // Handle mouse input for tile placement/removal
         handleInput();
+
+        if (canvas != null) canvas.update(deltaTime);
     }
     
     /**
@@ -521,7 +584,7 @@ class EditorState extends State {
         var worldPos = screenToWorld(screenX, screenY);
 
         // ── Photoshop-style pan: Space held OR middle mouse held ──────────────
-        var panActive = keyboard.check(32) || mouse.check(2); // 32 = SPACE, 2 = middle button
+        var panActive = keyboard.check(ScanCode.SPACE) || mouse.check(MouseControl.MIDDLE);
 
         // Update placement ghost — suppress it during pan and resize interactions
         _updatePlacementPreview(worldPos.x, worldPos.y, panActive || (mapFrame != null && mapFrame.resizeMode != null));
@@ -543,10 +606,11 @@ class EditorState extends State {
 
         // Handle resize drag (if in resize mode)
         if (mapFrame != null && mapFrame.resizeMode != null) {
-            if (mouse.check(1)) {
+            if (mouse.check(MouseControl.LEFT)) {
                 // Continue dragging — MapFrame computes new bounds, EditorState applies them
                 var nb = mapFrame.computeResizeBounds(worldPos.x, worldPos.y, tileSizeX, tileSizeY);
                 updateMapBounds(nb.x, nb.y, nb.width, nb.height);
+                if (ui != null && ui.propertyGrid != null) ui.propertyGrid.refreshProperties();
                 if (deleteOutOfBoundsTilesOnResize) cleanupTilesOutsideBounds();
             } else {
                 // Released mouse - end resize
@@ -556,7 +620,7 @@ class EditorState extends State {
         }
 
         // Left click - check for resize handle first, then place tile
-        if (mouse.pressed(1)) { // Button just pressed
+        if (mouse.pressed(MouseControl.LEFT)) {
             // Check if clicking on a resize handle
             var handle = mapFrame != null ? mapFrame.getHandleAt(worldPos.x, worldPos.y) : null;
             if (handle != null) {
@@ -601,9 +665,6 @@ class EditorState extends State {
             return;
         }
 
-        var programInfo = app.renderer.getProgramInfo("texture");
-        if (programInfo == null) { _placementPreview.visible = false; return; }
-
         // ── Tile draw tool on a TilemapLayer ──────────────────────────────────
         if (toolType == ToolType.TILE_DRAW && Std.isOfType(activeLayer, TilemapLayer)) {
             var tilemapLayer:TilemapLayer = cast activeLayer;
@@ -627,7 +688,7 @@ class EditorState extends State {
 
             // Create the preview batch lazily; swap its texture if the tileset changed
             if (_placementPreview.batch == null) {
-                var previewBatch = new display.ManagedTileBatch(app.renderer, programInfo, editorTexture.textureId);
+                var previewBatch = new display.ManagedTileBatch(app.renderer, editorTexture.textureId);
                 previewBatch.depthTest = false;
                 _placementPreview.batch = previewBatch;
                 _placementPreview.currentTexture = editorTexture;
@@ -675,7 +736,7 @@ class EditorState extends State {
 
             // Create / swap batch when the entity definition's tileset changes
             if (_placementPreview.batch == null) {
-                var previewBatch = new display.ManagedTileBatch(app.renderer, programInfo, editorTexture.textureId);
+                var previewBatch = new display.ManagedTileBatch(app.renderer, editorTexture.textureId);
                 previewBatch.depthTest = false;
                 _placementPreview.batch = previewBatch;
                 _placementPreview.currentTexture = editorTexture;
@@ -742,8 +803,6 @@ class EditorState extends State {
         }
         
         // Add entity as a tile in the appropriate batch
-        var textureProgramInfo = app.renderer.getProgramInfo("texture");
-        if (textureProgramInfo == null) return;
         // Lookup tileset — null for no-tileset or missing-tileset entities (both routed to orphan batch)
         var editorTexture:EditorTexture = (entityDef.tilesetName != null && entityDef.tilesetName != "")
             ? tilesetManager.tilesets.get(entityDef.tilesetName) : null;
@@ -752,7 +811,7 @@ class EditorState extends State {
         if (editorTexture == null) {
             for (ts in tilesetManager.tilesets) { fallbackTexture = ts; break; }
         }
-        var entityId = entityLayer.placeEntity(entityDef, editorTexture, worldX, worldY, app.renderer, textureProgramInfo, null, null, null, fallbackTexture);
+        var entityId = entityLayer.placeEntity(entityDef, editorTexture, worldX, worldY, app.renderer, null, null, null, fallbackTexture);
         app.log.info(LogCategory.APP, "[LabelFont] placeEntityAt: layerLabelFont=" + (entityLayer.labelFont != null) + " totalTiles=" + (entityLabelFont != null ? entityLabelFont.getTileCount() : -1));
     }
     
@@ -1439,7 +1498,6 @@ class EditorState extends State {
 
                             if (layerData.batches != null) {
                                 var batches:Array<Dynamic> = layerData.batches;
-                                var programInfo = app.renderer.getProgramInfo("texture");
                                 var fallback:EditorTexture = null;
                                 for (ts in tilesetManager.tilesets) { fallback = ts; break; }
                                 for (batchData in batches) {
@@ -1451,13 +1509,12 @@ class EditorState extends State {
                                         var pivotX:Float = entityData.pivotX != null ? entityData.pivotX : 0.0;
                                         var pivotY:Float = entityData.pivotY != null ? entityData.pivotY : 0.0;
                                         entityLayer.placeEntity(def, tileset, entityData.x, entityData.y,
-                                            app.renderer, programInfo, pivotX, pivotY, entityData.uid, fallback);
+                                            app.renderer, pivotX, pivotY, entityData.uid, fallback);
                                         importedCount++;
                                     }
                                 }
                             } else if (layerData.entities != null) {
                                 var legacyEntities:Array<Dynamic> = layerData.entities;
-                                var programInfo = app.renderer.getProgramInfo("texture");
                                 for (entityData in legacyEntities) {
                                     var def = entityManager.getEntityDefinition(entityData.name);
                                     if (def == null) continue;
@@ -1468,7 +1525,7 @@ class EditorState extends State {
                                     var pivotX:Float = entityData.pivotX != null ? entityData.pivotX : 0.0;
                                     var pivotY:Float = entityData.pivotY != null ? entityData.pivotY : 0.0;
                                     entityLayer.placeEntity(def, tileset, entityData.x, entityData.y,
-                                        app.renderer, programInfo, pivotX, pivotY, entityData.uid);
+                                        app.renderer, pivotX, pivotY, entityData.uid);
                                     importedCount++;
                                 }
                             }
@@ -1612,13 +1669,39 @@ class EditorState extends State {
             if (el != null) el.setWorldBounds(cx, cy, mapWidth, mapHeight);
         }
     }
+
+    public function setMapBounds(x:Float, y:Float, width:Float, height:Float):Void {
+        if (width <= 0 || height <= 0 || !Math.isFinite(x) || !Math.isFinite(y)
+                || !Math.isFinite(width) || !Math.isFinite(height)) return;
+        updateMapBounds(x, y, width, height);
+    }
+
+    public function setGridDisplayMode(mode:String):Void {
+        switch (mode) {
+            case "Hidden":
+                grid.visible = false;
+            case "Visible":
+                if (gridDisplayMode != "Visible" || _coloredGridColor == null) {
+                    _coloredGridColor = grid.gridColor.hexValue;
+                }
+                grid.gridColor.hexValue = 0x9E9E9EFF;
+                grid.visible = true;
+            case "Colored":
+                if (_coloredGridColor != null) grid.gridColor.hexValue = _coloredGridColor;
+                grid.visible = true;
+            default:
+                return;
+        }
+        gridDisplayMode = mode;
+    }
     
     override public function render(renderer:Renderer):Void {
         if (!active) return;
 
         var size = app.window.size;
-        camera.renderMatrix(size.x, size.y);
+        camera.getProjectionMatrix();
         var viewProjectionMatrix = camera.getMatrix();
+        renderer.matrix = viewProjectionMatrix;
 
         renderDisplayObject(renderer, viewProjectionMatrix, grid);
         renderDisplayObject(renderer, viewProjectionMatrix, mapFrame.getLineBatch());
@@ -1647,7 +1730,7 @@ class EditorState extends State {
         while (i >= 0) {
             var entity = entities[i];
             if (entity != null && entity.active && entity.visible) {
-                entity.render(renderer, viewProjectionMatrix);
+                entity.render(renderer);
             }
             i--;
         }
@@ -1667,12 +1750,21 @@ class EditorState extends State {
             // Render labels with a screen-space ortho so glyph sizes are always
             // in screen pixels, unaffected by camera zoom.
             var screenMatrix = Matrix.createOrthoMatrix(0, size.x, size.y, 0, -1, 1);
-            renderer.renderDisplayObject(entityLabelFont, screenMatrix);
+            //renderer.renderDisplayObject(entityLabelFont, screenMatrix);
+            renderer.matrix = screenMatrix;
+            entityLabelFont.render(renderer);
         }
 
         // Draw selection outline on top of everything
         if (selection != null) {
             renderDisplayObject(renderer, viewProjectionMatrix, selection.getLineBatch());
+        }
+
+        // Render GUI canvas last so it always draws on top of all world content
+        if (canvas != null) {
+            var screenMatrix = Matrix.createOrthoMatrix(0, size.x, size.y, 0, -1, 1);
+            renderer.matrix = screenMatrix;
+            canvas.render(renderer);
         }
     }
     
@@ -1746,14 +1838,28 @@ class EditorState extends State {
             }
         }
 
-        entityLabelFont.needsBufferUpdate = true;
+        entityLabelFont.tileBatch.needsBufferUpdate = true;
+    }
+
+    private function renderDisplayObject(
+        renderer:Renderer,
+        matrix:Matrix,
+        displayObject:DisplayObject
+    ):Void {
+        if (displayObject == null || !displayObject.visible) return;
+        renderer.matrix = matrix;
+        displayObject.render(renderer);
+    }
+
+    override public function onWindowResized(width:Int, height:Int):Void {
+        if (canvas != null) canvas.resize(width, height);
     }
 
     override public function release():Void {
         // Layers are entities and will be cleaned up by super.release()
         layerManager.activeLayer = null;
         _placementPreview = null;
+        canvas = null;
         super.release();
     }
 }
-

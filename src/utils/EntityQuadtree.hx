@@ -1,260 +1,164 @@
 package utils;
 
-import differ.shapes.Polygon;
-import differ.shapes.Circle;
-import differ.Collision;
 import display.LineBatch;
 
-/**
- * Axis-aligned bounding box record stored in the quadtree for each entity.
- * (x, y) is the CENTER of the entity in world space.
- */
 typedef EntityBounds = {
-    var id:String;
-    var x:Float;
-    var y:Float;
-    var width:Float;
-    var height:Float;
+    id:String,
+    x:Float,    // center X
+    y:Float,    // center Y
+    width:Float,
+    height:Float,
 }
 
 /**
- * Quadtree for broad-phase entity spatial partitioning.
+ * Simple axis-aligned quadtree for broad-phase entity spatial queries.
  *
- * Usage pattern:
- *   1. Broad phase  — queryPoint / query      → candidate ID list
- *   2. Narrow phase — pickEntity (SAT via Differ) → exact hit
- *   3. Debug draw   — drawDebug (LineBatch)   → cell outlines
- *
- * All coordinates are world-space with (x, y) as the CENTER of a region.
+ * Entities are inserted by their AABB center (cx, cy) and half-extents.
+ * pickEntity() performs a broad-phase cell query followed by a narrow-phase
+ * AABB containment test against the full bounds map.
  */
 class EntityQuadtree {
 
-    /** Maximum entities per leaf node before the node is subdivided. */
-    public static inline var MAX_OBJECTS:Int = 8;
-    /** Maximum subdivision depth — prevents infinite splitting for co-located entities. */
-    public static inline var MAX_DEPTH:Int   = 8;
+    private static inline var MAX_DEPTH:Int    = 6;
+    private static inline var MAX_OBJECTS:Int  = 8;
 
-    /** Center x of this node's world region. */
-    public var x:Float;
-    /** Center y of this node's world region. */
-    public var y:Float;
-    /** Width of this node's world region. */
-    public var width:Float;
-    /** Height of this node's world region. */
-    public var height:Float;
+    private var _x:Float;
+    private var _y:Float;
+    private var _w:Float;
+    private var _h:Float;
+    private var _depth:Int;
 
-    private var depth:Int;
-    private var objects:Array<EntityBounds>;
-    /** Four children (TL, TR, BR, BL) after a split, or null while still a leaf. */
-    private var nodes:Array<EntityQuadtree>;
+    private var _objects:Array<{id:String, cx:Float, cy:Float, hw:Float, hh:Float}> = [];
+    private var _children:Array<EntityQuadtree> = null;
 
-    /**
-     * @param x       Center X of the root region (world space)
-     * @param y       Center Y of the root region (world space)
-     * @param width   Width  of the root region
-     * @param height  Height of the root region
-     * @param depth   Internal recursion depth — leave at 0 for the root
-     */
-    public function new(x:Float, y:Float, width:Float, height:Float, depth:Int = 0) {
-        this.x      = x;
-        this.y      = y;
-        this.width  = width;
-        this.height = height;
-        this.depth  = depth;
-        objects     = [];
-        nodes       = null;
+    public function new(x:Float, y:Float, w:Float, h:Float, depth:Int = 0) {
+        _x = x;  _y = y;  _w = w;  _h = h;  _depth = depth;
     }
 
-    // -----------------------------------------------------------------------
-    // Public API
-    // -----------------------------------------------------------------------
+    // ── Public API ─────────────────────────────────────────────────────────────
 
-    /** Remove every entity and collapse all child nodes back to leaf state. */
     public function clear():Void {
-        objects = [];
-        if (nodes != null) {
-            for (n in nodes) n.clear();
-            nodes = null;
+        _objects = [];
+        if (_children != null) {
+            for (c in _children) c.clear();
+            _children = null;
         }
     }
 
+    public function insert(id:String, cx:Float, cy:Float, width:Float, height:Float):Void {
+        var hw = width  * 0.5;
+        var hh = height * 0.5;
+        _insert(id, cx, cy, hw, hh);
+    }
+
     /**
-     * Insert an entity into the tree.
-     *
-     * @param id  Unique entity ID (as returned by EntityLayer.placeEntity)
-     * @param ex  Center X of the entity AABB in world space
-     * @param ey  Center Y of the entity AABB in world space
-     * @param ew  Width  of the entity AABB
-     * @param eh  Height of the entity AABB
+     * Broad-phase + narrow-phase point pick.
+     * Returns entity ID of the first entity whose AABB contains (px, py), or null.
      */
-    public function insert(id:String, ex:Float, ey:Float, ew:Float, eh:Float):Void {
-        // If already split, try to delegate to a single child
-        if (nodes != null) {
-            var idx = _getQuadrant(ex, ey, ew, eh);
-            if (idx >= 0) {
-                nodes[idx].insert(id, ex, ey, ew, eh);
+    public function pickEntity(px:Float, py:Float, bounds:Map<String, EntityBounds>):String {
+        var candidates:Array<String> = [];
+        _query(px, py, candidates);
+
+        for (id in candidates) {
+            var b = bounds.get(id);
+            if (b == null) continue;
+            var hw = b.width  * 0.5;
+            var hh = b.height * 0.5;
+            if (px >= b.x - hw && px <= b.x + hw &&
+                py >= b.y - hh && py <= b.y + hh) {
+                return id;
+            }
+        }
+        return null;
+    }
+
+    /** Draw cell boundaries into a LineBatch for debug visualisation. */
+    public function drawDebug(batch:LineBatch, color:Array<Float>):Void {
+        _drawCell(batch, color);
+    }
+
+    // ── Internals ──────────────────────────────────────────────────────────────
+
+    private function _insert(id:String, cx:Float, cy:Float, hw:Float, hh:Float):Void {
+        if (_children != null) {
+            var idx = _childIndex(cx, cy, hw, hh);
+            if (idx != -1) {
+                _children[idx]._insert(id, cx, cy, hw, hh);
                 return;
             }
         }
 
-        // Store in this node
-        objects.push({ id:id, x:ex, y:ey, width:ew, height:eh });
+        _objects.push({ id:id, cx:cx, cy:cy, hw:hw, hh:hh });
 
-        // Split if over capacity and still within depth limit
-        if (objects.length > MAX_OBJECTS && depth < MAX_DEPTH) {
-            if (nodes == null) _split();
-            // Push down any objects that now fit in a single child
-            var remaining:Array<EntityBounds> = [];
-            for (obj in objects) {
-                var idx = _getQuadrant(obj.x, obj.y, obj.width, obj.height);
-                if (idx >= 0) nodes[idx].insert(obj.id, obj.x, obj.y, obj.width, obj.height);
-                else          remaining.push(obj);
+        if (_objects.length > MAX_OBJECTS && _depth < MAX_DEPTH) {
+            if (_children == null) _subdivide();
+            var remaining = [];
+            for (o in _objects) {
+                var idx = _childIndex(o.cx, o.cy, o.hw, o.hh);
+                if (idx != -1)
+                    _children[idx]._insert(o.id, o.cx, o.cy, o.hw, o.hh);
+                else
+                    remaining.push(o);
             }
-            objects = remaining;
+            _objects = remaining;
         }
     }
 
-    /**
-     * Broad-phase AABB overlap query.
-     * Fills `result` with the IDs of entities whose bounding boxes overlap
-     * the supplied query rectangle (qx, qy, qw, qh — center + size).
-     * Does NOT deduplicate; callers should use a Set if needed.
-     */
-    public function query(qx:Float, qy:Float, qw:Float, qh:Float, result:Array<String>):Void {
-        var qL = qx - qw * 0.5;  var qR = qx + qw * 0.5;
-        var qT = qy - qh * 0.5;  var qB = qy + qh * 0.5;
-
-        for (obj in objects) {
-            var oL = obj.x - obj.width  * 0.5;  var oR = obj.x + obj.width  * 0.5;
-            var oT = obj.y - obj.height * 0.5;  var oB = obj.y + obj.height * 0.5;
-            if (oR >= qL && oL <= qR && oB >= qT && oT <= qB) result.push(obj.id);
+    private function _query(px:Float, py:Float, out:Array<String>):Void {
+        for (o in _objects) {
+            if (px >= o.cx - o.hw && px <= o.cx + o.hw &&
+                py >= o.cy - o.hh && py <= o.cy + o.hh) {
+                out.push(o.id);
+            }
         }
-
-        if (nodes != null) {
-            var idx = _getQuadrant(qx, qy, qw, qh);
-            if (idx >= 0) {
-                // Query fits in a single child
-                nodes[idx].query(qx, qy, qw, qh, result);
-            } else {
-                // Query spans multiple children — descend all
-                for (n in nodes) n.query(qx, qy, qw, qh, result);
+        if (_children != null) {
+            for (c in _children) {
+                if (px >= c._x && px < c._x + c._w &&
+                    py >= c._y && py < c._y + c._h) {
+                    c._query(px, py, out);
+                }
             }
         }
     }
 
-    /**
-     * Convenience wrapper: collects candidate entity IDs near world point (px, py).
-     * Uses a 1×1 query box — use pickEntity() or pickEntityAABB() for the exact test.
-     */
-    public function queryPoint(px:Float, py:Float, result:Array<String>):Void {
-        query(px, py, 1.0, 1.0, result);
-    }
-
-    /**
-     * Narrow-phase SAT point pick using Differ.
-     * Runs broad-phase first, then tests each candidate with a Polygon AABB via SAT.
-     *
-     * @param px      World X of the pick point (e.g. mouse cursor)
-     * @param py      World Y of the pick point
-     * @param bounds  Map from entity ID → EntityBounds (call EntityLayer.getAllEntityBounds())
-     * @return        ID of the first entity that contains (px, py), or -1 if none.
-     */
-    public function pickEntity(px:Float, py:Float, bounds:Map<String, EntityBounds>):String {
-        var candidates:Array<String> = [];
-        queryPoint(px, py, candidates);
-        if (candidates.length == 0) return null;
-
-        // Tiny circle probe at the cursor position
-        var probe = new Circle(px, py, 0.5);
-        for (id in candidates) {
-            var b = bounds.get(id);
-            if (b == null) continue;
-            var rect = Polygon.rectangle(b.x, b.y, b.width, b.height, true);
-            if (Collision.shapeWithShape(probe, rect) != null) return id;
-        }
-        return null;
-    }
-
-    /**
-     * Lightweight AABB-only point pick — no SAT overhead.
-     * Returns the first entity whose bounding box contains (px, py), or -1.
-     *
-     * Prefer pickEntity() when you need exact SAT accuracy (e.g. rotated shapes).
-     * Use this for simple rectangular entities where AABB is exact enough.
-     */
-    public function pickEntityAABB(px:Float, py:Float, bounds:Map<String, EntityBounds>):String {
-        var candidates:Array<String> = [];
-        queryPoint(px, py, candidates);
-        for (id in candidates) {
-            var b = bounds.get(id);
-            if (b == null) continue;
-            var l = b.x - b.width  * 0.5;  var r = b.x + b.width  * 0.5;
-            var t = b.y - b.height * 0.5;  var bm = b.y + b.height * 0.5;
-            if (px >= l && px <= r && py >= t && py <= bm) return id;
-        }
-        return null;
-    }
-
-    /**
-     * Draw the quadtree cell boundaries into a LineBatch for debug visualisation.
-     * Only draws cells that contain at least one entity or have children.
-     *
-     * Example:
-     *   entityLayer.quadtree.drawDebug(myLineBatch, [0.2, 0.8, 0.2, 0.6]);
-     *
-     * @param lineBatch  LineBatch instance (persistent = false for per-frame draw)
-     * @param color      RGBA color, e.g. [0.2, 0.9, 0.2, 0.7]
-     */
-    public function drawDebug(lineBatch:LineBatch, color:Array<Float>):Void {
-        // Always draw this cell's outline so the root is visible even when empty
-        var l = x - width  * 0.5;  var r = x + width  * 0.5;
-        var t = y - height * 0.5;  var b = y + height * 0.5;
-
-        lineBatch.addLine(l, t, 0,  r, t, 0,  color, color); // top edge
-        lineBatch.addLine(r, t, 0,  r, b, 0,  color, color); // right edge
-        lineBatch.addLine(r, b, 0,  l, b, 0,  color, color); // bottom edge
-        lineBatch.addLine(l, b, 0,  l, t, 0,  color, color); // left edge
-
-        // Only recurse into children that actually hold data, to avoid drawing
-        // all 4^depth empty leaf cells of the full tree
-        if (nodes != null) {
-            for (n in nodes) {
-                if (n.objects.length > 0 || n.nodes != null) n.drawDebug(lineBatch, color);
-            }
-        }
-    }
-
-    // -----------------------------------------------------------------------
-    // Private helpers
-    // -----------------------------------------------------------------------
-
-    /** Subdivide this node into four equal child quadrants. */
-    private function _split():Void {
-        var hw = width  * 0.5;
-        var hh = height * 0.5;
-        // Order: top-left, top-right, bottom-right, bottom-left
-        nodes = [
-            new EntityQuadtree(x - hw * 0.5, y - hh * 0.5, hw, hh, depth + 1),
-            new EntityQuadtree(x + hw * 0.5, y - hh * 0.5, hw, hh, depth + 1),
-            new EntityQuadtree(x + hw * 0.5, y + hh * 0.5, hw, hh, depth + 1),
-            new EntityQuadtree(x - hw * 0.5, y + hh * 0.5, hw, hh, depth + 1)
+    private function _subdivide():Void {
+        var hw = _w * 0.5;
+        var hh = _h * 0.5;
+        var d  = _depth + 1;
+        _children = [
+            new EntityQuadtree(_x,      _y,      hw, hh, d),  // NW
+            new EntityQuadtree(_x + hw, _y,      hw, hh, d),  // NE
+            new EntityQuadtree(_x,      _y + hh, hw, hh, d),  // SW
+            new EntityQuadtree(_x + hw, _y + hh, hw, hh, d),  // SE
         ];
     }
 
     /**
-     * Returns the child quadrant index [0-3] when the AABB fits entirely within
-     * one quadrant, or -1 when it straddles a boundary and must stay in the parent.
+     * Returns which child quadrant the AABB fits entirely inside, or -1
+     * if it straddles a boundary and must stay in the parent.
      */
-    private function _getQuadrant(ex:Float, ey:Float, ew:Float, eh:Float):Int {
-        if (nodes == null) return -1;
-        var el = ex - ew * 0.5;  var er = ex + ew * 0.5;
-        var et = ey - eh * 0.5;  var eb = ey + eh * 0.5;
-        for (i in 0...4) {
-            var n  = nodes[i];
-            var nl = n.x - n.width  * 0.5;  var nr = n.x + n.width  * 0.5;
-            var nt = n.y - n.height * 0.5;  var nb = n.y + n.height * 0.5;
-            if (el >= nl && er <= nr && et >= nt && eb <= nb) return i;
-        }
+    private function _childIndex(cx:Float, cy:Float, hw:Float, hh:Float):Int {
+        if (_children == null) return -1;
+        var midX = _x + _w * 0.5;
+        var midY = _y + _h * 0.5;
+        var inTop    = (cy - hh >= _y   && cy + hh < midY);
+        var inBottom = (cy - hh >= midY && cy + hh < _y + _h);
+        var inLeft   = (cx - hw >= _x   && cx + hw < midX);
+        var inRight  = (cx - hw >= midX && cx + hw < _x + _w);
+        if (inLeft  && inTop)    return 0;
+        if (inRight && inTop)    return 1;
+        if (inLeft  && inBottom) return 2;
+        if (inRight && inBottom) return 3;
         return -1;
+    }
+
+    private function _drawCell(batch:LineBatch, color:Array<Float>):Void {
+        batch.addLine(_x,      _y,      0, _x + _w, _y,      0, color, color);
+        batch.addLine(_x + _w, _y,      0, _x + _w, _y + _h, 0, color, color);
+        batch.addLine(_x + _w, _y + _h, 0, _x,      _y + _h, 0, color, color);
+        batch.addLine(_x,      _y + _h, 0, _x,      _y,      0, color, color);
+        if (_children != null) {
+            for (c in _children) c._drawCell(batch, color);
+        }
     }
 }

@@ -1,1 +1,3 @@
-build/build-web.hxml
+#build/build-web.hxml
+#build/build-native.hxml
+build/build-standalone.hxml

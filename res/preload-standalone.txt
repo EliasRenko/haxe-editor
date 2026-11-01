@@ -1,0 +1,34 @@
+# Standalone editor preload — covers both editor and GUI assets
+
+# ── UI atlas & sets ────────────────────────────────────────────────────────────
+textures/gui.json
+textures/gui.tga
+
+# ── Font atlases ───────────────────────────────────────────────────────────────
+textures/font_atlas.tga
+fonts/gohu14.json
+fonts/gohu11.json
+fonts/nokia.json
+
+# ── UI shaders ─────────────────────────────────────────────────────────────────
+shaders/ui.frag
+shaders/textured.vert
+shaders/textured.frag
+
+# ── Editor shaders ─────────────────────────────────────────────────────────────
+shaders/postprocess.vert
+shaders/postprocess.frag
+shaders/grid.vert
+shaders/grid.frag
+shaders/line.frag
+shaders/text.frag
+shaders/texture.frag
+
+# ── Editor fonts ───────────────────────────────────────────────────────────────
+fonts/gohufont.json
+
+# ── Editor textures ────────────────────────────────────────────────────────────
+textures/gohufont.tga
+textures/devTiles.tga
+textures/sky.tga
+

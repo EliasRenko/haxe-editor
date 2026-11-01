@@ -1,5 +1,7 @@
 package display;
 
+import shaders.GridShader;
+import data.Shader;
 import utils.Color;
 import data.Indices;
 import data.Vertices;
@@ -13,7 +15,6 @@ import math.Matrix;
  * FIX: Removed UV coordinates - grid shader only needs position (x,y,z)
  * The shader calculates grid pattern from world position, not texture coords
  */
-@:shader("grid")
 class Grid extends DisplayObject {
     public var gridSizeX:Float = 100.0;
     public var gridSizeY:Float = 100.0;
@@ -59,8 +60,6 @@ class Grid extends DisplayObject {
 
         // Set OpenGL properties
         mode = GL.TRIANGLES;
-        __verticesToRender = 4;
-        __indicesToRender = 6;
 
         // Grid typically renders behind other objects
         depthTest = true;
@@ -72,24 +71,25 @@ class Grid extends DisplayObject {
     /**
      * Update grid uniforms before rendering
      */
-    override public function render(cameraMatrix:Matrix):Void {
+    public function render(renderer:Renderer):Void {
         if (!visible) return;
 
         // Set uniforms for the grid shader
-        uniforms.set("uGridSize", [gridSizeX, gridSizeY]);
-        uniforms.set("uSubGridSize", [subGridSizeX, subGridSizeY]);
-        uniforms.set("uGridColor", [gridColor.r, gridColor.g, gridColor.b, 1.0]); // Convert Color to RGBA array
-        uniforms.set("uBackgroundColor", [backgroundColor.r, backgroundColor.g, backgroundColor.b, 1.0]); // Convert Color to RGBA array
-        //uniforms.set("uBackgroundColor", [0, 0, 0, 1.0]); // Convert Color to RGBA array
-        uniforms.set("uFadeDistance", fadeDistance);
+        shader.setUniform("uGridSize", [gridSizeX, gridSizeY]);
+        shader.setUniform("uSubGridSize", [subGridSizeX, subGridSizeY]);
+        shader.setUniform("uGridColor", [gridColor.r, gridColor.g, gridColor.b, 1.0]); // Convert Color to RGBA array
+        shader.setUniform("uBackgroundColor", [backgroundColor.r, backgroundColor.g, backgroundColor.b, 1.0]); // Convert Color to RGBA array
+        //shader.setUniform("uBackgroundColor", [0, 0, 0, 1.0]); // Convert Color to RGBA array
+        shader.setUniform("uFadeDistance", fadeDistance);
         
         // Set bounds uniforms
-        uniforms.set("uEnableBounds", enableBounds ? 1 : 0);
-        uniforms.set("uBoundsMin", [boundsMinX, boundsMinY]);
-        uniforms.set("uBoundsMax", [boundsMaxX, boundsMaxY]);
+        shader.setUniform("uEnableBounds", enableBounds ? 1 : 0);
+        shader.setUniform("uBoundsMin", [boundsMinX, boundsMinY]);
+        shader.setUniform("uBoundsMax", [boundsMaxX, boundsMaxY]);
 
-        // Call parent render - it will handle updateTransform and uMatrix
-        super.render(cameraMatrix);
+        
+
+        renderElements(renderer);
     }
     
     /**
@@ -112,5 +112,10 @@ class Grid extends DisplayObject {
      */
     public function clearBounds():Void {
         enableBounds = false;
+    }
+
+    private function assignShader():Shader {
+        
+        return new GridShader();
     }
 }

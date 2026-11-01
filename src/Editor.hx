@@ -906,10 +906,9 @@ class Editor extends CExterns {
         var ts = (tilesetName != null && tilesetName != "") ? tilesetManager.getTilesetInfo(tilesetName) : null;
         for (s in app.states) {
             var state:EditorState = cast s;
-            var programInfo = app.renderer.getProgramInfo("texture");
             var allEntityLayers:Array<layers.EntityLayer> = [];
             @:privateAccess state.collectEntityLayers(state.entities, allEntityLayers);
-            for (el in allEntityLayers) el.applyDefinitionUpdate(def, ts, app.renderer, programInfo);
+            for (el in allEntityLayers) el.applyDefinitionUpdate(def, ts, app.renderer);
         }
         return true;
     }

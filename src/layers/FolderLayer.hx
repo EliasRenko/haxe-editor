@@ -1,5 +1,7 @@
 package layers;
 
+import Renderer;
+
 class FolderLayer extends Layer {
     
     public var children:Array<Layer>;
@@ -14,11 +16,11 @@ class FolderLayer extends Layer {
         return "folder";
     }
     
-    override public function render(renderer:Dynamic, viewProjectionMatrix:Dynamic):Void {
+    override public function render(renderer:Renderer):Void {
         if (visible && children != null) {
             for (child in children) {
                 if (child != null && child.visible) {
-                    child.render(renderer, viewProjectionMatrix);
+                    child.render(renderer);
                 }
             }
         }

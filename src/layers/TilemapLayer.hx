@@ -2,6 +2,7 @@ package layers;
 
 import display.ManagedTileBatch;
 import EditorTexture;
+import Renderer;
 
 class TilemapLayer extends Layer implements ITilesLayer {
 
@@ -31,18 +32,20 @@ class TilemapLayer extends Layer implements ITilesLayer {
         return "tilemap";
     }
     
-    override public function render(renderer:Renderer, viewProjectionMatrix:Dynamic):Void {
+    override public function render(renderer:Renderer):Void {
         if (visible && managedTileBatch != null && managedTileBatch.visible) {
             
             managedTileBatch.uniforms.set("silhouette", false);
             managedTileBatch.uniforms.set("uAlpha", 1.0);
-            renderer.renderDisplayObject(managedTileBatch, viewProjectionMatrix); // automatically calls updateBuffers() and render()
-
+            //renderer.renderDisplayObject(managedTileBatch, viewProjectionMatrix); // automatically calls updateBuffers() and render()
+            managedTileBatch.render(renderer);
+            
             if (silhouette) {
                 managedTileBatch.uniforms.set("silhouette", silhouette);
                 managedTileBatch.uniforms.set("silhouetteColor", [silhouetteColor.r, silhouetteColor.g, silhouetteColor.b, 0.4]); 
 
-                renderer.renderDisplayObject(managedTileBatch, viewProjectionMatrix); // automatically calls updateBuffers() and render()
+                //renderer.renderDisplayObject(managedTileBatch, viewProjectionMatrix); // automatically calls updateBuffers() and render()
+                managedTileBatch.render(renderer);
             }
             
             if (missingTileset) {
@@ -50,7 +53,8 @@ class TilemapLayer extends Layer implements ITilesLayer {
                 managedTileBatch.uniforms.set("silhouette", true);
                 managedTileBatch.uniforms.set("silhouetteColor", [1, 0, 0, 0.5]); // Red with 50% opacity
 
-                renderer.renderDisplayObject(managedTileBatch, viewProjectionMatrix); // automatically calls updateBuffers() and render()
+                //renderer.renderDisplayObject(managedTileBatch, viewProjectionMatrix); // automatically calls updateBuffers() and render()
+                managedTileBatch.render(renderer);
             }
         }
     }

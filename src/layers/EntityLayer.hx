@@ -85,7 +85,7 @@ class EntityLayer extends Layer implements ITilesLayer {
         return "entity";
     }
     
-    override public function render(renderer:Dynamic, viewProjectionMatrix:Dynamic):Void {
+    override public function render(renderer:Renderer):Void {
         if (!visible) {
             return;
         }
@@ -106,19 +106,23 @@ class EntityLayer extends Layer implements ITilesLayer {
             // Skip the normal texture render when the tileset is missing; the GPU
             // texture has been freed and sampling it would produce undefined output.
             if (!entry.missingTileset) {
-                renderer.renderDisplayObject(mb, viewProjectionMatrix);
+                //renderer.renderDisplayObject(mb, viewProjectionMatrix);
+
+                mb.render(renderer);
             }
 
             if (silhouette) {
                 mb.uniforms.set("silhouette", true);
                 mb.uniforms.set("silhouetteColor", [silhouetteColor.r, silhouetteColor.g, silhouetteColor.b, 0.4]);
-                renderer.renderDisplayObject(mb, viewProjectionMatrix);
+                //renderer.renderDisplayObject(mb, viewProjectionMatrix);
+                mb.render(renderer);
             }
 
             if (missingTileset || entry.missingTileset) {
                 mb.uniforms.set("silhouette", true);
                 mb.uniforms.set("silhouetteColor", [1.0, 0.0, 0.0, 0.5]);
-                renderer.renderDisplayObject(mb, viewProjectionMatrix);
+                //renderer.renderDisplayObject(mb, viewProjectionMatrix);
+                mb.render(renderer);
             }
         }
     }
@@ -157,7 +161,7 @@ class EntityLayer extends Layer implements ITilesLayer {
      * When pivotX / pivotY are omitted (or Math.NaN), the entity definition's
      * own default pivot (def.pivotX / def.pivotY) is used instead.
      */
-    public function placeEntity(def:EntityDefinition, editorTexture:EditorTexture, x:Float, y:Float, renderer:Dynamic, programInfo:Dynamic, ?pivotX:Null<Float>, ?pivotY:Null<Float>, ?uid:String, ?fallbackTexture:EditorTexture):String {
+    public function placeEntity(def:EntityDefinition, editorTexture:EditorTexture, x:Float, y:Float, renderer:Renderer, ?pivotX:Null<Float>, ?pivotY:Null<Float>, ?uid:String, ?fallbackTexture:EditorTexture):String {
         // Resolve pivot: explicit override > definition default
         var px:Float = (pivotX != null) ? pivotX : def.pivotX;
         var py:Float = (pivotY != null) ? pivotY : def.pivotY;
@@ -279,9 +283,8 @@ class EntityLayer extends Layer implements ITilesLayer {
      * @param def         The already-updated definition object.
      * @param newEditorTexture  The EditorTexture that def.tilesetName now refers to.
      * @param renderer    Renderer used to initialise any newly-created batch.
-     * @param programInfo Program info for the texture shader.
      */
-    public function applyDefinitionUpdate(def:EntityDefinition, newEditorTexture:EditorTexture, renderer:Dynamic, programInfo:Dynamic):Void {
+    public function applyDefinitionUpdate(def:EntityDefinition, newEditorTexture:EditorTexture, renderer:Renderer):Void {
         var changed = false;
 
         // Separate entities into those that stay in their current batch vs those

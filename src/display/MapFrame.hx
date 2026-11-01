@@ -104,10 +104,8 @@ public function new(renderer:Renderer, x:Float, y:Float, width:Float, height:Flo
         }
         
         // Render the line batch
-        lineBatch.render(viewProjectionMatrix);
-        
-        // Actually draw the lines to the screen
-        renderer.renderDisplayObject(lineBatch, viewProjectionMatrix);
+        renderer.matrix = viewProjectionMatrix;
+        lineBatch.render(renderer);
     }
     
     /**
@@ -215,44 +213,43 @@ public function new(renderer:Renderer, x:Float, y:Float, width:Float, height:Flo
                                         :{x:Float, y:Float, width:Float, height:Float} {
         if (resizeMode == null || _resizeDragStart == null || _resizeOriginalBounds == null)
             return {x: x, y: y, width: width, height: height};
+        if (tileSizeX <= 0 || tileSizeY <= 0) return {x: x, y: y, width: width, height: height};
 
         var deltaX = worldX - _resizeDragStart.x;
         var deltaY = worldY - _resizeDragStart.y;
-
-        // Snap delta to tile grid
-        deltaX = Math.round(deltaX / tileSizeX) * tileSizeX;
-        deltaY = Math.round(deltaY / tileSizeY) * tileSizeY;
 
         var newX      = _resizeOriginalBounds.x;
         var newY      = _resizeOriginalBounds.y;
         var newWidth  = _resizeOriginalBounds.width;
         var newHeight = _resizeOriginalBounds.height;
+        var originalRight = _resizeOriginalBounds.x + _resizeOriginalBounds.width;
+        var originalBottom = _resizeOriginalBounds.y + _resizeOriginalBounds.height;
+        var minWidth = Math.ceil(minMapSize / tileSizeX) * tileSizeX;
+        var minHeight = Math.ceil(minMapSize / tileSizeY) * tileSizeY;
 
         switch (resizeMode) {
             case "top":
-                // Move top edge up/down (changes Y and height)
-                newY      = _resizeOriginalBounds.y + deltaY;
-                newHeight = _resizeOriginalBounds.height - deltaY;
+                newY = Math.round((_resizeOriginalBounds.y + deltaY) / tileSizeY) * tileSizeY;
+                newHeight = originalBottom - newY;
+                if (newHeight < minHeight) {
+                    newY = originalBottom - minHeight;
+                    newHeight = minHeight;
+                }
             case "bottom":
-                // Move bottom edge up/down (changes height only)
-                newHeight = _resizeOriginalBounds.height + deltaY;
+                var bottom = Math.round((originalBottom + deltaY) / tileSizeY) * tileSizeY;
+                newHeight = bottom - _resizeOriginalBounds.y;
+                if (newHeight < minHeight) newHeight = minHeight;
             case "left":
-                // Move left edge left/right (changes X and width)
-                newX     = _resizeOriginalBounds.x + deltaX;
-                newWidth = _resizeOriginalBounds.width - deltaX;
+                newX = Math.round((_resizeOriginalBounds.x + deltaX) / tileSizeX) * tileSizeX;
+                newWidth = originalRight - newX;
+                if (newWidth < minWidth) {
+                    newX = originalRight - minWidth;
+                    newWidth = minWidth;
+                }
             case "right":
-                // Move right edge left/right (changes width only)
-                newWidth = _resizeOriginalBounds.width + deltaX;
-        }
-
-        // Enforce minimum size
-        if (newWidth < minMapSize) {
-            if (resizeMode == "left") newX = newX + (newWidth - minMapSize);
-            newWidth = minMapSize;
-        }
-        if (newHeight < minMapSize) {
-            if (resizeMode == "top") newY = newY + (newHeight - minMapSize);
-            newHeight = minMapSize;
+                var right = Math.round((originalRight + deltaX) / tileSizeX) * tileSizeX;
+                newWidth = right - _resizeOriginalBounds.x;
+                if (newWidth < minWidth) newWidth = minWidth;
         }
 
         return {x: newX, y: newY, width: newWidth, height: newHeight};

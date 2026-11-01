@@ -1,0 +1,39 @@
+# ── Standalone native editor build ────────────────────────────────────────────
+# Produces a self-contained .exe in bin/standalone/
+
+# Copy native layer dependencies
+--macro Sys.command("cmd", ["/c", ".\\bat\\clean-obj.bat"])
+--macro Sys.command("cmd", ["/c", ".\\bat\\copy-files.bat", "..\\haxe-native\\include", ".\\bin\\standalone\\include"])
+--macro Sys.command("cmd", ["/c", ".\\bat\\copy-files.bat", "..\\haxe-native\\lib",     ".\\bin\\standalone\\lib"])
+--macro Sys.command("cmd", ["/c", "if not exist bin\\standalone\\src mkdir bin\\standalone\\src"])
+--macro Sys.command("cmd", ["/c", "copy ..\\haxe-native\\src\\glad.c bin\\standalone\\src\\glad.c"])
+--macro Sys.command("cmd", ["/c", "copy ..\\haxe-native\\lib\\SDL3.dll bin\\standalone\\SDL3.dll"])
+
+# Copy resources:
+#   1. haxe-application/res first — provides GUI assets (gui.tga, ui.frag, fonts, etc.)
+#   2. haxe-editor/res second    — adds/overrides editor-specific assets
+#   3. Then drop in the standalone preload.txt that covers both sets
+--macro Sys.command("cmd", ["/c", ".\\bat\\copy-files.bat", "..\\haxe-application\\res\\shaders",  ".\\bin\\standalone\\res\\shaders"])
+--macro Sys.command("cmd", ["/c", ".\\bat\\copy-files.bat", "..\\haxe-application\\res\\textures", ".\\bin\\standalone\\res\\textures"])
+--macro Sys.command("cmd", ["/c", ".\\bat\\copy-files.bat", "..\\haxe-application\\res\\fonts",    ".\\bin\\standalone\\res\\fonts"])
+--macro Sys.command("cmd", ["/c", ".\\bat\\copy-files.bat", "res",                                  ".\\bin\\standalone\\res"])
+--macro Sys.command("cmd", ["/c", "copy res\\preload-standalone.txt bin\\standalone\\res\\preload.txt"])
+
+# ── Build settings ─────────────────────────────────────────────────────────────
+-lib haxe-native
+-lib haxe-application
+-lib hxcpp-debug-server
+
+-cp src
+-main EditorMain
+-cpp bin/standalone
+
+-D debug
+-D HXCPP_M64
+-D HXCPP_CPP11
+-D HXCPP_NO_PCH
+-D HXCPP_NO_PRECOMPILED_HEADERS
+-D no-deprecation-warnings
+
+-debug
+-dce std
