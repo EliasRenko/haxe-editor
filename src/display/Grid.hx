@@ -62,8 +62,8 @@ class Grid extends DisplayObject {
         mode = GL.TRIANGLES;
 
         // Grid typically renders behind other objects
-        depthTest = true;
-        depthWrite = false; // Don't write to depth buffer so other objects render on top
+        //depthTest = true;
+        //depthWrite = false; // Don't write to depth buffer so other objects render on top
 
         // ---
     }
@@ -77,9 +77,8 @@ class Grid extends DisplayObject {
         // Set uniforms for the grid shader
         shader.setUniform("uGridSize", [gridSizeX, gridSizeY]);
         shader.setUniform("uSubGridSize", [subGridSizeX, subGridSizeY]);
-        shader.setUniform("uGridColor", [gridColor.r, gridColor.g, gridColor.b, 1.0]); // Convert Color to RGBA array
-        shader.setUniform("uBackgroundColor", [backgroundColor.r, backgroundColor.g, backgroundColor.b, 1.0]); // Convert Color to RGBA array
-        //shader.setUniform("uBackgroundColor", [0, 0, 0, 1.0]); // Convert Color to RGBA array
+        shader.setUniform("uGridColor", [gridColor.r, gridColor.g, gridColor.b]); // Color stores normalized RGB, shader expects vec3
+        shader.setUniform("uBackgroundColor", [backgroundColor.r, backgroundColor.g, backgroundColor.b]); // Color stores normalized RGB, shader expects vec3
         shader.setUniform("uFadeDistance", fadeDistance);
         
         // Set bounds uniforms
@@ -88,8 +87,8 @@ class Grid extends DisplayObject {
         shader.setUniform("uBoundsMax", [boundsMaxX, boundsMaxY]);
 
         
-
-        renderElements(renderer);
+        
+        //renderElements(renderer);
     }
     
     /**

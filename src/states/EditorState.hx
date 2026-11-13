@@ -133,7 +133,7 @@ class EditorState extends State {
         grid.gridSizeY = tileSizeY * 4.0;
         grid.fadeDistance = 3000.0;
         //grid.z = 0.0;
-        grid.depthTest = false;
+        //grid.depthTest = false;
         
         // Clip grid to map bounds
         grid.setBounds(mapX, mapY, mapX + mapWidth, mapY + mapHeight);
@@ -146,7 +146,7 @@ class EditorState extends State {
 
         // Setup quadtree debug batch (non-persistent — repopulated every frame)
         quadtreeDebug = new LineBatch(app.renderer, false);
-        quadtreeDebug.depthTest = false;
+        //quadtreeDebug.depthTest = false;
 
         selection = new Selection(app.renderer);
         selection.init(app.renderer);
@@ -179,7 +179,7 @@ class EditorState extends State {
             //     app.log.info(LogCategory.APP, "[LabelFont] text program reused");
             // }
             entityLabelFont = new BitmapFont(app.renderer, fontTexture, fontData);
-            entityLabelFont.tileBatch.depthTest = false;
+            //entityLabelFont.tileBatch.depthTest = false;
             app.log.info(LogCategory.APP, "[LabelFont] BitmapFont ready, regions=" + Lambda.count(entityLabelFont.atlasRegions));
         } catch(e:Dynamic) {
             app.log.info(LogCategory.APP, "[LabelFont] FAILED at init: " + e);
@@ -470,7 +470,7 @@ class EditorState extends State {
      */
     private function setupWorldAxes(renderer:Renderer):Void {
         worldAxes = new LineBatch(renderer, true);
-        worldAxes.depthTest = false;
+        //worldAxes.depthTest = false;
         worldAxes.visible = showWorldAxes;
 
         // THEN add the lines
@@ -689,7 +689,7 @@ class EditorState extends State {
             // Create the preview batch lazily; swap its texture if the tileset changed
             if (_placementPreview.batch == null) {
                 var previewBatch = new display.ManagedTileBatch(app.renderer, editorTexture.textureId);
-                previewBatch.depthTest = false;
+                //previewBatch.depthTest = false;
                 _placementPreview.batch = previewBatch;
                 _placementPreview.currentTexture = editorTexture;
             } else if (_placementPreview.currentTexture != editorTexture) {
@@ -737,7 +737,7 @@ class EditorState extends State {
             // Create / swap batch when the entity definition's tileset changes
             if (_placementPreview.batch == null) {
                 var previewBatch = new display.ManagedTileBatch(app.renderer, editorTexture.textureId);
-                previewBatch.depthTest = false;
+                //previewBatch.depthTest = false;
                 _placementPreview.batch = previewBatch;
                 _placementPreview.currentTexture = editorTexture;
             } else if (_placementPreview.currentTexture != editorTexture) {

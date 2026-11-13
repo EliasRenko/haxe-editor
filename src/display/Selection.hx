@@ -22,7 +22,7 @@ class Selection {
 
     public function new(renderer:Renderer) {
         lineBatch = new LineBatch(renderer, true); // persistent
-        lineBatch.depthTest = false;
+        //lineBatch.depthTest = false;
     }
 
     public function init(renderer:Renderer):Void {
