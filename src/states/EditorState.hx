@@ -5,7 +5,7 @@ import DisplayObject;
 import display.BitmapFont;
 import display.Grid;
 import display.LineBatch;
-import display.ManagedTileBatch;
+import display.TileManager;
 import display.MapFrame;
 import display.Selection;
 import EditorTexture;
@@ -688,7 +688,7 @@ class EditorState extends State {
 
             // Create the preview batch lazily; swap its texture if the tileset changed
             if (_placementPreview.batch == null) {
-                var previewBatch = new display.ManagedTileBatch(app.renderer, editorTexture.textureId);
+                var previewBatch = new display.TileManager(app.renderer, editorTexture.textureId);
                 //previewBatch.depthTest = false;
                 _placementPreview.batch = previewBatch;
                 _placementPreview.currentTexture = editorTexture;
@@ -736,7 +736,7 @@ class EditorState extends State {
 
             // Create / swap batch when the entity definition's tileset changes
             if (_placementPreview.batch == null) {
-                var previewBatch = new display.ManagedTileBatch(app.renderer, editorTexture.textureId);
+                var previewBatch = new display.TileManager(app.renderer, editorTexture.textureId);
                 //previewBatch.depthTest = false;
                 _placementPreview.batch = previewBatch;
                 _placementPreview.currentTexture = editorTexture;
@@ -1737,8 +1737,8 @@ class EditorState extends State {
 
         // Draw placement preview ghost (60 % alpha) on top of all layers, below labels
         if (_placementPreview != null && _placementPreview.visible && _placementPreview.batch != null) {
-            _placementPreview.batch.uniforms.set("silhouette", false);
-            _placementPreview.batch.uniforms.set("uAlpha", PlacementPreview.ALPHA);
+            _placementPreview.batch.shader.setUniform("silhouette", false);
+            _placementPreview.batch.shader.setUniform("uAlpha", PlacementPreview.ALPHA);
             renderDisplayObject(renderer, viewProjectionMatrix, _placementPreview.batch);
         }
 

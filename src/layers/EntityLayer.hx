@@ -1,6 +1,6 @@
 package layers;
 
-import display.ManagedTileBatch;
+import display.TileManager;
 import display.LineBatch;
 import EditorTexture;
 import EntityDefinition;
@@ -31,12 +31,12 @@ typedef Entity = {
 // helper used only by EntityLayer - combines tileset and its batch plus bookkeeping
 class BatchEntry {
     public var editorTexture:EditorTexture;
-    public var batch:ManagedTileBatch;
+    public var batch:TileManager;
     public var entities:Map<String, Entity>;
     public var definedRegions:Map<String,Int>;
     /** True when the tileset has been deleted but entities are kept for preview. */
     public var missingTileset:Bool;
-    public function new(editorTexture:EditorTexture, batch:ManagedTileBatch) {
+    public function new(editorTexture:EditorTexture, batch:TileManager) {
         this.editorTexture = editorTexture;
         this.batch = batch;
         this.entities = new Map<String, Entity>();
@@ -77,7 +77,7 @@ class EntityLayer extends Layer implements ITilesLayer {
      * helper to add an existing batch entry (used by callers that create a batch
      * ahead of time, e.g. when the layer is first created)
      */
-    public function addBatch(editorTexture:EditorTexture, batch:ManagedTileBatch):Void {
+    public function addBatch(editorTexture:EditorTexture, batch:TileManager):Void {
         batches.push(new BatchEntry(editorTexture, batch));
     }
     
@@ -100,8 +100,8 @@ class EntityLayer extends Layer implements ITilesLayer {
             // Always reset silhouette to false first — GLSL uniforms are program-wide and
             // persist across draw calls, so a previous TilemapLayer that rendered with
             // silhouette=true would otherwise bleed into entity rendering.
-            mb.uniforms.set("silhouette", false);
-            mb.uniforms.set("uAlpha", 1.0);
+            mb.shader.setUniform("silhouette", false);
+            mb.shader.setUniform("uAlpha", 1.0);
 
             // Skip the normal texture render when the tileset is missing; the GPU
             // texture has been freed and sampling it would produce undefined output.
@@ -112,15 +112,15 @@ class EntityLayer extends Layer implements ITilesLayer {
             }
 
             if (silhouette) {
-                mb.uniforms.set("silhouette", true);
-                mb.uniforms.set("silhouetteColor", [silhouetteColor.r, silhouetteColor.g, silhouetteColor.b, 0.4]);
+                mb.shader.setUniform("silhouette", true);
+                mb.shader.setUniform("silhouetteColor", [silhouetteColor.r, silhouetteColor.g, silhouetteColor.b, 0.4]);
                 //renderer.renderDisplayObject(mb, viewProjectionMatrix);
                 mb.render(renderer);
             }
 
             if (missingTileset || entry.missingTileset) {
-                mb.uniforms.set("silhouette", true);
-                mb.uniforms.set("silhouetteColor", [1.0, 0.0, 0.0, 0.5]);
+                mb.shader.setUniform("silhouette", true);
+                mb.shader.setUniform("silhouetteColor", [1.0, 0.0, 0.0, 0.5]);
                 //renderer.renderDisplayObject(mb, viewProjectionMatrix);
                 mb.render(renderer);
             }
@@ -175,7 +175,7 @@ class EntityLayer extends Layer implements ITilesLayer {
         }
         if (entry == null) {
             if (editorTexture != null) {
-                var mb = new ManagedTileBatch(renderer, editorTexture.textureId);
+                var mb = new TileManager(renderer, editorTexture.textureId);
                 entry = new BatchEntry(editorTexture, mb);
             } else {
                 // No tileset available. If a fallback texture exists, back the orphan batch
@@ -183,7 +183,7 @@ class EntityLayer extends Layer implements ITilesLayer {
                 // The fallback texture content is irrelevant — the silhouette shader ignores it.
                 // entry.editorTexture stays null to mark this batch as orphaned.
                 if (fallbackTexture != null) {
-                    var mb = new ManagedTileBatch(renderer, fallbackTexture.textureId);
+                    var mb = new TileManager(renderer, fallbackTexture.textureId);
                     entry = new BatchEntry(null, mb);
                 } else {
                     entry = new BatchEntry(null, null);
@@ -349,14 +349,14 @@ class EntityLayer extends Layer implements ITilesLayer {
             }
             if (targetEntry == null) {
                 if (newEditorTexture != null) {
-                    var mb = new ManagedTileBatch(renderer, newEditorTexture.textureId);
+                    var mb = new TileManager(renderer, newEditorTexture.textureId);
                     targetEntry = new BatchEntry(newEditorTexture, mb);
                 } else {
                     // Migrating to no-tileset — back with a fallback GPU batch for silhouette rendering.
                     var fallbackTex:EditorTexture = null;
                     for (e in batches) { if (e.editorTexture != null) { fallbackTex = e.editorTexture; break; } }
                     if (fallbackTex != null) {
-                        var mb = new ManagedTileBatch(renderer, fallbackTex.textureId);
+                        var mb = new TileManager(renderer, fallbackTex.textureId);
                         targetEntry = new BatchEntry(null, mb);
                     } else {
                         targetEntry = new BatchEntry(null, null);

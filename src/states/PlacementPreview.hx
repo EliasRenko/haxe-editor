@@ -1,6 +1,6 @@
 package states;
 
-import display.ManagedTileBatch;
+import display.TileManager;
 import EditorTexture;
 
 /**
@@ -18,7 +18,7 @@ class PlacementPreview {
     public var visible:Bool = false;
 
     /** GPU batch holding the single ghost tile. Created lazily on first use. */
-    public var batch:ManagedTileBatch = null;
+    public var batch:TileManager = null;
 
     /**
      * The EditorTexture currently backing `batch`.

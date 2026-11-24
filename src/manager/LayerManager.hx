@@ -5,7 +5,7 @@ import layers.Layer;
 import layers.TilemapLayer;
 import layers.EntityLayer;
 import layers.FolderLayer;
-import display.ManagedTileBatch;
+import display.TileManager;
 import states.EditorState;
 
 /**
@@ -252,7 +252,7 @@ class LayerManager {
                 state.app.log.error(LogCategory.APP, "Cannot create tilemap layer: tileset not found: " + tilesetName);
                 return null;
             }
-            var batch = new ManagedTileBatch(state.app.renderer, tileset.textureId);
+            var batch = new TileManager(state.app.renderer, tileset.textureId);
             batch.debugName = "TilemapLayer:" + name;
             //batch.depthTest = false;
             var tilesPerRow = Std.int(tileset.textureId.width / tileSize);

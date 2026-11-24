@@ -1,23 +1,23 @@
 package layers;
 
-import display.ManagedTileBatch;
+import display.TileManager;
 import EditorTexture;
 import Renderer;
 
 class TilemapLayer extends Layer implements ITilesLayer {
 
     public var editorTexture:EditorTexture;
-    public var managedTileBatch:ManagedTileBatch;
+    public var managedTileBatch:TileManager;
     public var selectedTileRegion:Int = 0;
     public var tileSize:Int;
     public var tilesPerRow:Int;
     public var tilesPerCol:Int;
     
-    // Grid-based tile storage index (faster lookups than iterating ManagedTileBatch)
-    // Key format: "gridX_gridY" -> tileId in ManagedTileBatch
+    // Grid-based tile storage index (faster lookups than iterating TileManager)
+    // Key format: "gridX_gridY" -> tileId in TileManager
     public var tileGrid:Map<String, Int>;
     
-    public function new(name:String, editorTexture:EditorTexture, managedTileBatch:ManagedTileBatch, tileSize:Int, tilesPerRow:Int, tilesPerCol:Int) {
+    public function new(name:String, editorTexture:EditorTexture, managedTileBatch:TileManager, tileSize:Int, tilesPerRow:Int, tilesPerCol:Int) {
         super(name);
 
         this.editorTexture = editorTexture;
@@ -35,14 +35,14 @@ class TilemapLayer extends Layer implements ITilesLayer {
     override public function render(renderer:Renderer):Void {
         if (visible && managedTileBatch != null && managedTileBatch.visible) {
             
-            managedTileBatch.uniforms.set("silhouette", false);
-            managedTileBatch.uniforms.set("uAlpha", 1.0);
+            managedTileBatch.shader.setUniform("silhouette", false);
+            managedTileBatch.shader.setUniform("uAlpha", 1.0);
             //renderer.renderDisplayObject(managedTileBatch, viewProjectionMatrix); // automatically calls updateBuffers() and render()
             managedTileBatch.render(renderer);
             
             if (silhouette) {
-                managedTileBatch.uniforms.set("silhouette", silhouette);
-                managedTileBatch.uniforms.set("silhouetteColor", [silhouetteColor.r, silhouetteColor.g, silhouetteColor.b, 0.4]); 
+                managedTileBatch.shader.setUniform("silhouette", silhouette);
+                managedTileBatch.shader.setUniform("silhouetteColor", [silhouetteColor.r, silhouetteColor.g, silhouetteColor.b, 0.4]); 
 
                 //renderer.renderDisplayObject(managedTileBatch, viewProjectionMatrix); // automatically calls updateBuffers() and render()
                 managedTileBatch.render(renderer);
@@ -50,8 +50,8 @@ class TilemapLayer extends Layer implements ITilesLayer {
             
             if (missingTileset) {
                 // Render a red overlay to indicate missing tileset
-                managedTileBatch.uniforms.set("silhouette", true);
-                managedTileBatch.uniforms.set("silhouetteColor", [1, 0, 0, 0.5]); // Red with 50% opacity
+                managedTileBatch.shader.setUniform("silhouette", true);
+                managedTileBatch.shader.setUniform("silhouetteColor", [1, 0, 0, 0.5]); // Red with 50% opacity
 
                 //renderer.renderDisplayObject(managedTileBatch, viewProjectionMatrix); // automatically calls updateBuffers() and render()
                 managedTileBatch.render(renderer);
