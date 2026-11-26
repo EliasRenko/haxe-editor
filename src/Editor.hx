@@ -252,6 +252,7 @@ class Editor extends CExterns {
     }
 
     // ===== INPUT =====
+    // Mouse coordinates are logical window coordinates, not drawable pixels.
 
     @:keep
     public static function onMouseMotion(x:Int, y:Int):Void {
@@ -280,8 +281,8 @@ class Editor extends CExterns {
 
     /**
      * Forward a mouse-wheel event to the active editor state.
-     * @param x      Cursor X in screen pixels at the time of the scroll
-     * @param y      Cursor Y in screen pixels at the time of the scroll
+     * @param x      Cursor X in logical window coordinates at the time of the scroll
+     * @param y      Cursor Y in logical window coordinates at the time of the scroll
      * @param delta  Wheel delta: positive = scroll up (zoom in), negative = scroll down (zoom out)
      */
     @:keep

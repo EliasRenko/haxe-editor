@@ -106,7 +106,7 @@ extern "C" {
     __declspec(dllexport) void setWindowSize(int width, int height);
     __declspec(dllexport) void setWindowPosition(int x, int y);
 
-    // Input handling
+    // Input handling: mouse coordinates use logical window units, not drawable pixels.
     __declspec(dllexport) void onMouseMotion(int x, int y);
     __declspec(dllexport) void onMouseButtonDown(int x, int y, int button);
     __declspec(dllexport) void onMouseButtonUp(int x, int y, int button);

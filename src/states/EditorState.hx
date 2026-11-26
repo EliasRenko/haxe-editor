@@ -495,11 +495,12 @@ class EditorState extends State {
     
     /**
      * Zoom the camera centred on the given screen-space cursor position.
-     * @param mouseX  Cursor X in screen pixels
-     * @param mouseY  Cursor Y in screen pixels
+     * @param mouseX  Cursor X in logical window coordinates
+     * @param mouseY  Cursor Y in logical window coordinates
      * @param delta   Wheel delta: positive = zoom in, negative = zoom out
      */
     public function onMouseWheel(mouseX:Float, mouseY:Float, delta:Float):Void {
+        if (!_syncCameraViewport() || !_insideViewport(mouseX, mouseY)) return;
         var amount = ZOOM_STEP * Math.abs(delta);
         if (delta > 0) {
             zoomIn(amount, mouseX, mouseY);
@@ -526,8 +527,9 @@ class EditorState extends State {
 
     /** Reset zoom to 100%, anchored at the viewport center. */
     public function resetZoom():Void {
-        var size = app.window.size;
-        _setZoom(1.0, size.x * 0.5, size.y * 0.5);
+        if (!_syncCameraViewport()) return;
+        var center = _viewportCenter();
+        _setZoom(1.0, center.x, center.y);
     }
 
     private function _zoomBy(
@@ -538,9 +540,10 @@ class EditorState extends State {
     ):Void {
         if (amount <= 0 || Math.isNaN(amount)) return;
 
-        var size = app.window.size;
-        var x = focusX != null ? focusX : size.x * 0.5;
-        var y = focusY != null ? focusY : size.y * 0.5;
+        if (!_syncCameraViewport()) return;
+        var center = _viewportCenter();
+        var x = focusX != null ? focusX : center.x;
+        var y = focusY != null ? focusY : center.y;
         var factor = 1.0 + amount;
         var newZoom = zoomingIn ? camera.zoom * factor : camera.zoom / factor;
         newZoom = Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, newZoom));
@@ -548,15 +551,39 @@ class EditorState extends State {
     }
 
     private function _setZoom(newZoom:Float, focusX:Float, focusY:Float):Void {
+        if (!_syncCameraViewport()) return;
         var size = app.window.size;
-        var zoomCX = camera.zoomCenterX != null ? camera.zoomCenterX : size.x * 0.5;
-        var zoomCY = camera.zoomCenterY != null ? camera.zoomCenterY : size.y * 0.5;
-        var worldX = (focusX - zoomCX) / camera.zoom + zoomCX + camera.x;
-        var worldY = (focusY - zoomCY) / camera.zoom + zoomCY + camera.y;
-
+        var before = camera.screenToWorld2D(focusX, focusY, size.x, size.y);
         camera.zoom = newZoom;
-        camera.x = worldX - (focusX - zoomCX) / newZoom - zoomCX;
-        camera.y = worldY - (focusY - zoomCY) / newZoom - zoomCY;
+        var after = camera.screenToWorld2D(focusX, focusY, size.x, size.y);
+        camera.x += before.x - after.x;
+        camera.y += before.y - after.y;
+    }
+
+    private function _syncCameraViewport():Bool {
+        var pixels = app.window.pixelSize;
+        var size = app.window.size;
+        if (pixels.x <= 0 || pixels.y <= 0 || size.x <= 0 || size.y <= 0) return false;
+        camera.setViewportSize(pixels.x, pixels.y);
+        return true;
+    }
+
+    private function _viewportCenter():{x:Float, y:Float} {
+        var viewport = camera.effectiveViewport();
+        var size = app.window.size;
+        return {
+            x: (viewport.x + viewport.width * 0.5) * size.x / camera.viewWidth,
+            y: (viewport.y + viewport.height * 0.5) * size.y / camera.viewHeight
+        };
+    }
+
+    private function _insideViewport(x:Float, y:Float):Bool {
+        var viewport = camera.effectiveViewport();
+        var size = app.window.size;
+        var pixelX = x * camera.viewWidth / size.x;
+        var pixelY = y * camera.viewHeight / size.y;
+        return pixelX >= viewport.x && pixelY >= viewport.y
+            && pixelX < viewport.x + viewport.width && pixelY < viewport.y + viewport.height;
     }
 
     override public function update(deltaTime:Float):Void {
@@ -572,12 +599,21 @@ class EditorState extends State {
      * Handle mouse input for placing and removing tiles, and resizing the map frame
      */
     private function handleInput():Void {
+        if (!_syncCameraViewport()) {
+            _isPanning = false;
+            return;
+        }
         var mouse = app.input.mouse;
         var keyboard = app.input.keyboard;
 
-        // Get mouse screen position from C# (assumed to be in screen coordinates)
+        // Mouse positions are in logical window coordinates.
         var screenX = mouse.x;
         var screenY = mouse.y;
+        if (!_insideViewport(screenX, screenY)) {
+            _isPanning = false;
+            if (_placementPreview != null) _placementPreview.visible = false;
+            return;
+        }
 
         // Convert screen position to world position using camera
         // (computed before the pan check so the preview can still follow the cursor)
@@ -591,10 +627,9 @@ class EditorState extends State {
 
         if (panActive) {
             if (_isPanning) {
-                var dx = screenX - _panLastX;
-                var dy = screenY - _panLastY;
-                camera.x -= dx / camera.zoom;
-                camera.y -= dy / camera.zoom;
+                var previous = screenToWorld(_panLastX, _panLastY);
+                camera.x += previous.x - worldPos.x;
+                camera.y += previous.y - worldPos.y;
             }
             _isPanning = true;
             _panLastX = screenX;
@@ -765,18 +800,8 @@ class EditorState extends State {
      * Convert screen coordinates to world coordinates
      */
     private function screenToWorld(screenX:Float, screenY:Float):{x:Float, y:Float} {
-        // Centered ortho projection: zoom happens around configurable zoom center
-        var windowWidth = app.window.size.x;
-        var windowHeight = app.window.size.y;
-        
-        // Get zoom center (defaults to screen center if not set)
-        var zoomCenterX = camera.zoomCenterX != null ? camera.zoomCenterX : windowWidth * 0.5;
-        var zoomCenterY = camera.zoomCenterY != null ? camera.zoomCenterY : windowHeight * 0.5;
-        
-        var worldX = (screenX - zoomCenterX) / camera.zoom + zoomCenterX + camera.x;
-        var worldY = (screenY - zoomCenterY) / camera.zoom + zoomCenterY + camera.y;
-
-        return {x: worldX, y: worldY};
+        var size = app.window.size;
+        return camera.screenToWorld2D(screenX, screenY, size.x, size.y);
     }
     
     /**
@@ -1697,6 +1722,7 @@ class EditorState extends State {
     
     override public function render(renderer:Renderer):Void {
         if (!active) return;
+        if (!_syncCameraViewport()) return;
 
         var size = app.window.size;
         camera.getProjectionMatrix();
@@ -1748,11 +1774,23 @@ class EditorState extends State {
         if (entityLabelFont != null && _labelsVisible) {
             buildEntityLabels();
             // Render labels with a screen-space ortho so glyph sizes are always
-            // in screen pixels, unaffected by camera zoom.
+            // in logical screen units, unaffected by camera zoom.
             var screenMatrix = Matrix.createOrthoMatrix(0, size.x, size.y, 0, -1, 1);
             //renderer.renderDisplayObject(entityLabelFont, screenMatrix);
+            renderer.resetCameraViewport();
             renderer.matrix = screenMatrix;
-            entityLabelFont.render(renderer);
+            var viewport = camera.viewport;
+            if (viewport != null)
+                renderer.pushScissor(Std.int(viewport.x), Std.int(viewport.y), Std.int(viewport.width), Std.int(viewport.height));
+            try {
+                entityLabelFont.render(renderer);
+            } catch (error:Dynamic) {
+                if (viewport != null) renderer.popScissor();
+                throw error;
+            }
+            if (viewport != null) renderer.popScissor();
+            if (viewport != null)
+                renderer.setCameraViewport(Std.int(viewport.x), Std.int(viewport.y), Std.int(viewport.width), Std.int(viewport.height));
         }
 
         // Draw selection outline on top of everything
@@ -1762,6 +1800,7 @@ class EditorState extends State {
 
         // Render GUI canvas last so it always draws on top of all world content
         if (canvas != null) {
+            renderer.resetCameraViewport();
             var screenMatrix = Matrix.createOrthoMatrix(0, size.x, size.y, 0, -1, 1);
             renderer.matrix = screenMatrix;
             canvas.render(renderer);
@@ -1788,9 +1827,6 @@ class EditorState extends State {
         entityLabelFont.clear();
 
         var size = app.window.size;
-        var zoom = camera.zoom;
-        var zoomCX = camera.zoomCenterX != null ? camera.zoomCenterX : size.x * 0.5;
-        var zoomCY = camera.zoomCenterY != null ? camera.zoomCenterY : size.y * 0.5;
 
         for (entity in entities) {
             var el = Std.downcast(entity, EntityLayer);
@@ -1801,18 +1837,16 @@ class EditorState extends State {
                     var renderX = ent.x - ent.pivotX * ent.width;
                     var renderY = ent.y - ent.pivotY * ent.height;
 
-                    // Convert the entity's center-top anchor to screen pixels.
-                    // All world-to-screen offsets must be applied here so that glyph
-                    // positions (which are in screen pixels) stay zoom-independent.
+                    // Convert the entity's center-top anchor to logical screen coordinates.
+                    // Glyph positions remain independent of camera zoom.
                     var entityCenterWorldX = renderX + ent.width * 0.5;
                     var entityTopWorldY    = renderY;
-                    var entityCenterScreenX = (entityCenterWorldX - camera.x - zoomCX) * zoom + zoomCX;
-                    var entityTopScreenY    = (entityTopWorldY    - camera.y - zoomCY) * zoom + zoomCY;
+                    var screenPos = camera.worldToScreen2D(entityCenterWorldX, entityTopWorldY, size.x, size.y);
 
-                    // Offset in screen pixels: center the text, place it above the sprite.
+                    // Center the text and place it above the sprite.
                     var textWidth = entityLabelFont.measureTextWidth(ent.name);
-                    var cursorX:Float = Math.round(entityCenterScreenX - textWidth * 0.5);
-                    var cursorY:Float = Math.round(entityTopScreenY - entityLabelFont.fontData.lineHeight - 2);
+                    var cursorX:Float = Math.round(screenPos.x - textWidth * 0.5);
+                    var cursorY:Float = Math.round(screenPos.y - entityLabelFont.fontData.lineHeight - 2);
 
                     for (i in 0...ent.name.length) {
                         var charCode = ent.name.charCodeAt(i);
