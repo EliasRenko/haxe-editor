@@ -1777,7 +1777,7 @@ class EditorState extends State {
             // in logical screen units, unaffected by camera zoom.
             var screenMatrix = Matrix.createOrthoMatrix(0, size.x, size.y, 0, -1, 1);
             //renderer.renderDisplayObject(entityLabelFont, screenMatrix);
-            renderer.resetCameraViewport();
+            renderer.resetViewport();
             renderer.matrix = screenMatrix;
             var viewport = camera.viewport;
             if (viewport != null)
@@ -1790,7 +1790,7 @@ class EditorState extends State {
             }
             if (viewport != null) renderer.popScissor();
             if (viewport != null)
-                renderer.setCameraViewport(Std.int(viewport.x), Std.int(viewport.y), Std.int(viewport.width), Std.int(viewport.height));
+                renderer.setViewport(Std.int(viewport.x), Std.int(viewport.y), Std.int(viewport.width), Std.int(viewport.height));
         }
 
         // Draw selection outline on top of everything
@@ -1800,7 +1800,7 @@ class EditorState extends State {
 
         // Render GUI canvas last so it always draws on top of all world content
         if (canvas != null) {
-            renderer.resetCameraViewport();
+            renderer.resetViewport();
             var screenMatrix = Matrix.createOrthoMatrix(0, size.x, size.y, 0, -1, 1);
             renderer.matrix = screenMatrix;
             canvas.render(renderer);
